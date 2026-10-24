@@ -15,7 +15,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git build-essential cmake ninja-build libfftw3-dev libconfig-dev \
+            git build-essential cmake ninja-build libfftw3-dev libconfig-dev libasound2-dev \
             python3-colcon-common-extensions \
             ros-humble-rosidl-default-generators ros-humble-rclcpp \
             ros-humble-rclcpp-components ros-humble-geometry-msgs \
