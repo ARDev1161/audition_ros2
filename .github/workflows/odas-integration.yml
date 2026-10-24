@@ -1,0 +1,84 @@
+name: Native libaudition ODAS integration
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-odas:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git build-essential cmake ninja-build libfftw3-dev libconfig-dev libasound2-dev libpulse-dev libjack-jackd2-dev libsndfile1-dev \
+            python3-colcon-common-extensions \
+            ros-humble-rosidl-default-generators ros-humble-rclcpp \
+            ros-humble-rclcpp-components ros-humble-geometry-msgs \
+            ros-humble-launch-ros ros-humble-rclpy python3-pytest
+      - name: Build and install pinned libaudition with native ODAS
+        shell: bash
+        run: |
+          set -eo pipefail
+          git init /tmp/libaudition
+          git -C /tmp/libaudition remote add origin https://github.com/ARDev1161/libaudition.git
+          git -C /tmp/libaudition fetch --depth 1 origin fda0ab378d01be282acd4896411a1a6458c2afbf
+          git -C /tmp/libaudition checkout --detach FETCH_HEAD
+          cmake -S /tmp/libaudition -B /tmp/libaudition-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/audition-install \
+            -DLIBAUDITION_WITH_ODAS=ON \
+            -DLIBAUDITION_WITH_SPDLOG=OFF \
+            -DLIBAUDITION_BUILD_TESTS=OFF \
+            -DLIBAUDITION_BUILD_EXAMPLES=OFF \
+            -DLIBAUDITION_BUILD_QT_DEMO=OFF \
+            -DLIBAUDITION_FETCH_DEPENDENCIES=ON -DBUILD_TESTING=OFF
+          cmake --build /tmp/libaudition-build --parallel 3
+          cmake --install /tmp/libaudition-build
+      - name: Compile native ROS ODAS adapter
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          export CMAKE_PREFIX_PATH="/tmp/audition-install:${CMAKE_PREFIX_PATH}"
+          colcon build --event-handlers console_direct+ \
+            --cmake-args -DAUDITION_ROS2_WITH_ODAS=ON -DBUILD_TESTING=OFF
+      - name: Smoke actual ODAS pipeline on synthetic multichannel WAV
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          export CMAKE_PREFIX_PATH="/tmp/audition-install:${CMAKE_PREFIX_PATH}"
+          export LD_LIBRARY_PATH="/tmp/audition-install/lib:${LD_LIBRARY_PATH:-}"
+          source install/setup.bash
+          python3 - <<'PY'
+          import math
+          import struct
+          import wave
+          with wave.open('/tmp/odas_ci.wav', 'wb') as wav:
+              wav.setnchannels(6)
+              wav.setsampwidth(2)
+              wav.setframerate(16000)
+              for offset in range(0, 16000 * 12, 1600):
+                  samples = []
+                  for i in range(1600):
+                      k = offset + i
+                      for channel in range(6):
+                          signal = math.sin(2 * math.pi * (360 + channel * 6) * k / 16000)
+                          samples.append(int(8500 * signal) if channel in (1,2,3,4) else 0)
+                  wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+          PY
+          ros2 launch audition_bringup m1_wav_pipeline.launch.py \
+            wav_path:=/tmp/odas_ci.wav spatial_backend:=odas \
+            spatial_config:=./audition_bringup/config/odas_synthetic_ci.yaml \
+            > /tmp/odas_ros.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_odas_pipeline.py; then
+            cat /tmp/odas_ros.log
+            exit 1
+          fi

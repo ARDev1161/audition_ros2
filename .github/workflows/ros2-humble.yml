@@ -1,0 +1,72 @@
+name: ROS 2 Humble CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+
+jobs:
+  humble:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            python3-colcon-common-extensions \
+            python3-pytest \
+            ros-humble-ament-cmake-pytest \
+            ros-humble-ament-cmake-gtest \
+            ros-humble-rosidl-default-generators \
+            ros-humble-geometry-msgs \
+            ros-humble-rclpy \
+            ros-humble-rclcpp \
+            ros-humble-rclcpp-components \
+            ros-humble-launch-ros
+      - name: Build all packages
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          colcon build --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=ON
+      - name: Run ROS message and WAV parser tests
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
+          ros2 interface show audition_msgs/msg/AcousticScene
+          ros2 interface show audition_msgs/msg/SourceAudioFrame
+      - name: Validate launch Python syntax
+        run: |
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py
+
+      - name: Smoke WAV to acoustic scene over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          python3 - <<'PY'
+          import math, struct, wave
+          with wave.open('/tmp/audition_ci.wav', 'wb') as wav:
+              wav.setnchannels(1)
+              wav.setsampwidth(2)
+              wav.setframerate(16000)
+              for _ in range(40):
+                  samples = [int(7000 * math.sin(2 * math.pi * 440 * i / 16000))
+                             for i in range(16000)]
+                  wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+          PY
+          ros2 launch audition_bringup m1_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav > /tmp/audition_ci_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_wav_pipeline.py; then
+            cat /tmp/audition_ci_launch.log
+            exit 1
+          fi
