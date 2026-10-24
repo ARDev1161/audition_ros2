@@ -1,6 +1,7 @@
 # Observed speech segments; speaker ID is optional and unverified by default.
 std_msgs/Header header
 string source_id
+uint64 source_generation
 string speaker_id
 string model_id
 string language
