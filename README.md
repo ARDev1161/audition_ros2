@@ -6,7 +6,23 @@ ROS 2 integration and robot-facing acoustic perception built on [libaudition](ht
 
 ## Interaction overview
 
-![audition_ros2 node interaction diagram](docs/images/acoustic_interaction_flow.svg)
+```mermaid
+flowchart TB
+    CAP["audio_capture"] -->|Multichannel PCM| SP["spatial_perception"]
+    SP -->|Separated audio per source| SEM["semantic_perception"]
+    SP -->|Sources and bearings| SC["acoustic_scene"]
+    SEM -->|Classes, events, transcripts| SC
+    SC --> ATT["attention_manager"]
+    SC --> FUS["multimodal_fusion"]
+    SC --> MEM["acoustic_memory"]
+    CAM["OAK-D / Radar / TF2"] --> FUS
+    FUS -->|Validated 3D positions| COST["Nav2 costmap plugin"]
+    FUS --> ATT
+    ATT -->|Actions| NAV["Nav2"]
+    COST --> NAV
+```
+
+[Static SVG version](docs/images/acoustic_interaction_flow.svg)
 
 The M1 perception path has three ROS nodes: `audio_capture`, `spatial_perception`, and `acoustic_scene`. M2 adds `semantic_perception`; later components add attention, fusion and memory. A Nav2 costmap layer is a plugin, not an additional ROS node.
 
