@@ -2,6 +2,7 @@
 # An acoustic source ID, transient spatial track ID and speaker ID differ.
 std_msgs/Header header
 string source_id
+uint64 source_generation
 string spatial_track_id
 string speaker_id
 
