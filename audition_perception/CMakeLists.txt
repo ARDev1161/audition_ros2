@@ -27,7 +27,7 @@ ament_target_dependencies(audition_perception_components
   rclcpp rclcpp_components audition_msgs)
 if(AUDITION_ROS2_WITH_ODAS)
   target_link_libraries(audition_perception_components
-    PRIVATE audition::backend_odas audition::core)
+    audition::backend_odas audition::core)
   target_compile_definitions(audition_perception_components PRIVATE
     AUDITION_ROS2_WITH_ODAS=1)
 endif()
