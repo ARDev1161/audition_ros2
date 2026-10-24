@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 interface scaffold in development. No microphone, spatial processing or navigation runtime nodes are implemented yet.
+**Status:** M0 messages and an experimental M1 WAV replay/scaffold exist. ODAS localization, semantic inference, live hardware capture and navigation integration are **not yet implemented**.
 
 ## Interaction overview
 
@@ -18,6 +18,23 @@ The M1 perception path has three ROS nodes: `audio_capture`, `spatial_perception
 - [M0 implementation notes](docs/M0_IMPLEMENTATION.md) — implemented messages, example ReSpeaker profile, build and pending gates.
 - [Engineering roadmap](docs/ROADMAP.md) — near-term ROS 2 integration, future capabilities, dependencies, explicit non-goals, validation gates, and safety boundaries.
 - [Human spatial hearing and robot perception](docs/HUMAN_SPATIAL_HEARING.md) — how biological hearing uses acoustic cues, motion, vision, and prior knowledge; what is worth reproducing in robotics and where engineering alternatives are preferable.
+
+## Experimental M1 WAV replay
+
+With ROS 2 Humble installed:
+
+```bash
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --cmake-args -DBUILD_TESTING=ON
+source install/setup.bash
+ros2 launch audition_bringup m1_wav_pipeline.launch.py wav_path:=/absolute/path/to/audio.wav
+# New sourced shell:
+ros2 topic echo /audition/scene audition_msgs/msg/AcousticScene --once
+```
+
+Only uncompressed PCM16 and normalized float32 RIFF/WAV are currently supported. The spatial backend is explicitly **disabled**: it produces empty source observations, not fake DOA measurements. This runs transport and scene-adapter plumbing rather than a functional source localization pipeline.
+
+See [M1 implementation status](docs/M1_IMPLEMENTATION.md).
 
 ## Intended boundaries
 
