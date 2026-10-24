@@ -34,6 +34,10 @@ Counts exclude `/rviz2`, `/camera`, existing Nav2 servers, TF publishers, audio-
 
 ## 2. End-to-end data flow
 
+![Canonical audition_ros2 interactions](images/acoustic_interaction_flow.svg)
+
+[Mermaid source](diagrams/acoustic_interaction_flow.mmd). Keep the source and rendered illustration synchronized with the interface topology.
+
 ```mermaid
 flowchart TB
   MIC["ReSpeaker / ALSA / WAV"] --> CAP["audio_capture<br/>device / capture time / channel map"]
