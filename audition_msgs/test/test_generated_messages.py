@@ -31,7 +31,7 @@ def test_capture_frame_round_trip():
     restored = deserialize_message(serialize_message(msg), AudioFrame)
     assert restored.header.stamp.sec == 17
     assert restored.header.frame_id == "microphone_array"
-    assert restored.channel_indices == msg.channel_indices
+    assert list(restored.channel_indices) == [1, 2]
     assert list(restored.pcm) == pytest.approx([0.25, -0.5, 0.125, -0.25])
 
 
