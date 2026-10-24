@@ -5,6 +5,16 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(audition_msgs REQUIRED)
 
+option(AUDITION_ROS2_WITH_ODAS "Build native libaudition ODAS spatial adapter" OFF)
+if(AUDITION_ROS2_WITH_ODAS)
+  find_package(libaudition 1 CONFIG REQUIRED)
+  if(NOT TARGET audition::backend_odas)
+    message(FATAL_ERROR
+      "libaudition was installed without its ODAS backend. Rebuild upstream with "
+      "-DLIBAUDITION_WITH_ODAS=ON")
+  endif()
+endif()
+
 add_library(audition_perception_components SHARED
   src/spatial_perception_node.cpp
   src/acoustic_scene_node.cpp
@@ -15,6 +25,12 @@ target_include_directories(audition_perception_components PUBLIC
   $<INSTALL_INTERFACE:include>)
 ament_target_dependencies(audition_perception_components
   rclcpp rclcpp_components audition_msgs)
+if(AUDITION_ROS2_WITH_ODAS)
+  target_link_libraries(audition_perception_components
+    PRIVATE audition::backend_odas audition::core)
+  target_compile_definitions(audition_perception_components PRIVATE
+    AUDITION_ROS2_WITH_ODAS=1)
+endif()
 rclcpp_components_register_nodes(audition_perception_components
   "audition_perception::SpatialPerceptionNode"
   "audition_perception::AcousticSceneNode"
