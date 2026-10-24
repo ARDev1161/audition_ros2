@@ -24,14 +24,16 @@ jobs:
       - name: Build ROS messages
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           source /opt/ros/humble/setup.bash
+          set -u
           colcon build --packages-select audition_msgs --cmake-args -DBUILD_TESTING=ON
       - name: Run message contract tests
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           source /opt/ros/humble/setup.bash
+          set -u
           source install/setup.bash
           colcon test --packages-select audition_msgs --event-handlers console_direct+
           colcon test-result --verbose
