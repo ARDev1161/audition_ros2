@@ -138,7 +138,7 @@ public:
     }
 #ifdef AUDITION_ROS2_WITH_ODAS
     if (msg.header.frame_id != frame_id_ || msg.sample_rate_hz != sample_rate_ ||
-        input_channels_.back() >= msg.channel_count) {
+        *std::max_element(input_channels_.begin(), input_channels_.end()) >= msg.channel_count) {
       throw std::invalid_argument("Input does not match the calibrated ODAS frame/rate/channels");
     }
     // A discontinuity must never join samples from different source generations.
@@ -153,6 +153,17 @@ public:
     have_stamp_ = true;
     last_stamp_ns_ = stamp_ns;
 
+    if (pending_channels_ != 0 && pending_channels_ != msg.channel_count) {
+      restart();
+      audition_msgs::msg::AcousticSourceArray empty;
+      empty.header = msg.header;
+      empty.generation = generation_;
+      source_pub->publish(empty);
+      throw std::invalid_argument("Channel count changed; ODAS restarted");
+    }
+    if (msg.frame_count > hop_ * 4) {
+      throw std::invalid_argument("AudioFrame exceeds bounded ODAS ingress chunk");
+    }
     if (pending_.empty()) pending_stamp_ns_ = stamp_ns;
     const auto frame_count = static_cast<std::size_t>(msg.frame_count);
     const auto channel_count = static_cast<std::size_t>(msg.channel_count);
@@ -169,13 +180,6 @@ public:
       for (std::size_t n = 0; n < frame_count; ++n)
         for (std::size_t ch = 0; ch < channel_count; ++ch)
           pending_.push_back(msg.pcm[ch * frame_count + n]);
-    }
-    if (pending_channels_ != 0 && pending_channels_ != msg.channel_count) {
-      restart();
-      snapshot.generation = generation_;
-      pending_stamp_ns_ = stamp_ns;
-      pending_.clear();
-      throw std::invalid_argument("Channel count changed; ODAS restarted");
     }
     pending_channels_ = msg.channel_count;
     const auto hop_samples = static_cast<std::size_t>(hop_) * channel_count;
