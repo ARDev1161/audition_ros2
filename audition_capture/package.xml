@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>audition_capture</name>
+  <version>0.1.0</version>
+  <description>Replayable ROS 2 multichannel audio capture for audition.</description>
+  <maintainer email="ardev1161@users.noreply.github.com">ARDev1161</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>audition_msgs</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
