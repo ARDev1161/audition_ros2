@@ -1,0 +1,18 @@
+# ROS 2 / colcon generated directories
+build/
+install/
+log/
+
+# IDE / Python
+.idea/
+.vscode/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Binary recordings and model artifacts must not be committed by default
+*.wav
+*.flac
+*.ogg
+*.onnx
+*.gguf
