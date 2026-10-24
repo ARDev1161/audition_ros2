@@ -1,0 +1,37 @@
+name: ROS 2 Humble interface CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+
+jobs:
+  interfaces:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build/test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            python3-colcon-common-extensions \
+            python3-pytest \
+            ros-humble-ament-cmake-pytest \
+            ros-humble-rosidl-default-generators \
+            ros-humble-geometry-msgs \
+            ros-humble-rclpy
+      - name: Build ROS messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /opt/ros/humble/setup.bash
+          colcon build --packages-select audition_msgs --cmake-args -DBUILD_TESTING=ON
+      - name: Run message contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --packages-select audition_msgs --event-handlers console_direct+
+          colcon test-result --verbose
