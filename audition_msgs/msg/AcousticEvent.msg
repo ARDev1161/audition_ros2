@@ -2,6 +2,7 @@
 std_msgs/Header header
 string event_id
 string source_id
+uint64 source_generation
 string class_label
 string taxonomy_version
 string model_id
