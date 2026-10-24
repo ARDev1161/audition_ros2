@@ -47,8 +47,19 @@ std::int64_t toNanoseconds(const builtin_interfaces::msg::Time & stamp) {
   return static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
 }
 builtin_interfaces::msg::Time asStamp(std::int64_t ns) {
-  // Ingestion stamps are already ROS-domain timestamps (including sim time).
-  return rclcpp::Time(ns, RCL_ROS_TIME).to_msg();
+  // rclcpp::Time::to_msg() is unavailable on ROS 2 Humble.
+  constexpr std::int64_t billion = 1000000000LL;
+  auto sec = ns / billion;
+  auto rem = ns % billion;
+  if (rem < 0) { --sec; rem += billion; }
+  if (sec < std::numeric_limits<std::int32_t>::min() ||
+      sec > std::numeric_limits<std::int32_t>::max()) {
+    throw std::overflow_error("Audio timestamp outside ROS Time range");
+  }
+  builtin_interfaces::msg::Time result;
+  result.sec = static_cast<std::int32_t>(sec);
+  result.nanosec = static_cast<std::uint32_t>(rem);
+  return result;
 }
 #endif
 }  // namespace
