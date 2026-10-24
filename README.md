@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 messages and an experimental M1 WAV replay/scaffold exist. ODAS localization, semantic inference, live hardware capture and navigation integration are **not yet implemented**.
+**Status:** M0 messages and an experimental M1 WAV replay/scaffold exist. An optional native ODAS integration is implemented but **not hardware validated**; semantic inference, live capture and navigation remain unimplemented.
 
 ## Interaction overview
 
@@ -50,7 +50,7 @@ ros2 topic echo /audition/scene audition_msgs/msg/AcousticScene --once
 
 Only uncompressed PCM16 and normalized float32 RIFF/WAV are currently supported. The spatial backend is explicitly **disabled**: it produces empty source observations, not fake DOA measurements. This runs transport and scene-adapter plumbing rather than a functional source localization pipeline.
 
-See [M1 implementation status](docs/M1_IMPLEMENTATION.md).
+An optional `spatial_backend:=odas` mode is available with an ODAS-enabled libaudition CMake installation and separately calibrated array YAML. See [M1 implementation and native ODAS setup](docs/M1_IMPLEMENTATION.md).
 
 ## Intended boundaries
 
