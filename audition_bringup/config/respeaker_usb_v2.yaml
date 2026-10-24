@@ -14,10 +14,15 @@ audio_capture:
 
 spatial_perception:
   ros__parameters:
-    backend: "odas"
+    backend: "disabled" # switch to odas ONLY after calibration and ODAS-enabled build
     input_channel_indices: [1, 2, 3, 4]
     geometry_calibrated: false # fail closed until physical positions are supplied
     microphone_positions_m: [] # intentionally empty; never assume coordinates
     microphone_frame: "microphone_array"
-    odas_hop_frames: 128       # validate against actual backend configuration
+    sample_rate_hz: 16000
+    odas_hop_frames: 128
+    odas_frame_size: 256
+    max_tracks: 4
+    enable_separation: true
+    respeaker_angular_profile: false  # enable only when profile is physically appropriate
     source_timeout_ms: 1000   # suggested initial value; tune from recordings
