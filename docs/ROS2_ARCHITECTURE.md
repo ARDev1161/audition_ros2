@@ -34,30 +34,24 @@ Counts exclude `/rviz2`, `/camera`, existing Nav2 servers, TF publishers, audio-
 
 ## 2. End-to-end data flow
 
-![Canonical audition_ros2 interactions](images/acoustic_interaction_flow.svg)
+[Static SVG export](images/acoustic_interaction_flow.svg) (for offline viewing).
 
 [Mermaid source](diagrams/acoustic_interaction_flow.mmd). Keep the source and rendered illustration synchronized with the interface topology.
 
 ```mermaid
 flowchart TB
-  MIC["ReSpeaker / ALSA / WAV"] --> CAP["audio_capture<br/>device / capture time / channel map"]
-  CAP -->|"AudioFrame: raw PCM"| SP["spatial_perception<br/>ODAS + acoustic identity"]
-  SP -->|"SourceAudioFrame: mono per source"| SEM["semantic_perception<br/>tagging, VAD, ASR, temporal events"]
-  SP -->|"AcousticSourceArray"| SC["acoustic_scene<br/>canonical states and TTL"]
-  SEM -->|"SoundClassification / AcousticEvent / Transcript"| SC
-  SC -->|"AcousticScene, sources, events, transcripts"| CONS["ROS 2 consumers / recorders / UI"]
-  SC --> ATT["attention_manager<br/>Listen / LookAt / Investigate actions"]
-  SC --> FUS["multimodal_fusion<br/>tf2, AV and radar association"]
-  TF["tf2 / odom / IMU"] --> FUS
-  CAM["OAK-D / detections"] --> FUS
-  RAD["Radar, optional"] --> FUS
-  FUS -->|"LocalizedSourceArray (metric + covariance)"| MAP["Nav2 AcousticCostmapLayer plugin"]
-  FUS --> ATT
-  SC --> MEM["acoustic_memory<br/>history and room evidence"]
-  FUS --> MEM
-  ATT -->|"Allowed Nav2 / pan-tilt action"| NAV["Existing Nav2 / motion safety"]
-  MAP --> NAV
-  NAV -. "Robot movement enables new acoustic observations" .-> MIC
+    CAP["audio_capture"] -->|Multichannel PCM| SP["spatial_perception"]
+    SP -->|Separated audio per source| SEM["semantic_perception"]
+    SP -->|Sources and bearings| SC["acoustic_scene"]
+    SEM -->|Classes, events, transcripts| SC
+    SC --> ATT["attention_manager"]
+    SC --> FUS["multimodal_fusion"]
+    SC --> MEM["acoustic_memory"]
+    CAM["OAK-D / Radar / TF2"] --> FUS
+    FUS -->|Validated 3D positions| COST["Nav2 costmap plugin"]
+    FUS --> ATT
+    ATT -->|Actions| NAV["Nav2"]
+    COST --> NAV
 ```
 
 There is **no** semantic/attention feedback into the raw-capture callback. Feedback for selective heavier models uses commands/configuration or explicit per-source subscriptions and never creates a synchronous dependency from capture to an inference worker.
