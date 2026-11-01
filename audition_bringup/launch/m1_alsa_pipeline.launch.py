@@ -5,6 +5,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -32,8 +33,8 @@ def generate_launch_description():
             name="audio_capture",
             output="screen",
             parameters=[{
-                "device": LaunchConfiguration("device"),
-                "frame_id": LaunchConfiguration("frame_id"),
+                "device": ParameterValue(LaunchConfiguration("device"), value_type=str),
+                "frame_id": ParameterValue(LaunchConfiguration("frame_id"), value_type=str),
                 "sample_rate_hz": LaunchConfiguration("sample_rate_hz"),
                 "channel_count": LaunchConfiguration("channel_count"),
                 "frames_per_message": LaunchConfiguration("frames_per_message"),

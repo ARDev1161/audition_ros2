@@ -30,7 +30,7 @@ class Probe(Node):
             or msg.frame_count == 0
             or msg.frame_count > 160
             or msg.layout != AudioFrame.INTERLEAVED
-            or msg.channel_indices != [0, 1, 2, 3, 4, 5]
+            or list(msg.channel_indices) != [0, 1, 2, 3, 4, 5]
             or len(msg.pcm) != msg.channel_count * msg.frame_count
             or msg.header.frame_id != "microphone_array"
             or any(not math.isfinite(x) or abs(x) > 1 for x in msg.pcm)

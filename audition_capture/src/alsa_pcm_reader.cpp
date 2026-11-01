@@ -58,6 +58,8 @@ AlsaPcmReader::AlsaPcmReader(
     }
     scratch_.resize(static_cast<std::size_t>(chunk_frames_) * channels_);
     check(snd_pcm_prepare(pcm_), "snd_pcm_prepare");
+    // Capture must be running before the first wait on physical ALSA devices.
+    check(snd_pcm_start(pcm_), "snd_pcm_start");
   } catch (...) {
     snd_pcm_close(pcm_);
     pcm_ = nullptr;
@@ -76,6 +78,7 @@ void AlsaPcmReader::recoverOrThrow(int error) {
   }
   const int result = snd_pcm_recover(pcm_, error, 1);
   check(result, "ALSA XRUN/suspend recovery");
+  check(snd_pcm_start(pcm_), "ALSA capture restart");
   ++recoveries_;
   discontinuity_pending_ = true;
 }
