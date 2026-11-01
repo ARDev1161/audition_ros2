@@ -35,6 +35,12 @@ class Probe(Node):
             or msg.header.frame_id != "microphone_array"
             or any(not math.isfinite(x) or abs(x) > 1 for x in msg.pcm)
         ):
+            print(
+                f"Bad ALSA AudioFrame: rate={msg.sample_rate_hz} channels={msg.channel_count} "
+                f"frames={msg.frame_count} frame_id={msg.header.frame_id!r} "
+                f"indices={list(msg.channel_indices)} samples={len(msg.pcm)}",
+                file=sys.stderr,
+            )
             self.invalid = True
         if self.seq is not None and msg.sequence_number <= self.seq:
             self.invalid = True
