@@ -17,6 +17,7 @@ endif()
 
 add_library(audition_perception_components SHARED
   src/spatial_perception_node.cpp
+  src/source_lifecycle.cpp
   src/acoustic_scene_node.cpp
   src/semantic_perception_node.cpp)
 target_compile_features(audition_perception_components PUBLIC cxx_std_17)
@@ -41,4 +42,12 @@ install(TARGETS audition_perception_components
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(source_lifecycle_test test/test_source_lifecycle.cpp)
+  target_compile_features(source_lifecycle_test PUBLIC cxx_std_17)
+  target_include_directories(source_lifecycle_test PRIVATE include)
+  target_link_libraries(source_lifecycle_test audition_perception_components)
+  ament_target_dependencies(source_lifecycle_test audition_msgs)
+endif()
 ament_package()
