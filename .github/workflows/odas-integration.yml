@@ -46,7 +46,7 @@ jobs:
           source /opt/ros/humble/setup.bash
           export CMAKE_PREFIX_PATH="/tmp/audition-install:${CMAKE_PREFIX_PATH}"
           colcon build --event-handlers console_direct+ \
-            --cmake-args -DAUDITION_ROS2_WITH_ODAS=ON -DBUILD_TESTING=OFF
+            --cmake-args -DAUDITION_ROS2_WITH_ODAS=ON -DAUDITION_ROS2_WITH_ALSA=ON -DBUILD_TESTING=OFF
       - name: Smoke actual ODAS pipeline on synthetic multichannel WAV
         shell: bash
         run: |
