@@ -10,5 +10,6 @@
   <depend>rclcpp_components</depend>
   <depend>audition_msgs</depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <!-- libasound2-dev is required only when AUDITION_ROS2_WITH_ALSA=ON. -->
   <export><build_type>ament_cmake</build_type></export>
 </package>
