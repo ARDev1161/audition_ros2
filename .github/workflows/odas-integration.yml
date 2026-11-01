@@ -20,13 +20,13 @@ jobs:
             ros-humble-rosidl-default-generators ros-humble-rclcpp \
             ros-humble-rclcpp-components ros-humble-geometry-msgs \
             ros-humble-launch-ros ros-humble-rclpy python3-pytest
-      - name: Build and install pinned libaudition with native ODAS
+      - name: Build and install updated libaudition with native ODAS
         shell: bash
         run: |
           set -eo pipefail
           git init /tmp/libaudition
           git -C /tmp/libaudition remote add origin https://github.com/ARDev1161/libaudition.git
-          git -C /tmp/libaudition fetch --depth 1 origin fda0ab378d01be282acd4896411a1a6458c2afbf
+          git -C /tmp/libaudition fetch --depth 1 origin 72fc4040f0e21f1271a6b14c787cc8fa73cb3ad3
           git -C /tmp/libaudition checkout --detach FETCH_HEAD
           cmake -S /tmp/libaudition -B /tmp/libaudition-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
