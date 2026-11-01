@@ -30,6 +30,7 @@ The M1 perception path has three ROS nodes: `audio_capture`, `spatial_perception
 
 ## Design documents
 
+- [libaudition integration and user configuration](docs/LIBAUDITION_INTEGRATION.md) — backend selection, proposed YAML presets, exposed ROS features and runtime configuration rules.
 - [Node architecture and interaction contracts](docs/ROS2_ARCHITECTURE.md) — how many nodes, who owns data, internal/public topics, process isolation, QoS and lifecycle.
 - [M0 implementation notes](docs/M0_IMPLEMENTATION.md) — implemented messages, example ReSpeaker profile, build and pending gates.
 - [Engineering roadmap](docs/ROADMAP.md) — near-term ROS 2 integration, future capabilities, dependencies, explicit non-goals, validation gates, and safety boundaries.
