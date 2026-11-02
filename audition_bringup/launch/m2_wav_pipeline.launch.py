@@ -35,6 +35,7 @@ def generate_launch_description():
                 "wav_path": LaunchConfiguration("wav_path"),
                 "spatial_backend": LaunchConfiguration("spatial_backend"),
                 "spatial_config": LaunchConfiguration("spatial_config"),
+                "scene_config": LaunchConfiguration("scene_config"),
             }.items(),
         ),
         # Isolate model inference from spatial processing even when the native
