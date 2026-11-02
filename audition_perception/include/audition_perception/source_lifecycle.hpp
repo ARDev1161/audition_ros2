@@ -29,7 +29,9 @@ public:
 
   SourceLifecycle(std::chrono::milliseconds lost_after,
                   std::chrono::milliseconds end_after,
-                  std::size_t max_sources);
+                  std::size_t max_sources,
+                  std::chrono::milliseconds final_transcript_grace =
+                    std::chrono::milliseconds{5000});
 
   // A full spatial-source snapshot. Even an empty snapshot is significant.
   Update observe(const audition_msgs::msg::AcousticSourceArray & spatial,
@@ -37,6 +39,14 @@ public:
 
   // Called periodically even if capture/ODAS stops delivering messages.
   Update tick(TimePoint now, const std_msgs::msg::Header & header);
+
+  // Only admitted spatial sources may own new semantic observations/events.
+  bool isLive(const std::string & id, std::uint64_t generation) const;
+
+  // ASR may finish after physical retirement. Permit a bounded final-result
+  // grace for a known retired source but never across spatial stream resets.
+  bool allowsFinalTranscript(const std::string & id, std::uint64_t generation,
+                             TimePoint arrival) const;
 
 private:
   using Key = std::pair<std::uint64_t, std::string>;
@@ -54,8 +64,12 @@ private:
 
   std::chrono::milliseconds lost_after_;
   std::chrono::milliseconds end_after_;
+  std::chrono::milliseconds final_transcript_grace_;
   std::size_t max_sources_;
   std::map<Key, Entry> tracked_;
+  std::map<Key, TimePoint> recently_ended_;
+  std::string frame_id_;
+  void pruneEnded(TimePoint now);
   std::uint64_t stream_generation_{0};
   bool have_stream_{false};
 };
