@@ -3,7 +3,7 @@
 import pytest
 from rclpy.serialization import deserialize_message, serialize_message
 
-from audition_msgs.srv import GetCapabilities
+from audition_msgs.srv import GetCapabilities, GetCaptureStatus
 
 from audition_msgs.msg import (
     AcousticEvent,
@@ -131,3 +131,19 @@ def test_capabilities_service_contract():
     assert restored.spatial_backend == "mono"
     assert list(restored.compiled_classifiers) == ["disabled"]
     assert not restored.runtime_reconfiguration_supported
+
+
+def test_capture_status_service_round_trip():
+    response = GetCaptureStatus.Response()
+    response.connected = False
+    response.terminal_failure = True
+    response.reconnect_attempts = 4
+    response.reconnect_failures = 4
+    response.next_retry_delay_ms = 800
+    response.last_error = "ENODEV"
+    back = deserialize_message(serialize_message(response), GetCaptureStatus.Response)
+    assert not back.connected
+    assert back.terminal_failure
+    assert back.reconnect_attempts == 4
+    assert back.next_retry_delay_ms == 800
+    assert back.last_error == "ENODEV"

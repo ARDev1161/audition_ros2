@@ -272,3 +272,12 @@ resets, and reports counters via a typed ROS service. Native synthetic ODAS CI
 checks real hop processing. This is not an asynchronous ODAS worker, a
 DDS-drop measurement, measured microphone calibration, or transactional
 reload. Those remain M1/M2 acceptance work.
+
+### Implemented increment: live ALSA capture continuity (2026-11-02)
+
+The capture process now retries failed or stalled ALSA devices with bounded
+backoff and an optional attempt limit, publishes a sequence gap on the next
+real PCM frame after recovery, and exposes a typed status service. Deterministic
+fault-policy tests and virtual-device ROS graph smoke cover the software
+contract. Real unplug/replug, latency and USB timestamp accuracy remain HIL
+acceptance requirements. This is not semantic transactional reconfiguration.

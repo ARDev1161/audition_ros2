@@ -22,6 +22,8 @@ def generate_launch_description():
         DeclareLaunchArgument("sample_rate_hz", default_value="16000"),
         DeclareLaunchArgument("channel_count", default_value="6"),
         DeclareLaunchArgument("frames_per_message", default_value="160"),
+        DeclareLaunchArgument("stall_timeout_ms", default_value="2000"),
+        DeclareLaunchArgument("max_reconnect_attempts", default_value="0"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled"),
         DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
@@ -42,6 +44,8 @@ def generate_launch_description():
                 "sample_rate_hz": LaunchConfiguration("sample_rate_hz"),
                 "channel_count": LaunchConfiguration("channel_count"),
                 "frames_per_message": LaunchConfiguration("frames_per_message"),
+                "stall_timeout_ms": LaunchConfiguration("stall_timeout_ms"),
+                "max_reconnect_attempts": LaunchConfiguration("max_reconnect_attempts"),
             }],
         ),
         ComposableNodeContainer(

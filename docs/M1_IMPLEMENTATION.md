@@ -229,3 +229,35 @@ deterministic unit tests in the default Humble build; the native ODAS workflow
 tests the service while processing a synthetic multichannel WAV. No physical
 array calibration or real-time performance is implied. Transactional
 reconfiguration and HIL metrics remain outstanding.
+
+## M2f: live ALSA watchdog, reconnect and capture diagnostics (2026-11-02)
+
+Live ALSA capture now treats an unexpected read error or a sustained absence of
+PCM as a transport failure. The worker closes the failed handle and retries the
+**same configured device/rate/channel layout**, with bounded exponential
+backoff (100–2000 ms). `stall_timeout_ms` defaults to 2000 ms (500–60000
+allowed); `max_reconnect_attempts:=0` means unlimited retries, or a positive
+cap marks a terminal failure. Initial device configuration still fails fast.
+
+Every successful reconnect and delivered XRUN recovery creates a sequence
+gap on the next valid `AudioFrame`, fencing downstream mono/ODAS source
+generations without synthesizing audio. Capture time is still an estimate from
+read completion, **not** a hardware timestamp. Shutdown interrupts retry sleep
+within approximately 50 ms; no model worker runs in the capture thread.
+
+Inspect the namespaced read-only service:
+
+~~~bash
+ros2 service call /audition/audio_capture/get_capture_status \\
+  audition_msgs/srv/GetCaptureStatus "{}"
+# With audition_namespace:=robot_a/audition, use
+# /robot_a/audition/audio_capture/get_capture_status
+~~~
+
+It exposes connection/terminal state, published PCM count, last sequence,
+delivered XRUN recovery episodes, fatal/stall events, reconnect attempts,
+success/failure counts, retry delay and last error. These are process-local
+counters, **not** evidence of successful physical unplug/replug, clock
+synchronization or calibrated ReSpeaker accuracy. Unit tests inject failures
+into the continuity/backoff state machine; Humble CI checks the service on
+the virtual ALSA `null` device. Physical HIL remains required.

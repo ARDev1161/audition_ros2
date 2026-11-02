@@ -9,6 +9,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from audition_msgs.msg import AudioFrame, AcousticScene
+from audition_msgs.srv import GetCaptureStatus
 
 
 class Probe(Node):
@@ -18,6 +19,9 @@ class Probe(Node):
         self.scene_count = 0
         self.invalid = False
         self.seq = None
+        self.status_future = None
+        self.status_client = self.create_client(
+            GetCaptureStatus, "/audition/audio_capture/get_capture_status")
         self.create_subscription(
             AudioFrame, "/audition/audio/raw", self.on_audio, qos_profile_sensor_data)
         self.create_subscription(
@@ -63,8 +67,19 @@ def main():
                 print("ALSA smoke FAIL: invalid PCM metadata", file=sys.stderr)
                 return 1
             if probe.frames >= 8 and probe.scene_count >= 2:
-                print("ALSA smoke PASS: finite normalized 6ch live PCM -> canonical scene")
-                return 0
+                if probe.status_future is None and probe.status_client.service_is_ready():
+                    probe.status_future = probe.status_client.call_async(
+                        GetCaptureStatus.Request())
+                if probe.status_future is not None and probe.status_future.done():
+                    status = probe.status_future.result()
+                    if status is None or not status.connected or status.terminal_failure:
+                        print("ALSA capture service reported unhealthy null PCM", file=sys.stderr)
+                        return 1
+                    if status.published_frames < 8 or status.reconnect_failures:
+                        print("ALSA capture counters invalid", file=sys.stderr)
+                        return 1
+                    print("ALSA smoke PASS: live PCM, canonical scene, capture status service")
+                    return 0
         print(
             f"ALSA smoke FAIL: frames={probe.frames} scenes={probe.scene_count}",
             file=sys.stderr,

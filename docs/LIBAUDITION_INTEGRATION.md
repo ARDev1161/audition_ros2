@@ -340,3 +340,17 @@ reset causes, buffer overflow and recovery. Native ODAS CI additionally
 checks the service against actual synthetic WAV processing. Neither test
 certifies ReSpeaker calibration, measured DOA accuracy or end-to-end latency.
 A full transactional `ReloadPipeline` is still future work.
+
+## 14. M2f: resilient ALSA capture transport (2026-11-02)
+
+The live ALSA worker now has a bounded-backoff reopen loop and a no-PCM
+watchdog, with a typed `GetCaptureStatus` service. A recovered XRUN or a
+successful device reopen skips one sequence number before the next valid
+capture frame. Existing mono/ODAS ingress detects the gap and advances its
+source generation; no samples, speaker identities or timestamps are fabricated.
+The device and negotiated rate/channels remain fixed; failure to open at
+startup is fatal. This is a transport-level recovery increment, not the
+transactional semantic model `ReloadPipeline` or a field validation.
+
+See [M1 capture and scene status](M1_IMPLEMENTATION.md) for launch arguments,
+service fields and testing limitations.

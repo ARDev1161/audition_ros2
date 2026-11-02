@@ -170,3 +170,12 @@ and 880Hz WAVs, validates PCM, canonical scene frames and independent
 capability services, and rejects unexpected global /audition topics.
 This is graph isolation, not physical ODAS calibration, a fleet registry
 or transactional model reload. Runtime semantic parameters remain immutable.
+
+### Live ALSA recovery (experimental)
+
+`m1_alsa_pipeline.launch.py` supports `stall_timeout_ms:=2000` and
+`max_reconnect_attempts:=0` (unlimited bounded-backoff retries). Unexpected
+read failure/stall reopens the same device; a sequence gap fences old
+mono/ODAS sources. Inspect `/audition/audio_capture/get_capture_status`
+(`audition_msgs/srv/GetCaptureStatus`). The virtual ALSA CI test does not
+replace physical ReSpeaker unplug/replug validation.
