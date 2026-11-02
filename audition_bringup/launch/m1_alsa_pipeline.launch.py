@@ -72,6 +72,7 @@ def generate_launch_description():
                     plugin="audition_perception::AcousticSceneNode",
                     name="acoustic_scene",
                     namespace="/audition",
+                    parameters=[LaunchConfiguration("scene_config")],
                 ),
             ],
         ),
