@@ -18,7 +18,7 @@ jobs:
             git build-essential cmake ninja-build libfftw3-dev libconfig-dev libasound2-dev libpulse-dev libjack-jackd2-dev libsndfile1-dev \
             python3-colcon-common-extensions \
             ros-humble-rosidl-default-generators ros-humble-rclcpp \
-            ros-humble-rclcpp-components ros-humble-ament-cmake-gtest ros-humble-geometry-msgs \
+            ros-humble-rclcpp-components ros-humble-ament-cmake-gtest ros-humble-ament-cmake-pytest ros-humble-geometry-msgs \
             ros-humble-launch-ros ros-humble-rclpy python3-pytest
       - name: Build and install updated libaudition with native ODAS
         shell: bash
