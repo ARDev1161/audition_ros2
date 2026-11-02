@@ -21,6 +21,7 @@ private:
   rclcpp::Publisher<audition_msgs::msg::AudioFrame>::SharedPtr publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
   std::string frame_id_;
+  std::string capture_session_id_;
   std::uint32_t frames_per_message_{160};
   std::uint64_t sequence_{0};
   bool loop_{false};
