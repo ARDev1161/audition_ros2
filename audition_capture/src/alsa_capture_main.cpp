@@ -1,5 +1,6 @@
 #include "audition_capture/alsa_pcm_reader.hpp"
 #include "audition_capture/capture_continuity.hpp"
+#include "audition_capture/capture_session_id.hpp"
 
 #include <audition_msgs/msg/audio_frame.hpp>
 #include <audition_msgs/srv/get_capture_status.hpp>
@@ -174,6 +175,7 @@ private:
       last_frame = Clock::now();
       audition_msgs::msg::AudioFrame msg;
       msg.header.frame_id = frame_id_;
+      msg.capture_session_id = capture_session_id_;
       // Estimate the first sample's ROS timestamp from read completion.
       const auto delay = static_cast<std::int64_t>(frames) * 1000000000LL / rate_;
       msg.header.stamp = now() - rclcpp::Duration::from_nanoseconds(delay);
@@ -206,6 +208,7 @@ private:
   }
 
   std::string device_, frame_id_;
+  const std::string capture_session_id_{makeCaptureSessionId()};
   std::uint32_t rate_{0}, channels_{0}, chunk_{0};
   int timeout_ms_{100}, stall_timeout_ms_{2000};
   std::unique_ptr<AlsaPcmReader> reader_;  // owned exclusively by capture worker after start
