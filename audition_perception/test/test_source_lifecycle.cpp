@@ -100,3 +100,49 @@ TEST(SourceLifecycle, RejectsDuplicateAndUnboundedInputWithoutMutation) {
   auto valid = lifecycle.observe(source(), SourceLifecycle::TimePoint{});
   EXPECT_EQ(valid.scene.sources.size(), 1U);
 }
+
+
+TEST(SourceLifecycle, FinalASRGraceIsBoundedAndGenerationScoped) {
+  SourceLifecycle lifecycle(100ms, 600ms, 8, 2000ms);
+  const auto t = SourceLifecycle::TimePoint{};
+  lifecycle.observe(source(1, "speech"), t);
+  EXPECT_TRUE(lifecycle.isLive("speech", 1));
+  EXPECT_TRUE(lifecycle.allowsFinalTranscript("speech", 1, t));
+  EXPECT_FALSE(lifecycle.isLive("unseen", 1));
+
+  const auto header = source().header;
+  auto ended = lifecycle.tick(t + 600ms, header);
+  ASSERT_EQ(ended.sources.sources.size(), 1U);
+  EXPECT_EQ(ended.sources.sources[0].state, AcousticSource::ENDED);
+  EXPECT_FALSE(lifecycle.isLive("speech", 1));
+  EXPECT_TRUE(lifecycle.allowsFinalTranscript("speech", 1, t + 2100ms));
+  EXPECT_FALSE(lifecycle.allowsFinalTranscript("speech", 1, t + 2601ms));
+  EXPECT_FALSE(lifecycle.allowsFinalTranscript("unseen", 1, t + 700ms));
+
+  lifecycle.observe(source(2, "new"), t + 2700ms);
+  EXPECT_FALSE(lifecycle.allowsFinalTranscript("speech", 1, t + 2700ms));
+  EXPECT_TRUE(lifecycle.isLive("new", 2));
+}
+
+TEST(SourceLifecycle, MalformedSnapshotsCannotCorruptStreamOrSources) {
+  SourceLifecycle lifecycle(100ms, 600ms, 8);
+  const auto t = SourceLifecycle::TimePoint{};
+  lifecycle.observe(source(3, "known"), t);
+  const auto original = source(3, "known");
+  auto invalid = source(3, "mismatch");
+  invalid.sources.front().source_generation = 4;
+  EXPECT_THROW(lifecycle.observe(invalid, t + 1ms), std::invalid_argument);
+  invalid = source(3, "mismatch");
+  invalid.sources.front().header.frame_id = "other";
+  EXPECT_THROW(lifecycle.observe(invalid, t + 2ms), std::invalid_argument);
+  invalid = source(3, "mismatch");
+  invalid.header.frame_id = "other";
+  EXPECT_THROW(lifecycle.observe(invalid, t + 3ms), std::invalid_argument);
+  invalid = source(2, "stale");
+  EXPECT_THROW(lifecycle.observe(invalid, t + 4ms), std::invalid_argument);
+  EXPECT_TRUE(lifecycle.isLive("known", 3));
+  EXPECT_FALSE(lifecycle.isLive("mismatch", 3));
+  const auto recovered = lifecycle.observe(original, t + 5ms);
+  ASSERT_EQ(recovered.scene.sources.size(), 1U);
+  EXPECT_EQ(recovered.scene.sources.front().source_id, "known");
+}
