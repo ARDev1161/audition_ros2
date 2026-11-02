@@ -3,6 +3,9 @@
 # acquisition clock should be mapped explicitly before publication.
 # header.frame_id identifies the physical capture device / microphone array.
 std_msgs/Header header
+# Unique 32-character lowercase hex capture-process incarnation, stable across reconnect.
+# This is an ordering discriminator, not publisher authentication.
+string capture_session_id
 uint64 sequence_number
 uint32 sample_rate_hz
 uint32 channel_count
