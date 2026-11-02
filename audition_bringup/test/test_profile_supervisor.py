@@ -12,6 +12,17 @@ spec.loader.exec_module(module)
 ProfileSpec, PipelineSupervisor = module.ProfileSpec, module.PipelineSupervisor
 
 
+class FakeClock:
+    def __init__(self):
+        self.value = 0.0
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, seconds=1.1):
+        self.value += seconds
+
+
 class FakeProcess:
     def __init__(self, name, events):
         self.name, self.events, self.dead, self.fail_stop = name, events, False, False
@@ -30,6 +41,8 @@ class FakeProcess:
 class FakeProbe:
     def __init__(self, events):
         self.events, self.fail, self.fail_gone, self.occupied = events, set(), False, False
+        self.health_failure = ""
+        self.raise_health = False
 
     def vacant(self, spec):
         return not self.occupied
@@ -37,6 +50,12 @@ class FakeProbe:
     def ready(self, spec, process, timeout):
         self.events.append("ready:" + spec.profile)
         return spec.profile not in self.fail
+
+    def health(self, spec):
+        self.events.append("health:" + spec.profile)
+        if self.raise_health:
+            raise RuntimeError("injected discovery failure")
+        return not self.health_failure, self.health_failure
 
     def gone(self, spec, timeout):
         self.events.append("gone:" + spec.profile)
@@ -47,6 +66,7 @@ class SwitchTests(unittest.TestCase):
     def setUp(self):
         self.events = []
         self.probe = FakeProbe(self.events)
+        self.clock = FakeClock()
 
         def validate(spec):
             self.events.append("validate:" + spec.profile)
@@ -55,7 +75,7 @@ class SwitchTests(unittest.TestCase):
 
         self.supervisor = PipelineSupervisor(
             validate, lambda spec: FakeProcess(spec.profile, self.events),
-            self.probe, timeout=1)
+            self.probe, timeout=1, clock=self.clock)
         self.supervisor.start(ProfileSpec("old"))
 
     def tearDown(self):
@@ -145,6 +165,81 @@ class SwitchTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("stale pipeline", result.message)
         self.assertEqual(self.events.count("spawn:old"), 1)
+
+    def test_transient_graph_miss_recovers_without_restart(self):
+        self.probe.health_failure = "missing semantic_perception"
+        for _ in range(4):
+            self.clock.advance()
+            self.supervisor.monitor()
+        state = self.supervisor.status()
+        self.assertTrue(state.running)
+        self.assertFalse(state.graph_healthy)
+        self.assertEqual(state.graph_miss_count, 4)
+        self.probe.health_failure = ""
+        self.clock.advance()
+        self.supervisor.monitor()
+        self.assertTrue(self.supervisor.status().graph_healthy)
+        self.assertEqual(self.supervisor.status().graph_miss_count, 0)
+        self.assertNotIn("stop:old", self.events)
+
+    def test_sustained_graph_failure_fences_and_manual_recovery(self):
+        self.probe.health_failure = "missing semantic_perception"
+        for _ in range(5):
+            self.clock.advance()
+            self.supervisor.monitor()
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertFalse(state.graph_healthy)
+        self.assertFalse(state.owned_process_present)
+        self.assertIn("5 consecutive checks", state.fault)
+        self.assertEqual(self.events.count("stop:old"), 1)
+        self.probe.health_failure = ""
+        recovered = self.supervisor.switch(ProfileSpec("old"))
+        self.assertTrue(recovered.success)
+        self.assertTrue(self.supervisor.status().graph_healthy)
+        self.assertEqual(self.supervisor.status().reload_epoch, 1)
+
+    def test_status_polling_cannot_accelerate_watchdog(self):
+        self.probe.health_failure = "missing acoustic_scene"
+        self.clock.advance()
+        for _ in range(30):
+            self.supervisor.monitor()
+            self.supervisor.status()
+        self.assertEqual(self.supervisor.status().graph_miss_count, 1)
+        self.assertEqual(self.events.count("health:old"), 1)
+        self.assertTrue(self.supervisor.status().running)
+
+    def test_discovery_exception_counts_as_failed_probe(self):
+        self.probe.raise_health = True
+        for _ in range(5):
+            self.clock.advance()
+            self.supervisor.monitor()
+        self.assertIn("injected discovery failure", self.supervisor.status().fault)
+        self.assertFalse(self.supervisor.status().running)
+
+    def test_graph_failure_cleanup_error_retains_ownership(self):
+        self.probe.health_failure = "missing mono_source"
+        self.supervisor.process.fail_stop = True
+        for _ in range(5):
+            self.clock.advance()
+            self.supervisor.monitor()
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertTrue(state.owned_process_present)
+        self.assertIn("cleanup failed", state.fault)
+        self.assertFalse(self.supervisor.switch(ProfileSpec("new")).success)
+        self.assertNotIn("spawn:new", self.events)
+        self.supervisor.process.fail_stop = False
+
+    def test_successful_switch_resets_health_debounce(self):
+        self.probe.health_failure = "missing acoustic_scene"
+        self.clock.advance()
+        self.supervisor.monitor()
+        self.assertEqual(self.supervisor.status().graph_miss_count, 1)
+        self.probe.health_failure = ""
+        self.assertTrue(self.supervisor.switch(ProfileSpec("new")).success)
+        self.assertTrue(self.supervisor.status().graph_healthy)
+        self.assertEqual(self.supervisor.status().graph_miss_count, 0)
 
     def test_dead_owned_process_rejected(self):
         self.supervisor.process.dead = True

@@ -3,7 +3,7 @@
 import pytest
 from rclpy.serialization import deserialize_message, serialize_message
 
-from audition_msgs.srv import GetCapabilities, GetCaptureStatus, GetSemanticStatus
+from audition_msgs.srv import GetCapabilities, GetCaptureStatus, GetSemanticStatus, GetPipelineStatus
 
 from audition_msgs.msg import (
     AcousticEvent,
@@ -174,3 +174,15 @@ def test_capture_status_service_round_trip():
     assert back.reconnect_attempts == 4
     assert back.next_retry_delay_ms == 800
     assert back.last_error == "ENODEV"
+
+
+def test_pipeline_status_graph_watchdog_round_trip():
+    response = GetPipelineStatus.Response()
+    response.running = True
+    response.graph_healthy = False
+    response.graph_miss_count = 3
+    response.last_good_profile = "replay_ci"
+    back = deserialize_message(serialize_message(response), GetPipelineStatus.Response)
+    assert back.running and not back.graph_healthy
+    assert back.graph_miss_count == 3
+    assert back.last_good_profile == "replay_ci"

@@ -556,3 +556,14 @@ with last-good profile and faults. Recovery is explicit, guarded by preflight
 and graph disappearance; it never adopts an occupied namespace. This is not
 two-phase resource reservation or a guarantee of continued model/hardware
 health. See [supervisor contract](M2_PIPELINE_SUPERVISOR.md).
+
+## M2q: supervised ROS graph health (2026-11-02)
+
+The opt-in process supervisor now samples expected capture/spatial/scene/semantic
+ROS nodes and the semantic capability service once per second after startup.
+Five consecutive missing/duplicate discovery results or probe errors cause
+owned process-group cleanup and an explicit-recovery fault, even if the launch
+parent remains alive. A transient miss resets on the next healthy sample.
+`GetPipelineStatus` exposes `graph_healthy` and `graph_miss_count`.
+This is not an audio heartbeat, hardware health guarantee or zero-downtime
+reload. See [M2q supervisor watchdog](M2_PIPELINE_SUPERVISOR.md).

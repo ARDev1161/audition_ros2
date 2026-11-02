@@ -6,3 +6,6 @@ string active_profile
 string last_good_profile
 uint64 reload_epoch
 string fault
+# Last sampled ROS graph health; false while offline or after a missed check.
+bool graph_healthy
+uint32 graph_miss_count

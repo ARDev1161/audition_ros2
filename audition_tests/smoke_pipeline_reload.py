@@ -24,7 +24,8 @@ def main():
         initial = call(node, status_client, GetPipelineStatus.Request())
         assert initial.running and initial.owned_process_present, initial
         assert initial.active_profile == "replay_ci" and initial.reload_epoch == 0
-        assert not initial.fault
+        assert not initial.fault and initial.graph_healthy
+        assert initial.graph_miss_count == 0
         dry = ReloadPipeline.Request()
         dry.dry_run = True
         result = call(node, reload, dry)
@@ -39,11 +40,12 @@ def main():
         healthy = call(node, status_client, GetPipelineStatus.Request())
         assert healthy.running and healthy.owned_process_present, healthy
         assert healthy.last_good_profile == "replay_ci" and not healthy.fault
+        assert healthy.graph_healthy and healthy.graph_miss_count == 0
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
         nodes = node.get_node_names_and_namespaces()
         for name in ("audio_capture", "mono_source", "acoustic_scene", "semantic_perception"):
             assert nodes.count((name, "/audition")) == 1, (name, nodes)
-        print("Pipeline reload PASS: preflight, dry-run, owned restart, readiness")
+        print("Pipeline reload PASS: preflight, dry-run, owned restart, graph watchdog status")
     finally:
         node.destroy_node()
         rclpy.shutdown()

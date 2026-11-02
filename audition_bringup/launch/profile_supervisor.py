@@ -66,6 +66,8 @@ class OwnedLaunch:
 class GraphProbe:
     def __init__(self, node, validate):
         self.node, self.validate = node, validate
+        self._ready_expected = None
+        self._ready_service = None
 
     @staticmethod
     def expected(spec, resolved):
@@ -91,9 +93,23 @@ class GraphProbe:
             services = {name for name, _ in self.node.get_service_names_and_types()}
             nodes = self._nodes()
             if all(nodes.count(item) == 1 for item in expected) and service in services:
+                self._ready_expected = expected
+                self._ready_service = service
                 return True
             time.sleep(0.1)
         return False
+
+    def health(self, spec):
+        """Read-only graph liveness, using the last successfully started layout."""
+        if self._ready_expected is None or self._ready_service is None:
+            return False, "no confirmed ready graph"
+        nodes = self._nodes()
+        missing = [name for name, namespace in sorted(self._ready_expected)
+                   if nodes.count((name, namespace)) != 1]
+        services = {name for name, _ in self.node.get_service_names_and_types()}
+        if self._ready_service not in services:
+            missing.append("semantic_perception/get_capabilities")
+        return (not missing, "missing/duplicate: " + ", ".join(missing) if missing else "")
 
     def gone(self, spec, timeout):
         expected = self.expected(spec, self.validate(spec))
@@ -145,6 +161,8 @@ class SupervisorNode(Node):
         response.last_good_profile = status.last_good_profile
         response.reload_epoch = status.reload_epoch
         response.fault = status.fault
+        response.graph_healthy = status.graph_healthy
+        response.graph_miss_count = status.graph_miss_count
         return response
 
     def on_reload(self, request, response):

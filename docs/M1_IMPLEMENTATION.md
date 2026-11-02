@@ -463,3 +463,14 @@ service reports liveness, ownership, active/last-good profile, epoch and fault.
 Explicit ReloadPipeline recovery requires cleanup and graph disappearance.
 See [M2 supervisor](M2_PIPELINE_SUPERVISOR.md). Hardware/model health and
 zero-downtime reload are not guaranteed.
+
+## M2q: continuous supervisor graph watchdog (2026-11-02)
+
+After initial readiness, the opt-in supervisor checks the four ROS pipeline
+nodes and the semantic capability service at a one-second interval. Five
+consecutive failed graph samples (including discovery exceptions) stop the
+owned process group and require explicit recovery. Healthy samples reset the
+counter. The typed pipeline status includes last-sampled `graph_healthy`
+and `graph_miss_count`; launch-parent liveness alone no longer masks
+sustained ROS graph loss. The watchdog cannot prove actual audio delivery,
+model quality or microphone health. See [M2 supervisor](M2_PIPELINE_SUPERVISOR.md).

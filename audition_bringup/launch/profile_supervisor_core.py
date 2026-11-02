@@ -1,6 +1,7 @@
 """M2p process-owned supervisor with bounded recovery and fault containment."""
 from dataclasses import dataclass
 import threading
+import time
 
 
 @dataclass(frozen=True)
@@ -35,15 +36,24 @@ class SupervisorStatus:
     last_good_profile: str
     reload_epoch: int
     fault: str
+    graph_healthy: bool
+    graph_miss_count: int
 
 
 class PipelineSupervisor:
     """Injectable state machine: validate(spec), spawn(spec), probe.ready/gone/vacant."""
-    def __init__(self, validate, spawn, probe, timeout=30):
-        if timeout <= 0:
-            raise ValueError("timeout must be positive")
+    def __init__(self, validate, spawn, probe, timeout=30,
+                 graph_failure_threshold=5, health_check_interval=1.0, clock=None):
+        if timeout <= 0 or graph_failure_threshold < 1 or health_check_interval <= 0:
+            raise ValueError("timeouts and graph failure threshold must be positive")
         self.validate, self.spawn, self.probe = validate, spawn, probe
         self.timeout = timeout
+        self.graph_failure_threshold = graph_failure_threshold
+        self.health_check_interval = health_check_interval
+        self.clock = clock or time.monotonic
+        self._last_health_check = None
+        self._graph_healthy = False
+        self._graph_misses = 0
         self.process = None
         self.active = None
         self.last_good = None
@@ -61,7 +71,8 @@ class PipelineSupervisor:
                                 self.process is not None,
                                 self.active.profile if self.active else "",
                                 self.last_good.profile if self.last_good else "",
-                                self.epoch, self.fault)
+                                self.epoch, self.fault,
+                                self._graph_healthy, self._graph_misses)
 
     def status(self):
         with self._lock:
@@ -75,9 +86,13 @@ class PipelineSupervisor:
                 self.process.stop()
             except Exception:
                 self.active = None
+                self._graph_healthy = False
                 raise
             self.process = None
         self.active = None
+        self._graph_healthy = False
+        self._graph_misses = 0
+        self._last_health_check = None
 
     def _launch(self, spec):
         process = self.spawn(spec)
@@ -90,6 +105,9 @@ class PipelineSupervisor:
             raise
         self.active = spec
         self.last_good = spec
+        self._graph_healthy = True
+        self._graph_misses = 0
+        self._last_health_check = self.clock()
         self.fault = ""
 
     def start(self, spec):
@@ -118,20 +136,49 @@ class PipelineSupervisor:
             return self._result(False, False, cause + "; " + self.fault)
 
     def monitor(self):
-        """Reap a dead launch and its process group; never auto-restart."""
+        """Check owned process and live ROS graph; contain sustained failures.
+
+        Time-based sampling prevents frequent status requests from accelerating
+        the failure threshold. A transient DDS discovery miss is not fatal.
+        """
         if not self._lock.acquire(blocking=False):
             return
         try:
-            if self.process is None or self.process.poll() is None:
+            if self.process is None:
                 return
             previous = self.active
-            self.fault = "owned launch process exited unexpectedly"
+            if self.process.poll() is not None:
+                cause = "owned launch process exited unexpectedly"
+            else:
+                if previous is None:
+                    return  # Cleanup failed; ownership must be resolved first.
+                now = self.clock()
+                if (self._last_health_check is not None and
+                        now - self._last_health_check < self.health_check_interval):
+                    return
+                self._last_health_check = now
+                try:
+                    healthy, detail = self.probe.health(previous)
+                except Exception as error:
+                    healthy, detail = False, "graph probe error: " + str(error)
+                if healthy:
+                    self._graph_healthy = True
+                    self._graph_misses = 0
+                    return
+                self._graph_healthy = False
+                self._graph_misses += 1
+                if self._graph_misses < self.graph_failure_threshold:
+                    return
+                cause = ("ROS graph unhealthy for " + str(self._graph_misses) +
+                         " consecutive checks: " + detail)
+            self.fault = cause
             try:
                 self._stop()
                 if previous is not None and not self.probe.gone(previous, self.timeout):
                     self.fault += "; ROS graph still present (manual cleanup required)"
             except Exception as error:
                 self.active = None
+                self._graph_healthy = False
                 self.fault += "; cleanup failed: " + str(error)
         finally:
             self._lock.release()

@@ -88,3 +88,30 @@ discovery evidence, not proof of microphone health.
 Unit tests inject crash, failed cleanup, occupied namespace, stale graph and
 successful manual recovery. Humble graph smoke checks typed status before
 and after a real profile switch. This is not zero-downtime two-phase commit.
+
+## M2q: continuous graph health watchdog (2026-11-02)
+
+After initial readiness, the supervisor checks the four expected ROS node
+names (exactly one of each) and the semantic capability service every second.
+A missing or duplicate node, missing service or graph-query exception counts
+as a failed sample. **Five consecutive failed samples** trigger owned
+process-group cleanup, preserve the last healthy profile, record the observed
+fault and require explicit `ReloadPipeline` recovery. A healthy sample resets
+the consecutive-miss counter. Frequent status requests cannot shorten the
+one-second sampling interval; the initial launch readiness check remains
+separate. An exited launch parent is still contained immediately.
+
+`GetPipelineStatus.graph_healthy` reports the last observed graph sample;
+`graph_miss_count` reports the current consecutive failure count (reset on
+successful readiness or cleanup). `running=true` continues to mean the
+launch parent is alive and initial readiness passed; it does not imply the
+latest graph sample was healthy. If cleanup fails, the supervisor retains
+ownership and refuses any new launch. No automatic restart is attempted.
+
+This is **ROS discovery liveness**, not a heartbeat from audio processing,
+ALSA health check, model inference probe or proof of useful PCM delivery.
+Discovery can be temporarily stale, hence the debounce. It does not solve
+zero-downtime two-phase reload, hardware fault diagnosis or microphone
+calibration. The Humble suite injects missing nodes, recovery, graph API
+exceptions, cleanup failures and high-frequency status polling, and verifies
+serialization and live service fields.
