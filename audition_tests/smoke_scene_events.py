@@ -4,7 +4,7 @@ import sys
 import time
 import rclpy
 from rclpy.node import Node
-from audition_msgs.msg import AcousticEvent, AcousticScene, SoundClassification
+from audition_msgs.msg import AcousticEvent, AcousticScene, AcousticSourceArray, SoundClassification
 
 
 class Probe(Node):
@@ -14,9 +14,14 @@ class Probe(Node):
         self.frame_id = None
         self.active = False
         self.ended = False
+        self.updated = False
+        self.cancelled = False
+        self.reset_active = False
         self.started = False
         self.classified = False
         self.pub = self.create_publisher(AcousticEvent, "/audition/internal/events", 20)
+        self.spatial_pub = self.create_publisher(
+            AcousticSourceArray, "/audition/internal/spatial_sources", 10)
         self.cpub = self.create_publisher(
             SoundClassification, "/audition/internal/classifications", 20)
         self.create_subscription(AcousticScene, "/audition/scene", self.on_scene, 10)
@@ -28,24 +33,29 @@ class Probe(Node):
         self.scene_generation = msg.generation
         self.frame_id = msg.header.frame_id
         self.active = any(e.event_id == "ci-speech" for e in msg.active_events)
+        self.reset_active = any(e.event_id == "ci-reset" for e in msg.active_events)
 
     def on_event(self, msg):
         if msg.event_id == "ci-speech" and msg.transition == AcousticEvent.STARTED:
             self.started = True
         if msg.event_id == "ci-speech" and msg.transition == AcousticEvent.ENDED:
             self.ended = True
+        if msg.event_id == "ci-speech" and msg.transition == AcousticEvent.UPDATED:
+            self.updated = True
+        if msg.event_id == "ci-reset" and msg.transition == AcousticEvent.CANCELLED:
+            self.cancelled = msg.termination_reason == "spatial_stream_reset"
 
     def on_class(self, msg):
         if msg.source_id == "ci-source" and msg.class_label == "Speech":
             self.classified = True
 
-    def event(self, transition):
+    def event(self, transition, event_id='ci-speech'):
         e = AcousticEvent()
         e.header.frame_id = self.frame_id
         e.header.stamp = self.get_clock().now().to_msg()
         e.source_id = "ci-source"
         e.source_generation = self.scene_generation
-        e.event_id = "ci-speech"
+        e.event_id = event_id
         e.class_label = "Speech"
         e.taxonomy_version = "AudioSet-521"
         e.model_id = "integration-test"
@@ -97,11 +107,27 @@ def main():
         if not wait(probe, lambda: probe.started and probe.active and probe.classified, deadline):
             print("FAIL: STARTED/classification not canonically published", file=sys.stderr)
             return 1
+        probe.pub.publish(probe.event(AcousticEvent.UPDATED))
+        if not wait(probe, lambda: probe.updated and probe.active, deadline):
+            print("FAIL: UPDATED transition missing", file=sys.stderr)
+            return 1
         probe.pub.publish(probe.event(AcousticEvent.ENDED))
         if not wait(probe, lambda: probe.ended and not probe.active, deadline):
             print("FAIL: ENDED did not remove active event", file=sys.stderr)
             return 1
-        print("PASS: class forwarding, event STARTED/ENDED and scene active set")
+        probe.pub.publish(probe.event(AcousticEvent.STARTED, "ci-reset"))
+        if not wait(probe, lambda: probe.reset_active, deadline):
+            print("FAIL: reset fixture never became active", file=sys.stderr)
+            return 1
+        new_stream = AcousticSourceArray()
+        new_stream.header.frame_id = probe.frame_id
+        new_stream.header.stamp = probe.get_clock().now().to_msg()
+        new_stream.generation = probe.scene_generation + 1
+        probe.spatial_pub.publish(new_stream)
+        if not wait(probe, lambda: probe.cancelled and not probe.reset_active, deadline):
+            print("FAIL: stream reset did not cancel active event", file=sys.stderr)
+            return 1
+        print("PASS: class forwarding, STARTED/UPDATED/ENDED, stream-reset CANCELLED")
         return 0
     finally:
         probe.destroy_node()
