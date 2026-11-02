@@ -517,7 +517,7 @@ class SemanticFlowTests(unittest.TestCase):
         self.supervisor.monitor()
 
     def test_missing_semantic_ack_contained_when_upstream_healthy(self):
-        for seq in range(5):
+        for seq in range(4):
             self.tick(seq)
         state = self.supervisor.status()
         self.assertFalse(state.running)
@@ -546,7 +546,7 @@ class SemanticFlowTests(unittest.TestCase):
         self.assertEqual(self.semantic.snapshot().accepted_frames, 2)
 
     def test_source_stall_is_not_misdiagnosed_as_semantic_failure(self):
-        for seq in range(5):
+        for seq in range(4):
             self.tick(seq, source=False)
         state = self.supervisor.status()
         self.assertFalse(state.running)
