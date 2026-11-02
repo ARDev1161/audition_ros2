@@ -1,6 +1,7 @@
 #include "audition_perception/acoustic_scene_node.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -18,6 +19,18 @@ AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
     std::chrono::milliseconds(lost_ms), std::chrono::milliseconds(end_ms),
     static_cast<std::size_t>(capacity));
 
+  event_ledger_ = std::make_unique<EventLedger>(
+    static_cast<std::size_t>(declare_parameter<int>("max_active_events", 128)));
+  event_sub_ = create_subscription<audition_msgs::msg::AcousticEvent>(
+    "internal/events", rclcpp::QoS(20).reliable(),
+    [this](const audition_msgs::msg::AcousticEvent & msg) { onEvent(msg); });
+  class_sub_ = create_subscription<audition_msgs::msg::SoundClassification>(
+    "internal/classifications", rclcpp::QoS(20).reliable(),
+    [this](const audition_msgs::msg::SoundClassification & msg) { onClassification(msg); });
+  event_pub_ = create_publisher<audition_msgs::msg::AcousticEvent>(
+    "events", rclcpp::QoS(20).reliable());
+  class_pub_ = create_publisher<audition_msgs::msg::SoundClassification>(
+    "classifications", rclcpp::QoS(20).reliable());
   source_sub_ = create_subscription<audition_msgs::msg::AcousticSourceArray>(
     "internal/spatial_sources", rclcpp::QoS(10).reliable(),
     [this](const audition_msgs::msg::AcousticSourceArray & msg) { onSources(msg); });
@@ -31,6 +44,7 @@ AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
 
 void AcousticSceneNode::publish(SourceLifecycle::Update update) {
   if (!update.changed) return;
+  update.scene.active_events = event_ledger_->active();
   // /scene contains only ACTIVE and LOST sources; /sources additionally
   // carries one-shot ENDED notifications. Both share the same generation.
   source_pub_->publish(std::move(update.sources));
@@ -41,6 +55,15 @@ void AcousticSceneNode::onSources(
   const audition_msgs::msg::AcousticSourceArray & msg)
 {
   try {
+    if (have_stream_ && msg.generation < stream_generation_) {
+      RCLCPP_WARN(get_logger(), "Ignoring stale spatial stream generation");
+      return;
+    }
+    if (have_stream_ && msg.generation != stream_generation_) {
+      event_ledger_->clear();
+    }
+    stream_generation_ = msg.generation;
+    have_stream_ = true;
     frame_id_ = msg.header.frame_id;
     publish(lifecycle_->observe(msg, SourceLifecycle::Clock::now()));
   } catch (const std::exception & e) {
@@ -55,6 +78,30 @@ void AcousticSceneNode::onTimer() {
   header.stamp = now();
   header.frame_id = frame_id_;
   publish(lifecycle_->tick(SourceLifecycle::Clock::now(), header));
+}
+
+void AcousticSceneNode::onEvent(const audition_msgs::msg::AcousticEvent & msg) {
+  if (!have_stream_ || msg.source_generation != stream_generation_ ||
+      msg.header.frame_id != frame_id_ || !event_ledger_->apply(msg)) return;
+  event_pub_->publish(msg);
+  // Reconstruct the current scene after event transition. Publishing this
+  // snapshot must not update source observation freshness/TTL.
+  std_msgs::msg::Header header;
+  header.stamp = msg.header.stamp;
+  header.frame_id = frame_id_;
+  auto snapshot = lifecycle_->tick(SourceLifecycle::Clock::now(), header);
+  snapshot.changed = true;
+  publish(std::move(snapshot));
+}
+
+void AcousticSceneNode::onClassification(
+  const audition_msgs::msg::SoundClassification & msg)
+{
+  if (!have_stream_ || msg.source_generation != stream_generation_ ||
+      msg.header.frame_id != frame_id_ || msg.source_id.empty() ||
+      msg.class_label.empty() || !std::isfinite(msg.score) ||
+      msg.score < 0.0f || msg.score > 1.0f) return;
+  class_pub_->publish(msg);
 }
 }  // namespace audition_perception
 RCLCPP_COMPONENTS_REGISTER_NODE(audition_perception::AcousticSceneNode)
