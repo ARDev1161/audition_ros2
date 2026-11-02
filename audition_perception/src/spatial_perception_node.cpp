@@ -167,19 +167,20 @@ public:
         audition::Timestamp{hop_stamp, {audition::ClockDomain::External, 1}},
         hop.sequence
       };
-      audition::SpatialResult result;
-      try {
-        result = odas_->process(buffer.view());
-      } catch (...) {
-        ingress_->backendFailure();
-        tracks_.clear();
-        snapshot.sources.clear();
-        snapshot.generation = ingress_->generation();
-        snapshot.header.stamp = asStamp(hop_stamp);
-        source_pub->publish(snapshot);
-        odas_->reset();
-        throw;
-      }
+      auto result = [&]() {
+        try {
+          return odas_->process(buffer.view());
+        } catch (...) {
+          ingress_->backendFailure();
+          tracks_.clear();
+          snapshot.sources.clear();
+          snapshot.generation = ingress_->generation();
+          snapshot.header.stamp = asStamp(hop_stamp);
+          source_pub->publish(snapshot);
+          odas_->reset();
+          throw;
+        }
+      }();
 
       std::unordered_map<std::uint64_t, bool> seen;
       snapshot.sources.clear();
@@ -244,9 +245,10 @@ public:
 
   void status(audition_msgs::srv::GetIngressStatus::Response & response) const {
     response.backend = backend_;
-    response.generation = backend_ == "odas" ? ingress_->generation() : generation_;
+    response.generation = generation_;
 #ifdef AUDITION_ROS2_WITH_ODAS
     if (backend_ == "odas") {
+      response.generation = ingress_->generation();
       const auto & stats = ingress_->stats();
       response.accepted_frames = stats.accepted_frames;
       response.rejected_frames = stats.rejected_frames;
