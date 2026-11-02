@@ -19,7 +19,7 @@ namespace audition_perception {
 namespace {
 template<typename T>
 T readOrDeclare(rclcpp::Node & node, const std::string & name, const T & fallback) {
-  if (!node.has_parameter(name)) return readOrDeclare<T>(name, fallback);
+  if (!node.has_parameter(name)) return node.declare_parameter<T>(name, fallback);
   T value{};
   if (!node.get_parameter(name, value)) {
     throw std::invalid_argument("Cannot read existing speech parameter: " + name);
