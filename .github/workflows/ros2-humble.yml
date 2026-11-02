@@ -45,7 +45,7 @@ jobs:
           ros2 interface show audition_msgs/msg/SourceAudioFrame
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py
 
       - name: Smoke WAV to acoustic scene over ROS graph
         shell: bash
@@ -164,6 +164,22 @@ jobs:
           fi
           if ! python3 audition_tests/smoke_semantic_reload.py; then
             cat /tmp/audition_epoch_launch.log
+            exit 1
+          fi
+
+      - name: Smoke capture process restart and old-session replay over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=108
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_capture_session_fixture.launch.py \\
+            > /tmp/audition_capture_session.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_capture_session_restart.py; then
+            cat /tmp/audition_capture_session.log
             exit 1
           fi
 
