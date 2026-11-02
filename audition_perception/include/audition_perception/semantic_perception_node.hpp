@@ -5,6 +5,7 @@
 #include <audition_msgs/msg/acoustic_event.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <audition_msgs/msg/transcript.hpp>
+#include <audition_msgs/srv/get_capabilities.hpp>
 #include "audition_perception/speech_bridge.hpp"
 #include <memory>
 #include <string>
@@ -27,5 +28,9 @@ private:
   rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr event_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
+  rclcpp::Service<audition_msgs::srv::GetCapabilities>::SharedPtr capabilities_srv_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_guard_;
+  std::string profile_name_;
+  std::string profile_spatial_backend_;
 };
 }  // namespace audition_perception

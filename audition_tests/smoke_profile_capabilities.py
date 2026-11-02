@@ -9,6 +9,8 @@ from rcl_interfaces.srv import SetParameters
 
 def invoke(node, client, request):
     if not client.wait_for_service(timeout_sec=20.0):
+        print("Discovered ROS nodes:", node.get_node_names_and_namespaces(), flush=True)
+        print("Discovered ROS services:", node.get_service_names_and_types(), flush=True)
         raise AssertionError(f"Service unavailable: {client.srv_name}")
     future = client.call_async(request)
     rclpy.spin_until_future_complete(node, future, timeout_sec=20.0)

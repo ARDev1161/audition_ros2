@@ -315,6 +315,57 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
   sources_sub_ = create_subscription<audition_msgs::msg::AcousticSourceArray>(
     "sources", rclcpp::QoS(10).reliable(),
     [this](const audition_msgs::msg::AcousticSourceArray & msg) { onSources(msg); });
+  // Native worker and graph configuration are startup-only. A parameter
+  // update without rebuilding workers would silently keep stale state.
+  profile_name_ = declare_parameter<std::string>("profile_name", "manual");
+  profile_spatial_backend_ =
+    declare_parameter<std::string>("profile_spatial_backend", "unknown");
+  parameter_guard_ = add_on_set_parameters_callback(
+    [](const std::vector<rclcpp::Parameter> & changes) {
+      rcl_interfaces::msg::SetParametersResult result;
+      result.successful = changes.empty();
+      if (!result.successful) {
+        result.reason = "M2 pipeline parameters are startup-only; stop and relaunch "
+                        "with a validated profile (transactional reload not implemented)";
+      }
+      return result;
+    });
+  capabilities_srv_ = create_service<audition_msgs::srv::GetCapabilities>(
+    "semantic_perception/get_capabilities",
+    [this](
+      const std::shared_ptr<audition_msgs::srv::GetCapabilities::Request>,
+      std::shared_ptr<audition_msgs::srv::GetCapabilities::Response> response)
+    {
+      response->profile_name = profile_name_;
+      response->spatial_backend = profile_spatial_backend_;
+      response->classifier_backend = impl_->enabled() ? "yamnet" : "disabled";
+      response->classifier_active = impl_->enabled();
+      response->speech_active = speech_->enabled();
+      response->compiled_classifiers = {"disabled"};
+#ifdef AUDITION_ROS2_WITH_ODAS
+      response->odas_compiled = true;
+#endif
+#ifdef AUDITION_ROS2_WITH_YAMNET
+      response->yamnet_compiled = true;
+      response->compiled_classifiers.push_back("yamnet");
+#endif
+#ifdef AUDITION_ROS2_WITH_SPEECH
+      response->speech_compiled = true;
+      response->compiled_speech_backends = {"sherpa", "whispercpp"};
+#endif
+      if (impl_->enabled()) {
+        response->loaded_models.push_back("yamnet");
+        response->loaded_models.push_back("yamnet_labels");
+      }
+      if (speech_->enabled()) {
+        response->loaded_models.push_back("speech_vad");
+        response->loaded_models.push_back("speech_asr");
+      }
+      response->runtime_reconfiguration_supported = false;
+      response->note = "Loaded models reflect successful startup, not accuracy or "
+                       "runtime health; spatial_backend is declared profile intent, "
+                       "not an independent ODAS health check";
+    });
   timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
   RCLCPP_INFO(get_logger(), "Semantic backend: %s",
     impl_->enabled() ? "yamnet" : "disabled");
