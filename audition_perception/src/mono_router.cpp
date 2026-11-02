@@ -44,12 +44,13 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
   // Reject malformed frames before touching the source epoch or publishing
   // anything. No resampling or implicit channel mixing is performed.
   validate(frame);
+  const auto session = capture_sessions_.inspect(frame.capture_session_id);
   const auto stamp = stampNs(frame.header.stamp);
-  if (started_ &&
+  if (session == CaptureSessionGate::Decision::Changed || (started_ &&
       (frame.header.frame_id != frame_id_ ||
        frame.sequence_number != last_sequence_ + 1 ||
        stamp < last_stamp_ns_ ||
-       stamp > expected_next_ns_ + kMaxCaptureJitterNs)) {
+       stamp > expected_next_ns_ + kMaxCaptureJitterNs))) {
     ++generation_;
     started_ = false;
   }
@@ -58,6 +59,7 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
     first_seen_ = frame.header.stamp;
     started_ = true;
   }
+  capture_sessions_.commit(frame.capture_session_id);
   last_sequence_ = frame.sequence_number;
   last_stamp_ns_ = stamp;
   expected_next_ns_ = stamp +
