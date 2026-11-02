@@ -203,21 +203,30 @@ public:
 
   void poll(
     const rclcpp::Publisher<audition_msgs::msg::SoundClassification>::SharedPtr & class_pub,
-    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub)
+    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub,
+    InferenceCompletionStats & stats)
   {
 #ifdef AUDITION_ROS2_WITH_YAMNET
     if (!enabled()) return;
     for (const auto & completed : runtime_->takeCompleted()) {
       const auto name = id_to_name_.find(completed.source_id);
-      if (name == id_to_name_.end()) continue;  // retired worker generation
+      if (name == id_to_name_.end()) {
+        stats.classifierDiscarded(); continue;  // retired worker generation
+      }
       const auto it = sources_.find(name->second);
       if (it == sources_.end() || it->second.id != completed.source_id ||
-          completed.end_sample <= it->second.last_result_end_sample) continue;
+          completed.end_sample <= it->second.last_result_end_sample) {
+        stats.classifierDiscarded(); continue;
+      }
       auto & source = it->second;
-      if (completed.end_sample > source.sample_count) continue;
+      if (completed.end_sample > source.sample_count) {
+        stats.classifierDiscarded(); continue;
+      }
       const auto end_ns = source.anchor_ns +
         static_cast<std::int64_t>(completed.end_sample) * 1000000000LL / 16000;
-      if (end_ns <= source.last_result_ns) continue;
+      if (end_ns <= source.last_result_ns) {
+        stats.classifierDiscarded(); continue;
+      }
       source.last_result_end_sample = completed.end_sample;
       source.last_result_ns = end_ns;
       const audition::Timestamp observed{end_ns, {audition::ClockDomain::External, 1}};
@@ -255,9 +264,11 @@ public:
         update.header.stamp = stampFromNs(end_ns);
         event_pub->publish(std::move(update));
       }
+      // A completed window need not have any class above the event threshold.
+      stats.classifierCompleted();
     }
 #else
-    (void) class_pub; (void) event_pub;
+    (void) class_pub; (void) event_pub; (void) stats;
 #endif
   }
 
@@ -407,6 +418,18 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->reload_successes = reload_successes_;
       response->reload_failures = reload_failures_;
       response->reload_pending = gate_.reloadPending();
+      const auto inference = inference_stats_.snapshot();
+      response->classifier_active = impl_->enabled();
+      response->speech_active = speech_->enabled();
+      response->classifier_completed_windows = inference.classifier_completed_windows;
+      response->classifier_discarded_results = inference.classifier_discarded_results;
+      response->classifier_last_completion_age_ms =
+        inference.classifier_last_completion_age_ms;
+      response->asr_completed_segments = inference.asr_completed_segments;
+      response->asr_empty_segments = inference.asr_empty_segments;
+      response->asr_discarded_results = inference.asr_discarded_results;
+      response->asr_last_completion_age_ms = inference.asr_last_completion_age_ms;
+      response->inference_poll_failures = inference.inference_poll_failures;
     });
   reload_srv_ = create_service<audition_msgs::srv::ReloadSemanticWorkers>(
     "semantic_perception/reload_workers",
@@ -497,9 +520,13 @@ void SemanticPerceptionNode::onSources(
 }
 void SemanticPerceptionNode::pollCompleted() {
   try {
-    impl_->poll(class_pub_, event_pub_);
-    for (auto & t : speech_->drain()) transcript_pub_->publish(std::move(t));
+    impl_->poll(class_pub_, event_pub_, inference_stats_);
+    auto drained = speech_->drain();
+    inference_stats_.asrCompleted(drained.completed_segments,
+      drained.empty_segments, drained.discarded_segments);
+    for (auto & t : drained.transcripts) transcript_pub_->publish(std::move(t));
   } catch (const std::exception & error) {
+    inference_stats_.pollFailed();
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
       "Semantic inference completion failed: %s", error.what());
   }

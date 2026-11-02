@@ -524,3 +524,24 @@ measure classifier or ASR throughput. It also does not authenticate DDS
 publishers. CI tests invalid/replayed acknowledgements, spatial-session
 restarts, debounce, upstream fault attribution, profile switching, typed
 serialization and a live virtual ALSA ROS graph.
+
+
+## M2u: asynchronous inference completion telemetry (2026-11-03)
+
+`semantic_perception/get_semantic_status` now distinguishes **admitted PCM**
+from **completed inference**. It reports enabled YAMNet and speech workers,
+completed classifier windows, discarded stale classifier results, completed
+ASR segments (including empty-text results), empty ASR segments, discarded
+stale ASR results and caught inference polling failures. Separate
+monotonic-clock ages report time since the last accepted classifier window
+or ASR segment. Age is zero before the first completion. Counters persist
+for the process lifetime, including same-process worker reloads.
+
+This is diagnostic-only. **Missing inference completions do not trigger a
+restart**: YAMNet needs a complete window, ASR needs VAD-triggered speech,
+and silence or disabled models may legitimately produce no results. No
+libaudition worker queue depth, per-job runtime, model accuracy or latency
+bound is claimed. Native CI compiles both optional adapter paths; model-
+independent tests validate counter/age semantics and the Humble ROS graph
+verifies disabled workers never claim completed inference.
+See [M2u completion telemetry](M2_INFERENCE_COMPLETION_TELEMETRY.md).

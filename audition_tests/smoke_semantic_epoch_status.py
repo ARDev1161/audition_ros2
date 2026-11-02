@@ -41,6 +41,13 @@ def main():
         assert value.last_source_sequence > 0, value
         assert len(value.scene_session_id) == 32, value
         assert value.scene_session_resets == 0, value
+        # Disabled workers admit PCM, but cannot claim completed inference.
+        assert not value.classifier_active and not value.speech_active, value
+        assert value.classifier_completed_windows == 0, value
+        assert value.asr_completed_segments == 0, value
+        assert value.classifier_last_completion_age_ms == 0, value
+        assert value.asr_last_completion_age_ms == 0, value
+        assert value.inference_poll_failures == 0, value
         initial_rejected = value.rejected_source_snapshots
         # Simulate a second publisher replaying a zero-order canonical snapshot.
         stale_pub = node.create_publisher(

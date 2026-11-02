@@ -4,9 +4,16 @@
 #include <audition_msgs/msg/transcript.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <memory>
+#include <cstdint>
 #include <vector>
 
 namespace audition_perception {
+struct SpeechDrainResult {
+  std::vector<audition_msgs::msg::Transcript> transcripts;
+  std::uint64_t completed_segments{0};
+  std::uint64_t empty_segments{0};
+  std::uint64_t discarded_segments{0};
+};
 class SpeechBridge final {
 public:
   explicit SpeechBridge(rclcpp::Node & node);
@@ -15,7 +22,7 @@ public:
   void onAudio(const audition_msgs::msg::SourceAudioFrame & frame);
   void onSources(const audition_msgs::msg::AcousticSourceArray & snapshot);
   void resetStream();
-  std::vector<audition_msgs::msg::Transcript> drain();
+  SpeechDrainResult drain();
 private:
   class Impl;
   std::unique_ptr<Impl> impl_;

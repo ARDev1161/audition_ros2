@@ -23,3 +23,16 @@ uint64 last_source_sequence
 # Current canonical acoustic_scene incarnation and accepted restarts.
 string scene_session_id
 uint64 scene_session_resets
+
+# M2u: completed inference telemetry, not PCM admission or model accuracy.
+# Ages are zero before first completion; silence can legitimately yield no results.
+bool classifier_active
+bool speech_active
+uint64 classifier_completed_windows
+uint64 classifier_discarded_results
+uint64 classifier_last_completion_age_ms
+uint64 asr_completed_segments
+uint64 asr_empty_segments
+uint64 asr_discarded_results
+uint64 asr_last_completion_age_ms
+uint64 inference_poll_failures

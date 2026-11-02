@@ -177,16 +177,20 @@ public:
     (void)msg;
 #endif
   }
-  std::vector<audition_msgs::msg::Transcript> drain() {
-    std::vector<audition_msgs::msg::Transcript> out;
+  SpeechDrainResult drain() {
+    SpeechDrainResult out;
 #ifdef AUDITION_ROS2_WITH_SPEECH
     if(!enabled_) return out;
     const auto drained=runtime_->drainReady();
     for(const auto & item:drained.results) {
       const auto m=meta_.find(item.generation);
-      if(m==meta_.end() || item.transcript.text.empty()) continue;
+      if(m==meta_.end()) { ++out.discarded_segments; continue; }
       const auto & source=m->second;
-      if(have_stream_ && source.generation!=stream_generation_) continue;
+      if(have_stream_ && source.generation!=stream_generation_) {
+        ++out.discarded_segments; continue;
+      }
+      ++out.completed_segments;
+      if(item.transcript.text.empty()) { ++out.empty_segments; continue; }
       audition_msgs::msg::Transcript t;
       t.header.frame_id=source.frame_id;
       t.header.stamp=rosTime(item.end_time.nanoseconds());
@@ -202,7 +206,7 @@ public:
       t.score_kind=audition_msgs::msg::Transcript::UNCALIBRATED_SCORE;
       if(item.transcript.confidence)
         t.score=static_cast<float>(item.transcript.confidence->value());
-      out.push_back(std::move(t));
+      out.transcripts.push_back(std::move(t));
     }
     for(auto gen:drained.ready_retired_generations) {
       runtime_->releaseRetired(gen);meta_.erase(gen);
@@ -234,7 +238,7 @@ void SpeechBridge::resetStream() {impl_->resetStream();}
 void SpeechBridge::onSources(const audition_msgs::msg::AcousticSourceArray & s) {
   impl_->onSources(s);
 }
-std::vector<audition_msgs::msg::Transcript> SpeechBridge::drain() {
+SpeechDrainResult SpeechBridge::drain() {
   return impl_->drain();
 }
 }  // namespace audition_perception

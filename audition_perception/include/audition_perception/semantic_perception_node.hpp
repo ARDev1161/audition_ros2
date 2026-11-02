@@ -11,6 +11,7 @@
 #include <audition_msgs/srv/reload_semantic_workers.hpp>
 #include "audition_perception/semantic_epoch_gate.hpp"
 #include "audition_perception/speech_bridge.hpp"
+#include "audition_perception/inference_completion_stats.hpp"
 #include <memory>
 #include <string>
 
@@ -25,6 +26,7 @@ private:
   void onSources(const audition_msgs::msg::AcousticSourceArray & msg);
   void pollCompleted();
   SemanticEpochGate gate_;
+  InferenceCompletionStats inference_stats_;
   std::unique_ptr<Impl> impl_;
   std::unique_ptr<SpeechBridge> speech_;
   rclcpp::Subscription<audition_msgs::msg::SourceAudioFrame>::SharedPtr sub_;

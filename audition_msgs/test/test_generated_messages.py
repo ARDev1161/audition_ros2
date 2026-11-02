@@ -165,6 +165,16 @@ def test_semantic_status_service_round_trip():
     response.stream_resets = 3
     response.scene_session_id = "0123456789abcdef0123456789abcdef"
     response.scene_session_resets = 2
+    response.classifier_active = True
+    response.classifier_completed_windows = 7
+    response.classifier_discarded_results = 2
+    response.classifier_last_completion_age_ms = 1234
+    response.speech_active = True
+    response.asr_completed_segments = 3
+    response.asr_empty_segments = 1
+    response.asr_discarded_results = 2
+    response.asr_last_completion_age_ms = 4321
+    response.inference_poll_failures = 1
     back = deserialize_message(serialize_message(response), GetSemanticStatus.Response)
     assert back.have_stream and back.source_generation == 7
     assert back.frame_id == "robot_a_mic"
@@ -174,6 +184,15 @@ def test_semantic_status_service_round_trip():
     assert back.stream_resets == 3
     assert back.scene_session_id == response.scene_session_id
     assert back.scene_session_resets == 2
+    assert back.classifier_active and back.speech_active
+    assert back.classifier_completed_windows == 7
+    assert back.classifier_discarded_results == 2
+    assert back.classifier_last_completion_age_ms == 1234
+    assert back.asr_completed_segments == 3
+    assert back.asr_empty_segments == 1
+    assert back.asr_discarded_results == 2
+    assert back.asr_last_completion_age_ms == 4321
+    assert back.inference_poll_failures == 1
 
 
 def test_capture_status_service_round_trip():
