@@ -12,7 +12,7 @@ The documentation website is built with **Sphinx + MyST Markdown + Mermaid + Fur
 - [ROS node architecture](docs/ROS2_ARCHITECTURE.md): node count, responsibilities, interaction diagram, process boundaries and QoS.
 - [libaudition integration and user configuration](docs/LIBAUDITION_INTEGRATION.md): native C++ adapters, proposed YAML profiles, ROS topics and optional backends.
 - [Human spatial hearing and robotics](docs/HUMAN_SPATIAL_HEARING.md): bio-inspired approaches and engineering trade-offs.
-- [M0 implementation notes](docs/M0_IMPLEMENTATION.md), [M1 implementation notes](docs/M1_IMPLEMENTATION.md), [M2 semantic classification](docs/M2_IMPLEMENTATION.md).
+- [M0 implementation notes](docs/M0_IMPLEMENTATION.md), [M1 implementation notes](docs/M1_IMPLEMENTATION.md), [M2 semantic classification](docs/M2_IMPLEMENTATION.md), [Sherpa VAD and Russian Whisper ASR](docs/SPEECH_ASR.md).
 
 ## Build the website locally
 

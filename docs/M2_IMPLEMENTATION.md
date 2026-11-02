@@ -97,3 +97,7 @@ The emitted scores are explicitly **uncalibrated** model outputs; they do not pr
 - Speech model work (Sherpa VAD/Whisper.cpp ASR) is **not yet implemented** in audition_ros2.
 
 Current GitHub CI statuses should be read from [the implementation PR](https://github.com/ARDev1161/audition_ros2/pull/1/checks); a synthetic event-injection smoke tests the canonical ROS publication path, **not** classifier accuracy.
+
+## Speech slice
+
+The optional Sherpa VAD + whisper.cpp speech stage is implemented as a bridge inside semantic_perception, independent of YAMNet. See the [per-source speech setup and contract](SPEECH_ASR.md). Hardware speech quality, first-utterance alignment and model weights are not yet validated.
