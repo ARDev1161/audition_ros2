@@ -354,3 +354,16 @@ transactional semantic model `ReloadPipeline` or a field validation.
 
 See [M1 capture and scene status](M1_IMPLEMENTATION.md) for launch arguments,
 service fields and testing limitations.
+
+## 15. M2g semantic epoch admission (2026-11-02)
+
+The semantic component now gates classifier and ASR input on canonical
+`/audition/sources` admission, including active source generation, frame
+and live source identity. Unknown, retired, old-generation and pre-admission
+PCM cannot create inference work. A valid generation transition forgets
+old classifier jobs and resets speech workers; malformed snapshots leave
+the current generation untouched. The namespaced read-only
+`semantic_perception/get_semantic_status` service exposes drops, admissions,
+resets and rejected snapshots. See
+[M2g semantic epoch fencing](M2_SEMANTIC_EPOCH_FENCING.md).
+This is a prerequisite for, not an implementation of, transactional reload.

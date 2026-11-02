@@ -261,3 +261,15 @@ counters, **not** evidence of successful physical unplug/replug, clock
 synchronization or calibrated ReSpeaker accuracy. Unit tests inject failures
 into the continuity/backoff state machine; Humble CI checks the service on
 the virtual ALSA `null` device. Physical HIL remains required.
+
+## M2g semantic source admission and generation reset
+
+The semantic node now accepts source PCM only after the canonical scene
+has admitted the matching source ID, frame and generation. An empty snapshot,
+source retirement or generation change invalidates that admission. Stale
+classifier jobs are forgotten and speech workers reset on epoch changes.
+A namespaced `GetSemanticStatus` service reports accepted/dropped PCM,
+active generation and source count, malformed snapshots and reset counts.
+See [M2g details](M2_SEMANTIC_EPOCH_FENCING.md). DDS cross-topic ordering
+may drop the earliest PCM chunk; no audio is invented to mask that gap.
+The transactional `ReloadPipeline` remains unimplemented.

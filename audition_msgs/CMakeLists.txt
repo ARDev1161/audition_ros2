@@ -21,6 +21,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetCapabilities.srv"
   "srv/GetIngressStatus.srv"
   "srv/GetCaptureStatus.srv"
+  "srv/GetSemanticStatus.srv"
   DEPENDENCIES std_msgs geometry_msgs builtin_interfaces
 )
 ament_export_dependencies(rosidl_default_runtime)

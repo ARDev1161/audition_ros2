@@ -1,0 +1,10 @@
+# Read-only, namespaced semantic admission and generation diagnostics.
+---
+bool have_stream
+uint64 source_generation
+string frame_id
+uint32 admitted_sources
+uint64 accepted_audio_frames
+uint64 dropped_audio_frames
+uint64 rejected_source_snapshots
+uint64 stream_resets

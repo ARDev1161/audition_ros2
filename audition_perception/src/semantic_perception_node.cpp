@@ -110,6 +110,23 @@ public:
 
   bool enabled() const noexcept { return backend_ == "yamnet"; }
 
+  void resetStream() {
+#ifdef AUDITION_ROS2_WITH_YAMNET
+    if (!enabled()) return;
+    // Forget workers before a new epoch is admitted. A late completed job
+    // has no source-ID mapping and can never publish into the new stream.
+    for (const auto & item : sources_) {
+      runtime_->forget(item.second.id);
+      const auto stamp_ns = std::max(item.second.last_timestamp_ns,
+                                     item.second.last_result_ns);
+      detector_->retire(audition::AcousticSourceId{item.second.id},
+        audition::Timestamp{stamp_ns, {audition::ClockDomain::External, 1}});
+    }
+    sources_.clear();
+    id_to_name_.clear();
+#endif
+  }
+
   void onAudio(const audition_msgs::msg::SourceAudioFrame & msg,
     const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub)
   {
@@ -366,6 +383,14 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
                        "runtime health; spatial_backend is declared profile intent, "
                        "not an independent ODAS health check";
     });
+  semantic_status_srv_ = create_service<audition_msgs::srv::GetSemanticStatus>(
+    "semantic_perception/get_semantic_status",
+    [this](
+      const std::shared_ptr<audition_msgs::srv::GetSemanticStatus::Request>,
+      std::shared_ptr<audition_msgs::srv::GetSemanticStatus::Response> response)
+    {
+      gate_.status(*response);
+    });
   timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
   RCLCPP_INFO(get_logger(), "Semantic backend: %s",
     impl_->enabled() ? "yamnet" : "disabled");
@@ -376,10 +401,12 @@ void SemanticPerceptionNode::onSourceAudio(
   const audition_msgs::msg::SourceAudioFrame & msg)
 {
   if (!validInput(msg)) {
+    gate_.rejectInvalidAudio();
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
       "Rejected invalid source audio: expected normalized mono 16 kHz");
     return;
   }
+  if (!gate_.accept(msg)) return;
   try {
     impl_->onAudio(msg, event_pub_);
     speech_->onAudio(msg);
@@ -391,7 +418,16 @@ void SemanticPerceptionNode::onSourceAudio(
 void SemanticPerceptionNode::onSources(
   const audition_msgs::msg::AcousticSourceArray & msg)
 {
+  const auto decision = gate_.observe(msg);
+  if (decision == SemanticEpochGate::SnapshotResult::Rejected) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+      "Rejected malformed or stale canonical source snapshot");
+    return;
+  }
   try {
+    if (decision == SemanticEpochGate::SnapshotResult::NewGeneration) {
+      impl_->resetStream();
+    }
     impl_->onSources(msg, event_pub_);
     speech_->onSources(msg);
   } catch (const std::exception & error) {

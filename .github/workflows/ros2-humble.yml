@@ -146,6 +146,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke canonical semantic epoch admission and stale PCM rejection
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=107
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \
+            > /tmp/audition_epoch_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_semantic_epoch_status.py; then
+            cat /tmp/audition_epoch_launch.log
+            exit 1
+          fi
+
       - name: Smoke two isolated M2c instances on one DDS domain
         shell: bash
         run: |

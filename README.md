@@ -179,3 +179,12 @@ read failure/stall reopens the same device; a sequence gap fences old
 mono/ODAS sources. Inspect `/audition/audio_capture/get_capture_status`
 (`audition_msgs/srv/GetCaptureStatus`). The virtual ALSA CI test does not
 replace physical ReSpeaker unplug/replug validation.
+
+### Semantic generation fencing (M2g)
+
+The semantic node now requires canonical source admission before inference.
+Old/unknown/retired source PCM is dropped; classifier and ASR workers are
+invalidated on a new spatial generation. Inspect the namespaced
+`semantic_perception/get_semantic_status` service for admission/drop/reset
+counters. See [M2g contract](docs/M2_SEMANTIC_EPOCH_FENCING.md).
+This does not yet provide transactional pipeline reload.

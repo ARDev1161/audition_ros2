@@ -3,7 +3,7 @@
 import pytest
 from rclpy.serialization import deserialize_message, serialize_message
 
-from audition_msgs.srv import GetCapabilities, GetCaptureStatus
+from audition_msgs.srv import GetCapabilities, GetCaptureStatus, GetSemanticStatus
 
 from audition_msgs.msg import (
     AcousticEvent,
@@ -131,6 +131,23 @@ def test_capabilities_service_contract():
     assert restored.spatial_backend == "mono"
     assert list(restored.compiled_classifiers) == ["disabled"]
     assert not restored.runtime_reconfiguration_supported
+
+
+def test_semantic_status_service_round_trip():
+    response = GetSemanticStatus.Response()
+    response.have_stream = True
+    response.source_generation = 7
+    response.frame_id = "robot_a_mic"
+    response.admitted_sources = 2
+    response.accepted_audio_frames = 31
+    response.dropped_audio_frames = 4
+    response.stream_resets = 3
+    back = deserialize_message(serialize_message(response), GetSemanticStatus.Response)
+    assert back.have_stream and back.source_generation == 7
+    assert back.frame_id == "robot_a_mic"
+    assert back.admitted_sources == 2
+    assert back.dropped_audio_frames == 4
+    assert back.stream_resets == 3
 
 
 def test_capture_status_service_round_trip():

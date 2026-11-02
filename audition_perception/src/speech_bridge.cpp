@@ -98,6 +98,7 @@ public:
        !std::all_of(msg.pcm.begin(),msg.pcm.end(),[](float v){
          return std::isfinite(v) && v>=-1.0f && v<=1.0f;
        })) throw std::invalid_argument("Expected normalized mono 16k PCM");
+    if(have_stream_ && msg.source_generation!=stream_generation_) return;
     const auto stamp=ns(msg.header.stamp);
     auto it=active_.find(msg.source_id);
     if(it!=active_.end()) {

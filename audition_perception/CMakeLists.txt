@@ -36,6 +36,7 @@ add_library(audition_perception_components SHARED
   src/event_ledger.cpp
   src/acoustic_scene_node.cpp
   src/semantic_perception_node.cpp
+  src/semantic_epoch_gate.cpp
   src/speech_bridge.cpp)
 target_compile_features(audition_perception_components PUBLIC cxx_std_17)
 target_include_directories(audition_perception_components PUBLIC
@@ -96,6 +97,11 @@ if(BUILD_TESTING)
     target_compile_features(semantic_runtime_test PUBLIC cxx_std_17)
     target_link_libraries(semantic_runtime_test audition::pipeline)
   endif()
+  ament_add_gtest(semantic_epoch_gate_test test/test_semantic_epoch_gate.cpp)
+  target_compile_features(semantic_epoch_gate_test PUBLIC cxx_std_17)
+  target_include_directories(semantic_epoch_gate_test PRIVATE include)
+  target_link_libraries(semantic_epoch_gate_test audition_perception_components)
+  ament_target_dependencies(semantic_epoch_gate_test audition_msgs)
   ament_add_gtest(odas_ingress_test test/test_odas_ingress.cpp)
   target_compile_features(odas_ingress_test PUBLIC cxx_std_17)
   target_include_directories(odas_ingress_test PRIVATE include)
