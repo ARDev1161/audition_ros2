@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cmath>
 #include <stdexcept>
+#include <set>
+#include <string>
 #include <utility>
 
 #include <rclcpp_components/register_node_macro.hpp>
@@ -14,10 +16,11 @@ AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
   const auto lost_ms = declare_parameter<int>("source_lost_after_ms", 300);
   const auto end_ms = declare_parameter<int>("source_end_after_ms", 1500);
   const auto capacity = declare_parameter<int>("max_sources", 16);
+  const auto final_grace_ms = declare_parameter<int>("late_transcript_grace_ms", 5000);
   if (capacity <= 0) throw std::invalid_argument("max_sources must be positive");
   lifecycle_ = std::make_unique<SourceLifecycle>(
     std::chrono::milliseconds(lost_ms), std::chrono::milliseconds(end_ms),
-    static_cast<std::size_t>(capacity));
+    static_cast<std::size_t>(capacity), std::chrono::milliseconds(final_grace_ms));
 
   event_ledger_ = std::make_unique<EventLedger>(
     static_cast<std::size_t>(declare_parameter<int>("max_active_events", 128)));
@@ -49,6 +52,21 @@ AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
 
 void AcousticSceneNode::publish(SourceLifecycle::Update update) {
   if (!update.changed) return;
+  // End every event whose acoustic source vanished from the canonical scene.
+  // This is deliberately independent of delayed semantic/ASR worker completion.
+  std::set<std::pair<std::uint64_t, std::string>> live;
+  for (const auto & source : update.scene.sources) {
+    live.emplace(source.source_generation, source.source_id);
+  }
+  for (const auto & active : event_ledger_->active()) {
+    if (live.count({active.source_generation, active.source_id})) continue;
+    auto cancelled = active;
+    cancelled.transition = audition_msgs::msg::AcousticEvent::CANCELLED;
+    cancelled.header.stamp = update.scene.header.stamp;
+    cancelled.termination_reason = active.source_generation == update.scene.generation
+      ? "source_ended" : "spatial_stream_reset";
+    if (event_ledger_->apply(cancelled)) event_pub_->publish(std::move(cancelled));
+  }
   update.scene.active_events = event_ledger_->active();
   // /scene contains only ACTIVE and LOST sources; /sources additionally
   // carries one-shot ENDED notifications. Both share the same generation.
@@ -64,22 +82,13 @@ void AcousticSceneNode::onSources(
       RCLCPP_WARN(get_logger(), "Ignoring stale spatial stream generation");
       return;
     }
-    if (have_stream_ && msg.generation != stream_generation_) {
-      // Native semantic completions from an old generation are discarded.
-      // Public consumers still need a terminal transition for active events.
-      for (const auto & previous : event_ledger_->active()) {
-        auto cancelled = previous;
-        cancelled.transition = audition_msgs::msg::AcousticEvent::CANCELLED;
-        cancelled.header.stamp = msg.header.stamp;
-        cancelled.termination_reason = "spatial_stream_reset";
-        event_pub_->publish(std::move(cancelled));
-      }
-      event_ledger_->clear();
-    }
+    // Validate/mutate source state FIRST. Malformed snapshots must not cancel
+    // existing events or alter stream generation/frame identity.
+    auto update = lifecycle_->observe(msg, SourceLifecycle::Clock::now());
     stream_generation_ = msg.generation;
     have_stream_ = true;
     frame_id_ = msg.header.frame_id;
-    publish(lifecycle_->observe(msg, SourceLifecycle::Clock::now()));
+    publish(std::move(update));
   } catch (const std::exception & e) {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
       "Invalid spatial source snapshot: %s", e.what());
@@ -96,7 +105,9 @@ void AcousticSceneNode::onTimer() {
 
 void AcousticSceneNode::onEvent(const audition_msgs::msg::AcousticEvent & msg) {
   if (!have_stream_ || msg.source_generation != stream_generation_ ||
-      msg.header.frame_id != frame_id_ || !event_ledger_->apply(msg)) return;
+      msg.header.frame_id != frame_id_ ||
+      !lifecycle_->isLive(msg.source_id, msg.source_generation) ||
+      !event_ledger_->apply(msg)) return;
   event_pub_->publish(msg);
   // Reconstruct the current scene after event transition. Publishing this
   // snapshot must not update source observation freshness/TTL.
@@ -113,7 +124,9 @@ void AcousticSceneNode::onClassification(
 {
   if (!have_stream_ || msg.source_generation != stream_generation_ ||
       msg.header.frame_id != frame_id_ || msg.source_id.empty() ||
-      msg.class_label.empty() || !std::isfinite(msg.score) ||
+      msg.class_label.empty() ||
+      !lifecycle_->isLive(msg.source_id, msg.source_generation) ||
+      !std::isfinite(msg.score) ||
       msg.score < 0.0f || msg.score > 1.0f) return;
   class_pub_->publish(msg);
 }
@@ -121,6 +134,8 @@ void AcousticSceneNode::onTranscript(const audition_msgs::msg::Transcript & msg)
   if (!have_stream_ || msg.source_generation != stream_generation_ ||
       msg.header.frame_id != frame_id_ || !msg.is_final ||
       msg.source_id.empty() || msg.text.empty() ||
+      !lifecycle_->allowsFinalTranscript(
+        msg.source_id, msg.source_generation, SourceLifecycle::Clock::now()) ||
       (msg.has_score && (!std::isfinite(msg.score) ||
        msg.score < 0.0f || msg.score > 1.0f))) return;
   transcript_pub_->publish(msg);
