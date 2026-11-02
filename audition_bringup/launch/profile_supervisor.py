@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ROS 2 M2p supervised profile switching, fault status and manual recovery."""
+"""ROS 2 supervised profile switching with graph and capture PCM watchdogs."""
 import argparse
 import os
 from pathlib import Path
@@ -10,9 +10,12 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from audition_msgs.msg import AudioFrame
 from audition_msgs.srv import ReloadPipeline, GetPipelineStatus
 from profile_config import resolve_profile, validate_namespace, ProfileError
 from profile_supervisor_core import PipelineSupervisor, ProfileSpec
+from profile_audio_flow import AudioFlowMonitor
 
 
 class OwnedLaunch:
@@ -127,8 +130,15 @@ class SupervisorNode(Node):
         self.namespace_name = initial.namespace
         # Source tree: launch/..; installed: share/audition_bringup/launch/..
         self.share = Path(__file__).resolve().parents[1]
+        self.audio_flow = AudioFlowMonitor(
+            lambda spec: self.validate(spec).capture["kind"])
         self.supervisor = PipelineSupervisor(
-            self.validate, OwnedLaunch, GraphProbe(self, self.validate), timeout)
+            self.validate, OwnedLaunch, GraphProbe(self, self.validate),
+            timeout, audio_flow=self.audio_flow)
+        # Subscribe before starting the owned graph. The flow monitor ignores
+        # callbacks outside an active incarnation and fences old session IDs.
+        self.audio_subscription = self.create_subscription(
+            AudioFrame, "audio/raw", self.on_audio, qos_profile_sensor_data)
         self.supervisor.start(initial)
         self.service = self.create_service(
             ReloadPipeline, "pipeline/reload", self.on_reload)
@@ -144,6 +154,10 @@ class SupervisorNode(Node):
         if spec.namespace != "audition" and resolved.capture["frame_id"] == "microphone_array":
             raise ProfileError("non-default namespace requires a unique frame_id")
         return resolved
+
+    def on_audio(self, msg):
+        self.audio_flow.observe(msg.capture_session_id, msg.sequence_number,
+                                msg.frame_count, msg.channel_count, len(msg.pcm))
 
     def on_monitor(self):
         previous = self.supervisor.status().running
@@ -163,6 +177,11 @@ class SupervisorNode(Node):
         response.fault = status.fault
         response.graph_healthy = status.graph_healthy
         response.graph_miss_count = status.graph_miss_count
+        response.audio_watchdog_enabled = status.audio_watchdog_enabled
+        response.audio_healthy = status.audio_healthy
+        response.audio_miss_count = status.audio_miss_count
+        response.accepted_audio_frames = status.accepted_audio_frames
+        response.last_audio_age_ms = status.last_audio_age_ms
         return response
 
     def on_reload(self, request, response):

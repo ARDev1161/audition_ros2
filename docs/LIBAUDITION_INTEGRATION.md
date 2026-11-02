@@ -567,3 +567,14 @@ parent remains alive. A transient miss resets on the next healthy sample.
 `GetPipelineStatus` exposes `graph_healthy` and `graph_miss_count`.
 This is not an audio heartbeat, hardware health guarantee or zero-downtime
 reload. See [M2q supervisor watchdog](M2_PIPELINE_SUPERVISOR.md).
+
+## M2r: supervisor PCM progress watchdog (2026-11-02)
+
+The opt-in supervisor now observes valid namespaced raw capture PCM, exposes
+freshness and accepted-frame counters via `GetPipelineStatus`, and contains a
+live ALSA pipeline after a sustained capture stall (10-second initial grace,
+5-second inactivity timeout and five failed one-second samples). Finite WAV
+replay is observed but exempt from stall enforcement after EOF. Old session
+replays and duplicate sequence numbers cannot refresh the heartbeat. See
+[M2r supervisor flow contract](M2_PIPELINE_SUPERVISOR.md). This is not
+proof of ASR inference, speaker separation, or physical microphone health.

@@ -10,6 +10,12 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 ProfileSpec, PipelineSupervisor = module.ProfileSpec, module.PipelineSupervisor
+flow_spec = importlib.util.spec_from_file_location(
+    "profile_audio_flow", PATH.with_name("profile_audio_flow.py"))
+flow_module = importlib.util.module_from_spec(flow_spec)
+sys.modules[flow_spec.name] = flow_module
+flow_spec.loader.exec_module(flow_module)
+AudioFlowMonitor = flow_module.AudioFlowMonitor
 
 
 class FakeClock:
@@ -246,6 +252,98 @@ class SwitchTests(unittest.TestCase):
         result = self.supervisor.switch(ProfileSpec("new"))
         self.assertFalse(result.success)
         self.assertIn("exited", result.message)
+
+
+class AudioFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.events = []
+        self.probe = FakeProbe(self.events)
+        self.flow = AudioFlowMonitor(lambda spec: "alsa", clock=self.clock,
+                                     start_grace_s=2, stall_timeout_s=2)
+        self.supervisor = PipelineSupervisor(
+            lambda spec: None,
+            lambda spec: FakeProcess(spec.profile, self.events),
+            self.probe, timeout=1, clock=self.clock, audio_flow=self.flow,
+            audio_failure_threshold=3)
+        self.supervisor.start(ProfileSpec("old"))
+        self.session_a, self.session_b = "a" * 32, "b" * 32
+
+    def tearDown(self):
+        self.supervisor.shutdown()
+
+    def tick(self, count=1):
+        for _ in range(count):
+            self.clock.advance()
+            self.supervisor.monitor()
+
+    def test_no_pcm_after_grace_fails_closed(self):
+        self.tick(5)
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertFalse(state.owned_process_present)
+        self.assertIn("capture PCM stalled", state.fault)
+        self.assertEqual(self.events.count("stop:old"), 1)
+
+    def test_recent_pcm_keeps_live_pipeline_healthy(self):
+        for sequence in range(12):
+            self.assertTrue(self.flow.observe(self.session_a, sequence, 160, 1, 160))
+            self.tick()
+        state = self.supervisor.status()
+        self.assertTrue(state.running and state.audio_healthy)
+        self.assertTrue(state.audio_watchdog_enabled)
+        self.assertEqual(state.accepted_audio_frames, 12)
+        self.assertEqual(state.audio_miss_count, 0)
+
+    def test_duplicate_and_malformed_pcm_do_not_refresh_heartbeat(self):
+        self.assertTrue(self.flow.observe(self.session_a, 1, 160, 1, 160))
+        self.clock.advance(3)
+        self.assertFalse(self.flow.observe(self.session_a, 1, 160, 1, 160))
+        self.assertFalse(self.flow.observe(self.session_a, 2, 160, 2, 160))
+        self.tick(3)
+        self.assertFalse(self.supervisor.status().running)
+        self.assertEqual(self.events.count("stop:old"), 1)
+
+    def test_transient_stall_recovers_before_debounce(self):
+        self.assertTrue(self.flow.observe(self.session_a, 1, 160, 1, 160))
+        self.clock.advance(2.1)
+        self.supervisor.monitor()
+        self.assertEqual(self.supervisor.status().audio_miss_count, 1)
+        self.assertTrue(self.flow.observe(self.session_a, 2, 160, 1, 160))
+        self.tick()
+        self.assertTrue(self.supervisor.status().running)
+        self.assertEqual(self.supervisor.status().audio_miss_count, 0)
+
+    def test_reload_retires_old_capture_session(self):
+        self.assertTrue(self.flow.observe(self.session_a, 3, 160, 1, 160))
+        self.assertTrue(self.supervisor.switch(ProfileSpec("new")).success)
+        self.assertFalse(self.flow.observe(self.session_a, 4, 160, 1, 160))
+        self.assertTrue(self.flow.observe(self.session_b, 0, 160, 1, 160))
+        state = self.supervisor.status()
+        self.assertEqual(state.accepted_audio_frames, 1)
+        self.assertTrue(state.audio_healthy)
+        self.assertEqual(state.reload_epoch, 1)
+
+    def test_replay_profile_reports_flow_without_enforcing_stall(self):
+        replay = AudioFlowMonitor(lambda spec: "wav", clock=self.clock,
+                                  start_grace_s=2, stall_timeout_s=2)
+        replay.reset(ProfileSpec("replay_ci"))
+        self.clock.advance(100)
+        self.assertFalse(replay.snapshot().timed_out)
+        self.assertFalse(replay.snapshot().enabled)
+        self.assertTrue(replay.observe(self.session_a, 0, 160, 1, 160))
+        self.assertTrue(replay.snapshot().healthy)
+
+    def test_retired_session_limit_fails_closed(self):
+        flow = AudioFlowMonitor(lambda spec: "alsa", clock=self.clock,
+                                max_sessions=1)
+        flow.reset(ProfileSpec("old"))
+        self.assertTrue(flow.observe(self.session_a, 1, 160, 1, 160))
+        flow.reset(ProfileSpec("new"))
+        self.assertTrue(flow.observe(self.session_b, 1, 160, 1, 160))
+        flow.reset(ProfileSpec("third"))
+        self.assertFalse(flow.observe("c" * 32, 1, 160, 1, 160))
+        self.assertTrue(flow.snapshot().timed_out)
 
 
 if __name__ == "__main__":

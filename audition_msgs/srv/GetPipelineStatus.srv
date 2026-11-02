@@ -9,3 +9,11 @@ string fault
 # Last sampled ROS graph health; false while offline or after a missed check.
 bool graph_healthy
 uint32 graph_miss_count
+# Capture PCM watchdog is enforced only for live ALSA profiles.
+# WAV replay may legitimately reach EOF; its PCM is observed, not enforced.
+bool audio_watchdog_enabled
+bool audio_healthy
+uint32 audio_miss_count
+uint64 accepted_audio_frames
+# 0 if no accepted PCM in this supervised activation.
+uint64 last_audio_age_ms

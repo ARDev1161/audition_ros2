@@ -1,4 +1,4 @@
-"""M2p process-owned supervisor with bounded recovery and fault containment."""
+"""Process-owned pipeline supervisor with graph and PCM-flow fault containment."""
 from dataclasses import dataclass
 import threading
 import time
@@ -38,13 +38,20 @@ class SupervisorStatus:
     fault: str
     graph_healthy: bool
     graph_miss_count: int
+    audio_watchdog_enabled: bool
+    audio_healthy: bool
+    audio_miss_count: int
+    accepted_audio_frames: int
+    last_audio_age_ms: int
 
 
 class PipelineSupervisor:
     """Injectable state machine: validate(spec), spawn(spec), probe.ready/gone/vacant."""
     def __init__(self, validate, spawn, probe, timeout=30,
-                 graph_failure_threshold=5, health_check_interval=1.0, clock=None):
-        if timeout <= 0 or graph_failure_threshold < 1 or health_check_interval <= 0:
+                 graph_failure_threshold=5, health_check_interval=1.0, clock=None,
+                 audio_flow=None, audio_failure_threshold=5):
+        if (timeout <= 0 or graph_failure_threshold < 1 or
+                audio_failure_threshold < 1 or health_check_interval <= 0):
             raise ValueError("timeouts and graph failure threshold must be positive")
         self.validate, self.spawn, self.probe = validate, spawn, probe
         self.timeout = timeout
@@ -54,6 +61,9 @@ class PipelineSupervisor:
         self._last_health_check = None
         self._graph_healthy = False
         self._graph_misses = 0
+        self.audio_flow = audio_flow
+        self.audio_failure_threshold = audio_failure_threshold
+        self._audio_misses = 0
         self.process = None
         self.active = None
         self.last_good = None
@@ -66,13 +76,19 @@ class PipelineSupervisor:
                             self.active.profile if self.active else "", message)
 
     def _status(self):
+        audio = self.audio_flow.snapshot() if self.audio_flow is not None else None
         return SupervisorStatus(self.active is not None and self.process is not None
                                 and self.process.poll() is None,
                                 self.process is not None,
                                 self.active.profile if self.active else "",
                                 self.last_good.profile if self.last_good else "",
                                 self.epoch, self.fault,
-                                self._graph_healthy, self._graph_misses)
+                                self._graph_healthy, self._graph_misses,
+                                audio.enabled if audio else False,
+                                audio.healthy if audio else False,
+                                self._audio_misses,
+                                audio.accepted_frames if audio else 0,
+                                audio.age_ms if audio else 0)
 
     def status(self):
         with self._lock:
@@ -87,11 +103,17 @@ class PipelineSupervisor:
             except Exception:
                 self.active = None
                 self._graph_healthy = False
+                if self.audio_flow is not None:
+                    self.audio_flow.reset(None)
+                self._audio_misses = 0
                 raise
             self.process = None
         self.active = None
         self._graph_healthy = False
         self._graph_misses = 0
+        self._audio_misses = 0
+        if self.audio_flow is not None:
+            self.audio_flow.reset(None)
         self._last_health_check = None
 
     def _launch(self, spec):
@@ -100,6 +122,8 @@ class PipelineSupervisor:
         try:
             if not self.probe.ready(spec, process, self.timeout):
                 raise RuntimeError("pipeline nodes/capability service did not become ready")
+            if self.audio_flow is not None:
+                self.audio_flow.reset(spec)
         except Exception:
             self._stop()
             raise
@@ -107,6 +131,7 @@ class PipelineSupervisor:
         self.last_good = spec
         self._graph_healthy = True
         self._graph_misses = 0
+        self._audio_misses = 0
         self._last_health_check = self.clock()
         self.fault = ""
 
@@ -164,13 +189,25 @@ class PipelineSupervisor:
                 if healthy:
                     self._graph_healthy = True
                     self._graph_misses = 0
-                    return
-                self._graph_healthy = False
-                self._graph_misses += 1
-                if self._graph_misses < self.graph_failure_threshold:
-                    return
-                cause = ("ROS graph unhealthy for " + str(self._graph_misses) +
-                         " consecutive checks: " + detail)
+                    if self.audio_flow is None:
+                        return
+                    audio = self.audio_flow.snapshot()
+                    if not audio.timed_out:
+                        self._audio_misses = 0
+                        return
+                    self._audio_misses += 1
+                    if self._audio_misses < self.audio_failure_threshold:
+                        return
+                    cause = ("capture PCM stalled for " + str(self._audio_misses) +
+                             " consecutive checks: " + audio.detail)
+                else:
+                    self._graph_healthy = False
+                    self._graph_misses += 1
+                    self._audio_misses = 0
+                    if self._graph_misses < self.graph_failure_threshold:
+                        return
+                    cause = ("ROS graph unhealthy for " + str(self._graph_misses) +
+                             " consecutive checks: " + detail)
             self.fault = cause
             try:
                 self._stop()

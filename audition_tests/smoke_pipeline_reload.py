@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real Humble graph: M2o dry-run, rejected preflight, and owned restart."""
+import time
 import rclpy
 from audition_msgs.srv import ReloadPipeline, GetCapabilities, GetPipelineStatus
 
@@ -10,6 +11,16 @@ def call(node, client, request, timeout=90):
     rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
     assert future.done() and future.exception() is None, client.srv_name
     return future.result()
+
+
+def wait_audio(node, client, timeout=12):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = call(node, client, GetPipelineStatus.Request())
+        if status.accepted_audio_frames > 0 and status.audio_healthy:
+            return status
+        time.sleep(0.2)
+    raise AssertionError("no observed capture PCM after supervised launch")
 
 
 def main():
@@ -26,6 +37,8 @@ def main():
         assert initial.active_profile == "replay_ci" and initial.reload_epoch == 0
         assert not initial.fault and initial.graph_healthy
         assert initial.graph_miss_count == 0
+        assert not initial.audio_watchdog_enabled  # finite replay may reach EOF
+        assert wait_audio(node, status_client).accepted_audio_frames > 0
         dry = ReloadPipeline.Request()
         dry.dry_run = True
         result = call(node, reload, dry)
@@ -41,6 +54,8 @@ def main():
         assert healthy.running and healthy.owned_process_present, healthy
         assert healthy.last_good_profile == "replay_ci" and not healthy.fault
         assert healthy.graph_healthy and healthy.graph_miss_count == 0
+        assert healthy.audio_miss_count == 0
+        assert wait_audio(node, status_client).accepted_audio_frames > 0
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
         nodes = node.get_node_names_and_namespaces()
         for name in ("audio_capture", "mono_source", "acoustic_scene", "semantic_perception"):

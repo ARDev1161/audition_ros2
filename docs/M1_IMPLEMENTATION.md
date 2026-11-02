@@ -474,3 +474,13 @@ counter. The typed pipeline status includes last-sampled `graph_healthy`
 and `graph_miss_count`; launch-parent liveness alone no longer masks
 sustained ROS graph loss. The watchdog cannot prove actual audio delivery,
 model quality or microphone health. See [M2 supervisor](M2_PIPELINE_SUPERVISOR.md).
+
+## M2r: supervised raw PCM progress (2026-11-02)
+
+The optional supervisor subscribes to `audio/raw` and exposes a typed PCM
+heartbeat in `GetPipelineStatus`. Valid session/sequence-ordered PCM advances
+the counter; duplicates and stale sessions do not. Live ALSA profiles fault
+and require explicit recovery after a sustained no-PCM condition, whereas
+finite WAV playback is not faulted after EOF. See
+[M2r PCM watchdog](M2_PIPELINE_SUPERVISOR.md). This checks transport progress,
+not non-silence, ASR output or calibrated ReSpeaker performance.

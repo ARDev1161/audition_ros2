@@ -182,7 +182,16 @@ def test_pipeline_status_graph_watchdog_round_trip():
     response.graph_healthy = False
     response.graph_miss_count = 3
     response.last_good_profile = "replay_ci"
+    response.audio_watchdog_enabled = True
+    response.audio_healthy = False
+    response.audio_miss_count = 2
+    response.accepted_audio_frames = 12
+    response.last_audio_age_ms = 6200
     back = deserialize_message(serialize_message(response), GetPipelineStatus.Response)
     assert back.running and not back.graph_healthy
     assert back.graph_miss_count == 3
     assert back.last_good_profile == "replay_ci"
+    assert back.audio_watchdog_enabled and not back.audio_healthy
+    assert back.audio_miss_count == 2
+    assert back.accepted_audio_frames == 12
+    assert back.last_audio_age_ms == 6200

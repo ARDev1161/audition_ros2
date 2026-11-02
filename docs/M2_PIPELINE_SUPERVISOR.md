@@ -115,3 +115,34 @@ zero-downtime two-phase reload, hardware fault diagnosis or microphone
 calibration. The Humble suite injects missing nodes, recovery, graph API
 exceptions, cleanup failures and high-frequency status polling, and verifies
 serialization and live service fields.
+
+## M2r: supervised capture PCM heartbeat and live-stream stall containment (2026-11-02)
+
+The optional supervisor subscribes to the namespaced `audio/raw` stream using
+sensor-data QoS. A valid heartbeat requires a nonempty, correctly sized
+`AudioFrame`, a valid capture-session token, and strictly increasing sequence
+within that session. Duplicate, malformed and retired-session frames do not
+refresh the heartbeat. Each supervised activation clears counters and retires
+the prior capture session (up to 64; exhaustion fails closed).
+
+`GetPipelineStatus` now reports `audio_watchdog_enabled`, `audio_healthy`,
+`audio_miss_count`, `accepted_audio_frames` and `last_audio_age_ms`.
+`audio_healthy` means a fresh valid raw PCM message was observed, **not**
+that the samples are non-silent or correctly separated. Zero accepted frames
+means no heartbeat has been observed in the current activation.
+
+For **live ALSA** only, no PCM within 10 seconds of graph readiness or no
+fresh PCM for over 5 seconds is considered a stalled sample. Five consecutive
+1-second failed samples cause owned process-group containment, fault recording
+and manual recovery, as with the graph watchdog. A transient interruption
+resets the audio miss count when fresh PCM resumes. **Finite WAV replay**
+never triggers the stall watchdog after EOF, but reports observed PCM and
+freshness. ROS graph readiness remains independent of audio readiness.
+
+This is a transport-progress diagnostic, not a hardware timestamp, a model
+inference heartbeat, DDS publisher authentication, calibrated DOA, or
+zero-downtime reload. The supervisor must remain spinning for subscription
+callbacks to be serviced; a blocking reload intentionally resets the
+heartbeat for the new process. Humble tests cover missing PCM, live progress,
+replay/duplicates, malformed packets, transient recovery, session retirement,
+status serialization, and both replay and virtual ALSA ROS graph smokes.
