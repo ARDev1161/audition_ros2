@@ -3,6 +3,7 @@
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <audition_msgs/msg/audio_frame.hpp>
 #include <audition_msgs/msg/source_audio_frame.hpp>
+#include "audition_perception/capture_session_gate.hpp"
 
 #include <cstdint>
 #include <string>
@@ -23,6 +24,7 @@ public:
   std::uint64_t generation() const noexcept { return generation_; }
 
 private:
+  CaptureSessionGate capture_sessions_;
   std::string source_id_;
   std::string frame_id_;
   builtin_interfaces::msg::Time first_seen_;
