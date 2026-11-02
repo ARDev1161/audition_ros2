@@ -301,6 +301,9 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
 : rclcpp::Node("semantic_perception", options)
 {
   impl_ = std::make_unique<Impl>(*this);
+  speech_ = std::make_unique<SpeechBridge>(*this);
+  transcript_pub_ = create_publisher<audition_msgs::msg::Transcript>(
+    "internal/transcripts", rclcpp::QoS(20).reliable());
   class_pub_ = create_publisher<audition_msgs::msg::SoundClassification>(
     "internal/classifications", rclcpp::QoS(20).reliable());
   event_pub_ = create_publisher<audition_msgs::msg::AcousticEvent>(
@@ -327,6 +330,7 @@ void SemanticPerceptionNode::onSourceAudio(
   }
   try {
     impl_->onAudio(msg, event_pub_);
+    speech_->onAudio(msg);
   } catch (const std::exception & error) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
       "Semantic source rejected: %s", error.what());
@@ -337,6 +341,7 @@ void SemanticPerceptionNode::onSources(
 {
   try {
     impl_->onSources(msg, event_pub_);
+    speech_->onSources(msg);
   } catch (const std::exception & error) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
       "Semantic source retirement error: %s", error.what());
@@ -345,6 +350,7 @@ void SemanticPerceptionNode::onSources(
 void SemanticPerceptionNode::pollCompleted() {
   try {
     impl_->poll(class_pub_, event_pub_);
+    for (auto & t : speech_->drain()) transcript_pub_->publish(std::move(t));
   } catch (const std::exception & error) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
       "Semantic inference completion failed: %s", error.what());
