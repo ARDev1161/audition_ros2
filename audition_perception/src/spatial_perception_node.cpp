@@ -200,7 +200,7 @@ public:
         source.header.frame_id = frame_id_;
         source.header.stamp = asStamp(hop_stamp);
         source.source_id = it->second;
-        source.source_generation = generation_;
+        source.source_generation = batch.generation;
         source.spatial_track_id = std::to_string(id);
         source.state = audition_msgs::msg::AcousticSource::ACTIVE;
         source.has_direction = true;
@@ -232,7 +232,7 @@ public:
         out.header.frame_id = frame_id_;
         out.header.stamp = asStamp(frame.audio.captureTime().nanoseconds());
         out.source_id = it->second;
-        out.source_generation = generation_;
+        out.source_generation = batch.generation;
         out.sequence_number = frame.audio.sequenceNumber();
         out.sample_rate_hz = frame.audio.format().sample_rate_hz;
         out.frame_count = static_cast<std::uint32_t>(frame.audio.frameCount());
