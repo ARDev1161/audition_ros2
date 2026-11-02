@@ -25,6 +25,16 @@
 
 namespace audition_perception {
 namespace {
+template<typename T>
+T readOrDeclare(rclcpp::Node & node, const std::string & name, const T & fallback) {
+  if (!node.has_parameter(name)) return readOrDeclare<T>(name, fallback);
+  T value{};
+  if (!node.get_parameter(name, value)) {
+    throw std::invalid_argument("Cannot read existing semantic parameter: " + name);
+  }
+  return value;
+}
+
 bool validInput(const audition_msgs::msg::SourceAudioFrame & msg) {
   return !msg.source_id.empty() && !msg.header.frame_id.empty() &&
     msg.sample_rate_hz == 16000 && msg.frame_count > 0 &&
@@ -57,7 +67,7 @@ builtin_interfaces::msg::Time stampFromNs(std::int64_t ns) {
 class SemanticPerceptionNode::Impl {
 public:
   Impl(SemanticPerceptionNode & node) {
-    backend_ = node.declare_parameter<std::string>("classifier_backend", "disabled");
+    backend_ = readOrDeclare<std::string>(node, "classifier_backend", "disabled");
     if (backend_ == "disabled") return;
     if (backend_ != "yamnet") {
       throw std::invalid_argument("Unknown semantic classifier backend: " + backend_);
@@ -66,17 +76,17 @@ public:
     throw std::runtime_error("YAMNet requested but this binary lacks "
                              "-DAUDITION_ROS2_WITH_YAMNET=ON");
 #else
-    const auto model = node.declare_parameter<std::string>("yamnet_model", "");
-    const auto labels = node.declare_parameter<std::string>("yamnet_labels", "");
-    const auto top_k = node.declare_parameter<int>("yamnet_top_k", 5);
-    const auto threads = node.declare_parameter<int>("yamnet_threads", 1);
-    const auto window = node.declare_parameter<int>("window_samples", 15600);
-    const auto hop = node.declare_parameter<int>("hop_samples", 7800);
-    max_sources_ = node.declare_parameter<int>("max_sources", 16);
-    const auto start = node.declare_parameter<double>("event_start_threshold", 0.70);
-    const auto stop = node.declare_parameter<double>("event_stop_threshold", 0.40);
-    const auto rising = node.declare_parameter<int>("event_min_start_observations", 2);
-    const auto falling = node.declare_parameter<int>("event_min_stop_observations", 2);
+    const auto model = readOrDeclare<std::string>(node, "yamnet_model", "");
+    const auto labels = readOrDeclare<std::string>(node, "yamnet_labels", "");
+    const auto top_k = readOrDeclare<int>(node, "yamnet_top_k", 5);
+    const auto threads = readOrDeclare<int>(node, "yamnet_threads", 1);
+    const auto window = readOrDeclare<int>(node, "window_samples", 15600);
+    const auto hop = readOrDeclare<int>(node, "hop_samples", 7800);
+    max_sources_ = readOrDeclare<int>(node, "max_sources", 16);
+    const auto start = readOrDeclare<double>(node, "event_start_threshold", 0.70);
+    const auto stop = readOrDeclare<double>(node, "event_stop_threshold", 0.40);
+    const auto rising = readOrDeclare<int>(node, "event_min_start_observations", 2);
+    const auto falling = readOrDeclare<int>(node, "event_min_stop_observations", 2);
     if (model.empty() || labels.empty() || top_k <= 0 || top_k > 521 ||
         threads <= 0 || threads > 32 || window <= 0 || window > 160000 ||
         hop <= 0 || hop > window || max_sources_ <= 0 || max_sources_ > 128 ||
@@ -390,6 +400,43 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       std::shared_ptr<audition_msgs::srv::GetSemanticStatus::Response> response)
     {
       gate_.status(*response);
+      response->reload_epoch = reload_epoch_;
+      response->reload_successes = reload_successes_;
+      response->reload_failures = reload_failures_;
+      response->reload_pending = gate_.reloadPending();
+    });
+  reload_srv_ = create_service<audition_msgs::srv::ReloadSemanticWorkers>(
+    "semantic_perception/reload_workers",
+    [this](
+      const std::shared_ptr<audition_msgs::srv::ReloadSemanticWorkers::Request> request,
+      std::shared_ptr<audition_msgs::srv::ReloadSemanticWorkers::Response> response)
+    {
+      // All subscriptions, timer and services use the default mutually-exclusive
+      // callback group. No old inference completion can publish during swap.
+      try {
+        auto next_classifier = std::make_unique<Impl>(*this);
+        auto next_speech = std::make_unique<SpeechBridge>(*this);
+        if (!request->dry_run) {
+          // Construct both before touching the running graph: strong rollback
+          // guarantee on validation/model load errors.
+          impl_.swap(next_classifier);
+          speech_.swap(next_speech);
+          gate_.beginReload();
+          ++reload_epoch_;
+          ++reload_successes_;
+        }
+        response->success = true;
+        response->message = request->dry_run ?
+          "Candidate workers validated; active workers unchanged" :
+          "Semantic workers replaced; awaiting newer canonical source snapshot";
+      } catch (const std::exception & error) {
+        ++reload_failures_;
+        response->success = false;
+        response->message = error.what();
+        RCLCPP_ERROR(get_logger(), "Semantic worker reload failed (rollback): %s",
+          error.what());
+      }
+      response->reload_epoch = reload_epoch_;
     });
   timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
   RCLCPP_INFO(get_logger(), "Semantic backend: %s",

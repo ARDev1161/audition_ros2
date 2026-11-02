@@ -17,6 +17,16 @@
 
 namespace audition_perception {
 namespace {
+template<typename T>
+T readOrDeclare(rclcpp::Node & node, const std::string & name, const T & fallback) {
+  if (!node.has_parameter(name)) return readOrDeclare<T>(name, fallback);
+  T value{};
+  if (!node.get_parameter(name, value)) {
+    throw std::invalid_argument("Cannot read existing speech parameter: " + name);
+  }
+  return value;
+}
+
 std::int64_t ns(const builtin_interfaces::msg::Time & t) {
   return static_cast<std::int64_t>(t.sec)*1000000000LL+t.nanosec;
 }
@@ -34,22 +44,22 @@ builtin_interfaces::msg::Time rosTime(std::int64_t n) {
 class SpeechBridge::Impl {
 public:
   explicit Impl(rclcpp::Node & node) {
-    enabled_=node.declare_parameter<bool>("speech_enabled",false);
+    enabled_=readOrDeclare<bool>(node, "speech_enabled",false);
     if(!enabled_) return;
 #ifndef AUDITION_ROS2_WITH_SPEECH
     throw std::runtime_error("Speech requested but binary lacks AUDITION_ROS2_WITH_SPEECH");
 #else
-    const auto vad_type=node.declare_parameter<std::string>("speech_vad_backend","sherpa");
-    const auto asr_type=node.declare_parameter<std::string>("speech_asr_backend","whispercpp");
-    const auto vad_model=node.declare_parameter<std::string>("speech_vad_model","");
-    const auto asr_model=node.declare_parameter<std::string>("speech_asr_model","");
-    const auto language=node.declare_parameter<std::string>("speech_language","ru");
-    const int threads=node.declare_parameter<int>("speech_asr_threads",4);
-    const int initial_ms=node.declare_parameter<int>("speech_native_initial_context_ms",1000);
-    const int sources=node.declare_parameter<int>("speech_max_sources",8);
-    const int pending=node.declare_parameter<int>("speech_max_pending_segments",16);
-    const bool normalize=node.declare_parameter<bool>("speech_normalize_asr_segments",false);
-    const double threshold=node.declare_parameter<double>("speech_vad_threshold",0.5);
+    const auto vad_type=readOrDeclare<std::string>(node, "speech_vad_backend","sherpa");
+    const auto asr_type=readOrDeclare<std::string>(node, "speech_asr_backend","whispercpp");
+    const auto vad_model=readOrDeclare<std::string>(node, "speech_vad_model","");
+    const auto asr_model=readOrDeclare<std::string>(node, "speech_asr_model","");
+    const auto language=readOrDeclare<std::string>(node, "speech_language","ru");
+    const int threads=readOrDeclare<int>(node, "speech_asr_threads",4);
+    const int initial_ms=readOrDeclare<int>(node, "speech_native_initial_context_ms",1000);
+    const int sources=readOrDeclare<int>(node, "speech_max_sources",8);
+    const int pending=readOrDeclare<int>(node, "speech_max_pending_segments",16);
+    const bool normalize=readOrDeclare<bool>(node, "speech_normalize_asr_segments",false);
+    const double threshold=readOrDeclare<double>(node, "speech_vad_threshold",0.5);
     if(vad_type!="sherpa" || asr_type!="whispercpp" || language.empty() ||
        threads<1 || threads>32 || initial_ms<0 || initial_ms>1000 ||
        sources<1 || sources>64 || pending<1 || pending>128 ||

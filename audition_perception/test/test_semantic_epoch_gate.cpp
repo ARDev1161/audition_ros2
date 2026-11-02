@@ -105,3 +105,49 @@ TEST(SemanticEpochGate, EndedAndLostSourcesAreHandledSeparately) {
   EXPECT_FALSE(gate.accept(audio("retired", 2, "mic")));
   EXPECT_EQ(status(gate).admitted_sources, 1U);
 }
+
+
+TEST(SemanticEpochGate, ReloadRejectsQueuedSnapshotsAndAudioUntilNewAdmission) {
+  SemanticEpochGate gate;
+  auto first = snapshot(12, "mic");
+  first.header.stamp.sec = 100;
+  first.sources.push_back(source("s", 12, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  auto old_pcm = audio("s", 12, "mic");
+  old_pcm.header.stamp.sec = 100;
+  EXPECT_TRUE(gate.accept(old_pcm));
+
+  gate.beginReload();
+  EXPECT_TRUE(gate.reloadPending());
+  EXPECT_EQ(status(gate).admitted_sources, 0U);
+  EXPECT_FALSE(gate.accept(old_pcm));
+  EXPECT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_TRUE(gate.reloadPending());
+
+  auto fresh = first;
+  fresh.header.stamp.sec = 101;
+  EXPECT_EQ(gate.observe(fresh), SemanticEpochGate::SnapshotResult::Accepted);
+  EXPECT_FALSE(gate.reloadPending());
+  EXPECT_FALSE(gate.accept(old_pcm));
+  old_pcm.header.stamp.sec = 101;
+  EXPECT_FALSE(gate.accept(old_pcm));  // Snapshot-time PCM may be queued.
+  old_pcm.header.stamp.sec = 102;
+  EXPECT_TRUE(gate.accept(old_pcm));
+  EXPECT_EQ(status(gate).source_generation, 12U);  // Never fake upstream epoch.
+}
+
+TEST(SemanticEpochGate, ReloadAcceptsRealUpstreamGenerationChange) {
+  SemanticEpochGate gate;
+  auto first = snapshot(5, "old");
+  first.header.stamp.sec = 20;
+  first.sources.push_back(source("s", 5, "old"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  gate.beginReload();
+  auto next = snapshot(6, "new");
+  next.header.stamp.sec = 20;
+  next.sources.push_back(source("s", 6, "new"));
+  EXPECT_EQ(gate.observe(next), SemanticEpochGate::SnapshotResult::NewGeneration);
+  EXPECT_FALSE(gate.reloadPending());
+  EXPECT_TRUE(gate.accept(audio("s", 6, "new")));
+  EXPECT_FALSE(gate.accept(audio("s", 5, "old")));
+}

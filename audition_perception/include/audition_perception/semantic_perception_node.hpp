@@ -7,6 +7,7 @@
 #include <audition_msgs/msg/transcript.hpp>
 #include <audition_msgs/srv/get_capabilities.hpp>
 #include <audition_msgs/srv/get_semantic_status.hpp>
+#include <audition_msgs/srv/reload_semantic_workers.hpp>
 #include "audition_perception/semantic_epoch_gate.hpp"
 #include "audition_perception/speech_bridge.hpp"
 #include <memory>
@@ -33,6 +34,10 @@ private:
   rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
   rclcpp::Service<audition_msgs::srv::GetCapabilities>::SharedPtr capabilities_srv_;
   rclcpp::Service<audition_msgs::srv::GetSemanticStatus>::SharedPtr semantic_status_srv_;
+  rclcpp::Service<audition_msgs::srv::ReloadSemanticWorkers>::SharedPtr reload_srv_;
+  std::uint64_t reload_epoch_{0};
+  std::uint64_t reload_successes_{0};
+  std::uint64_t reload_failures_{0};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_guard_;
   std::string profile_name_;
   std::string profile_spatial_backend_;

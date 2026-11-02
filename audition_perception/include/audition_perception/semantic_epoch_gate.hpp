@@ -18,10 +18,19 @@ public:
 
   SnapshotResult observe(const audition_msgs::msg::AcousticSourceArray & snapshot);
   bool accept(const audition_msgs::msg::SourceAudioFrame & audio);
+  // On successful worker replacement, fence all PCM until a strictly newer
+  // canonical snapshot arrives. The upstream generation is NOT fabricated.
+  void beginReload() noexcept;
+  bool reloadPending() const noexcept { return reload_pending_; }
   void rejectInvalidAudio() noexcept { ++dropped_audio_frames_; }
   void status(audition_msgs::srv::GetSemanticStatus::Response & out) const;
 
 private:
+  bool reload_pending_{false};
+  bool reload_audio_fence_{false};
+  std::uint64_t reload_fence_generation_{0};
+  std::int64_t last_snapshot_stamp_ns_{0};
+  std::int64_t reload_cutoff_ns_{0};
   bool have_stream_{false};
   std::uint64_t generation_{0};
   std::string frame_id_;

@@ -188,3 +188,14 @@ invalidated on a new spatial generation. Inspect the namespaced
 `semantic_perception/get_semantic_status` service for admission/drop/reset
 counters. See [M2g contract](docs/M2_SEMANTIC_EPOCH_FENCING.md).
 This does not yet provide transactional pipeline reload.
+
+
+### M2h semantic worker restart
+
+The semantic node supports a same-configuration, fail-closed worker restart
+with a dry-run option, rollback on model construction failure, and source
+snapshot/PCM re-admission fencing. Call
+`/audition/semantic_perception/reload_workers` with
+`audition_msgs/srv/ReloadSemanticWorkers`. This is **not** full cross-node
+`ReloadPipeline` or live parameter/model switching.
+See [M2h documentation](docs/M2_SEMANTIC_WORKER_RELOAD.md).

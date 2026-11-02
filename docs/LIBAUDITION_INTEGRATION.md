@@ -367,3 +367,40 @@ the current generation untouched. The namespaced read-only
 resets and rejected snapshots. See
 [M2g semantic epoch fencing](M2_SEMANTIC_EPOCH_FENCING.md).
 This is a prerequisite for, not an implementation of, transactional reload.
+
+## M2h: transactional semantic worker restart (2026-11-02)
+
+The namespaced `audition_msgs/srv/ReloadSemanticWorkers` service at
+`<namespace>/semantic_perception/reload_workers` supports an explicit
+**same-configuration** restart of classifier and speech workers. The
+`dry_run` option builds candidate model workers without replacing live
+instances. On commit, both candidates are constructed successfully before
+the existing classifier/ASR workers are swapped. A model-load failure returns
+`success=false` and leaves the old workers and canonical admission untouched.
+
+After a successful commit, the semantic gate drops queued PCM and old
+source snapshots until a strictly newer canonical source snapshot arrives.
+Within the same upstream generation, PCM at or before that snapshot's capture
+timestamp remains rejected. The old worker instances are destroyed without
+draining their inference results to ROS, so stale classifications and ASR cannot
+be published from the replaced workers. The upstream `source_generation`
+is **not** incremented by this semantic-only operation. The read-only
+`GetSemanticStatus` reports the local `reload_epoch`, successes, failures,
+and whether a new source snapshot is awaited.
+
+This is a complete **semantic worker restart transaction**, not a
+`ReloadPipeline` across capture, ODAS and scene. It does not accept changed
+models, paths, geometry or sample rate; ROS parameters remain immutable.
+Model construction may temporarily duplicate model memory and block the
+semantic executor. For hardware or model configuration changes, stop and
+relaunch the validated profile. Full cross-node two-phase reload, upstream
+generation bump, resource budgeting and failure-injection HIL remain open.
+
+~~~bash
+ros2 service call /audition/semantic_perception/reload_workers \
+  audition_msgs/srv/ReloadSemanticWorkers "{dry_run: true}"
+ros2 service call /audition/semantic_perception/reload_workers \
+  audition_msgs/srv/ReloadSemanticWorkers "{dry_run: false}"
+ros2 service call /audition/semantic_perception/get_semantic_status \
+  audition_msgs/srv/GetSemanticStatus "{}"
+~~~

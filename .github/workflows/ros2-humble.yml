@@ -162,6 +162,10 @@ jobs:
             cat /tmp/audition_epoch_launch.log
             exit 1
           fi
+          if ! python3 audition_tests/smoke_semantic_reload.py; then
+            cat /tmp/audition_epoch_launch.log
+            exit 1
+          fi
 
       - name: Smoke two isolated M2c instances on one DDS domain
         shell: bash

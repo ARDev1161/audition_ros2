@@ -8,3 +8,9 @@ uint64 accepted_audio_frames
 uint64 dropped_audio_frames
 uint64 rejected_source_snapshots
 uint64 stream_resets
+
+# Local semantic-worker restart, NOT the upstream spatial source generation.
+uint64 reload_epoch
+uint64 reload_successes
+uint64 reload_failures
+bool reload_pending

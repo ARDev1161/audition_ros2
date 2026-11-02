@@ -6,6 +6,20 @@
 #include <utility>
 
 namespace audition_perception {
+namespace {
+std::int64_t stampNs(const builtin_interfaces::msg::Time & stamp) noexcept {
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
+}
+}  // namespace
+
+void SemanticEpochGate::beginReload() noexcept {
+  admitted_.clear();
+  reload_pending_ = have_stream_;
+  reload_audio_fence_ = have_stream_;
+  reload_fence_generation_ = generation_;
+  reload_cutoff_ns_ = last_snapshot_stamp_ns_;
+}
+
 
 SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
   const audition_msgs::msg::AcousticSourceArray & snapshot)
@@ -19,6 +33,9 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
       snapshot.header.stamp.nanosec >= 1000000000U ||
       snapshot.sources.size() > 256U ||
       (have_stream_ && snapshot.generation < generation_) ||
+      (reload_pending_ && have_stream_ &&
+       snapshot.generation == generation_ &&
+       stampNs(snapshot.header.stamp) <= reload_cutoff_ns_) ||
       (have_stream_ && snapshot.generation == generation_ &&
        snapshot.header.frame_id != frame_id_)) {
     return reject();
@@ -54,6 +71,16 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
   generation_ = snapshot.generation;
   frame_id_ = snapshot.header.frame_id;
   admitted_.swap(admitted);
+  last_snapshot_stamp_ns_ = stampNs(snapshot.header.stamp);
+  if (reload_pending_) {
+    reload_pending_ = false;
+    if (snapshot.generation == reload_fence_generation_) {
+      // Reject queued PCM captured at/before the re-admission snapshot.
+      reload_cutoff_ns_ = last_snapshot_stamp_ns_;
+    } else {
+      reload_audio_fence_ = false;  // Upstream generation already fences PCM.
+    }
+  }
   return reset ? SnapshotResult::NewGeneration : SnapshotResult::Accepted;
 }
 
@@ -63,7 +90,10 @@ bool SemanticEpochGate::accept(
   // Fail closed until canonical source admission has reached this process.
   // DDS ordering between different topics is not guaranteed: the first audio
   // chunk may be dropped, but no orphan/stale chunk can create a worker.
-  const bool ok = have_stream_ && audio.source_generation == generation_ &&
+  const bool ok = !reload_pending_ && have_stream_ &&
+    !(reload_audio_fence_ && audio.source_generation == reload_fence_generation_ &&
+      stampNs(audio.header.stamp) <= reload_cutoff_ns_) &&
+    audio.source_generation == generation_ &&
     audio.header.frame_id == frame_id_ &&
     admitted_.count(audio.source_id) != 0;
   if (ok) ++accepted_audio_frames_;
