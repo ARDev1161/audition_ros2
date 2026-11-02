@@ -132,12 +132,12 @@ TEST(MonoRouter, CaptureSessionHistoryFailsClosedAfterBound) {
   MonoRouter router;
   auto input = frame(0);
   for (int i = 0; i < 65; ++i) {
-    input.capture_session_id = std::string(31, '0') +
-      "0123456789abcdef"[i % 16];
+    input.capture_session_id = std::string(30, '0') +
+      "0123456789abcdef"[i / 16] + "0123456789abcdef"[i % 16];
     input.sequence_number = static_cast<std::uint64_t>(i);
     EXPECT_NO_THROW(router.process(input));
   }
-  input.capture_session_id = std::string(31, '1') + "f";
+  input.capture_session_id = std::string(30, '0') + "ff";
   EXPECT_THROW(router.process(input), std::invalid_argument);
   EXPECT_EQ(router.generation(), 65U);
 }
