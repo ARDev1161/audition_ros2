@@ -1,4 +1,5 @@
 #include "audition_capture/wav_capture_node.hpp"
+#include "audition_capture/capture_session_id.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -10,7 +11,8 @@
 namespace audition_capture {
 
 WavCaptureNode::WavCaptureNode(const rclcpp::NodeOptions & options)
-: rclcpp::Node("audio_capture", options)
+: rclcpp::Node("audio_capture", options),
+  capture_session_id_(makeCaptureSessionId())
 {
   const auto path = declare_parameter<std::string>("wav_path", "");
   frame_id_ = declare_parameter<std::string>("frame_id", "microphone_array");
@@ -53,6 +55,7 @@ void WavCaptureNode::publishNext() {
     // Original recording clock metadata is not available in generic RIFF WAV.
     message.header.stamp = now();
     message.header.frame_id = frame_id_;
+    message.capture_session_id = capture_session_id_;
     message.sequence_number = sequence_++;
     message.sample_rate_hz = reader_->sampleRate();
     message.channel_count = reader_->channels();
