@@ -157,6 +157,11 @@ def main():
         if not wait(probe, lambda: probe.tpub.get_subscription_count() > 0, deadline):
             print("FAIL: scene does not subscribe to transcripts", file=sys.stderr)
             return 1
+        probe.heartbeat = True
+        probe.send_source()
+        if not wait(probe, lambda: probe.source_present, deadline):
+            print('FAIL: missing active source', file=sys.stderr)
+            return 1
         spoken = Transcript()
         spoken.header.frame_id = probe.frame_id
         spoken.header.stamp = probe.get_clock().now().to_msg()
