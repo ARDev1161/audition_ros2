@@ -14,6 +14,7 @@ public:
   bool enabled() const noexcept;
   void onAudio(const audition_msgs::msg::SourceAudioFrame & frame);
   void onSources(const audition_msgs::msg::AcousticSourceArray & snapshot);
+  void resetStream();
   std::vector<audition_msgs::msg::Transcript> drain();
 private:
   class Impl;

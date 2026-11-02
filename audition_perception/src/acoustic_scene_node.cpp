@@ -2,6 +2,10 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <iomanip>
+#include <random>
+#include <sstream>
 #include <stdexcept>
 #include <set>
 #include <string>
@@ -10,8 +14,23 @@
 #include <rclcpp_components/register_node_macro.hpp>
 
 namespace audition_perception {
+namespace {
+std::string makeSceneSessionId() {
+  // This is an incarnation discriminator, NOT authentication or an
+  // authorization token. A new scene process gets a fresh 128-bit value.
+  std::random_device random;
+  std::ostringstream stream;
+  stream << std::hex << std::setfill('0');
+  for (int i = 0; i < 4; ++i) {
+    stream << std::setw(8) << static_cast<std::uint32_t>(random());
+  }
+  return stream.str();
+}
+}  // namespace
+
 AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
-: rclcpp::Node("acoustic_scene", options)
+: rclcpp::Node("acoustic_scene", options),
+  scene_session_id_(makeSceneSessionId())
 {
   const auto lost_ms = declare_parameter<int>("source_lost_after_ms", 300);
   const auto end_ms = declare_parameter<int>("source_end_after_ms", 1500);
@@ -72,6 +91,7 @@ void AcousticSceneNode::publish(SourceLifecycle::Update update) {
   // carries one-shot ENDED notifications. Both share the same generation.
   // A single process-local order key also covers timer and event updates.
   update.sources.sequence_number = ++canonical_sequence_;
+  update.sources.scene_session_id = scene_session_id_;
   source_pub_->publish(std::move(update.sources));
   scene_pub_->publish(std::move(update.scene));
 }

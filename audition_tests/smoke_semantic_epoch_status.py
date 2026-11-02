@@ -34,6 +34,8 @@ def main():
             raise AssertionError("No canonical semantic admission / PCM: " + str(value))
 
         assert value.last_source_sequence > 0, value
+        assert len(value.scene_session_id) == 32, value
+        assert value.scene_session_resets == 0, value
         initial_rejected = value.rejected_source_snapshots
         # Simulate a second publisher replaying a zero-order canonical snapshot.
         stale_pub = node.create_publisher(

@@ -474,6 +474,7 @@ void SemanticPerceptionNode::onSources(
   try {
     if (decision == SemanticEpochGate::SnapshotResult::NewGeneration) {
       impl_->resetStream();
+      speech_->resetStream();
     }
     impl_->onSources(msg, event_pub_);
     speech_->onSources(msg);

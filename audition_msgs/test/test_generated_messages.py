@@ -50,8 +50,10 @@ def test_source_identity_and_scene_round_trip():
 
     snapshot = AcousticSourceArray()
     snapshot.generation = 4
+    snapshot.scene_session_id = "0123456789abcdef0123456789abcdef"
     snapshot.sources = [source]
     back = deserialize_message(serialize_message(snapshot), AcousticSourceArray)
+    assert back.scene_session_id == snapshot.scene_session_id
     assert back.sources[0].source_id == source.source_id
     assert back.sources[0].source_generation == 4
     assert not back.sources[0].has_range
@@ -142,12 +144,16 @@ def test_semantic_status_service_round_trip():
     response.accepted_audio_frames = 31
     response.dropped_audio_frames = 4
     response.stream_resets = 3
+    response.scene_session_id = "0123456789abcdef0123456789abcdef"
+    response.scene_session_resets = 2
     back = deserialize_message(serialize_message(response), GetSemanticStatus.Response)
     assert back.have_stream and back.source_generation == 7
     assert back.frame_id == "robot_a_mic"
     assert back.admitted_sources == 2
     assert back.dropped_audio_frames == 4
     assert back.stream_resets == 3
+    assert back.scene_session_id == response.scene_session_id
+    assert back.scene_session_resets == 2
 
 
 def test_capture_status_service_round_trip():

@@ -334,3 +334,29 @@ Humble unit tests cover duplicated, reordered and cross-generation snapshots;
 ROS graph smoke injects a zero-sequence canonical snapshot and checks that
 live admission remains intact. This is ordering hardening, **not** the
 cross-node transactional `ReloadPipeline`.
+
+
+## M2j: canonical scene incarnation handshake (2026-11-02)
+
+Each `acoustic_scene` process now generates a fresh 128-bit hexadecimal
+`scene_session_id` and attaches it to every canonical `/sources` snapshot.
+Internal spatial producers leave it empty. Semantic admission validates the
+session ID, preserves per-session strict sequence ordering, and recognizes a
+**previously unseen** scene incarnation even when its sequence or upstream
+source generation restarts at 1. A session transition resets YAMNet and
+Sherpa/Whisper source workers, invalidates previous admission, and fences
+queued same-generation PCM until after the new canonical snapshot timestamp.
+Previously accepted session IDs are retained (up to 64 per semantic process)
+so a delayed old snapshot cannot restore a retired source. The 65th distinct
+session fails closed; restart the semantic process. Status now reports
+`scene_session_id` and `scene_session_resets`.
+
+This repairs **scene-only process restart reconciliation**, not an atomic
+capture/ODAS/scene/model reconfiguration transaction. A new scene process
+must publish at least one valid canonical snapshot before semantic admission
+can resume. The session ID is an ordering discriminator, **not DDS publisher
+authentication**; arbitrary untrusted publishers must be isolated by ROS 2
+security. PCM has no scene incarnation field, so independently restarted
+capture/spatial publishers and clock resets still require coordinated
+generation fencing or a complete pipeline restart. Model accuracy, HIL
+calibration and a full cross-node `ReloadPipeline` remain unverified.

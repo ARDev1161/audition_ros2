@@ -34,6 +34,11 @@ private:
   bool have_stream_{false};
   std::uint64_t generation_{0};
   std::uint64_t last_snapshot_sequence_{0};
+  std::string scene_session_id_;
+  // Retain every accepted incarnation: a delayed old session can never
+  // become authoritative again. Fail closed after 64 scene incarnations.
+  std::set<std::string> seen_scene_sessions_;
+  std::uint64_t scene_session_resets_{0};
   std::string frame_id_;
   std::set<std::string> admitted_;
   std::uint64_t accepted_audio_frames_{0};

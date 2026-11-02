@@ -41,5 +41,6 @@ private:
   rclcpp::Subscription<audition_msgs::msg::Transcript>::SharedPtr transcript_sub_;
   rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
   std::string frame_id_;
+  std::string scene_session_id_;
 };
 }  // namespace audition_perception

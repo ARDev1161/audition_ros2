@@ -17,3 +17,7 @@ bool reload_pending
 
 # Last accepted canonical /sources sequence (0 before first admission).
 uint64 last_source_sequence
+
+# Current canonical acoustic_scene incarnation and accepted restarts.
+string scene_session_id
+uint64 scene_session_resets

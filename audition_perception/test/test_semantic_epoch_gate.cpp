@@ -23,6 +23,7 @@ static Source source(const char * id, std::uint64_t generation,
 static Snapshot snapshot(std::uint64_t generation, const char * frame) {
   Snapshot out;
   out.generation = generation;
+  out.scene_session_id = "0123456789abcdef0123456789abcdef";
   static std::uint64_t sequence = 0;
   out.sequence_number = ++sequence;
   out.header.frame_id = frame;
@@ -195,4 +196,64 @@ TEST(SemanticEpochGate, RejectsZeroAndOldSequenceAcrossGenerations) {
   EXPECT_EQ(gate.observe(reset), SemanticEpochGate::SnapshotResult::NewGeneration);
   EXPECT_FALSE(gate.accept(audio("old", 70, "mic")));
   EXPECT_TRUE(gate.accept(audio("new", 71, "new_mic")));
+}
+
+
+TEST(SemanticEpochGate, SceneRestartAcceptsNewSessionWithResetSequenceAndGeneration) {
+  SemanticEpochGate gate;
+  auto first = snapshot(50, "mic");
+  first.sequence_number = 300;
+  first.header.stamp.sec = 100;
+  first.sources.push_back(source("s", 50, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  EXPECT_TRUE(gate.accept(audio("s", 50, "mic")));
+
+  auto restarted = snapshot(1, "mic");
+  restarted.scene_session_id = "fedcba9876543210fedcba9876543210";
+  restarted.sequence_number = 1;
+  restarted.header.stamp.sec = 101;
+  restarted.sources.push_back(source("s", 1, "mic"));
+  EXPECT_EQ(gate.observe(restarted), SemanticEpochGate::SnapshotResult::NewGeneration);
+  EXPECT_EQ(status(gate).last_source_sequence, 1U);
+  EXPECT_EQ(status(gate).scene_session_resets, 1U);
+  EXPECT_EQ(status(gate).scene_session_id, restarted.scene_session_id);
+  EXPECT_FALSE(gate.accept(audio("s", 50, "mic")));
+
+  auto queued = audio("s", 1, "mic");
+  queued.header.stamp.sec = 101;
+  EXPECT_FALSE(gate.accept(queued));
+  queued.header.stamp.sec = 102;
+  EXPECT_TRUE(gate.accept(queued));
+
+  // Old session cannot reclaim authority, even with an enormous sequence.
+  first.sequence_number = 9999;
+  EXPECT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_TRUE(gate.accept(queued));
+  EXPECT_EQ(status(gate).scene_session_resets, 1U);
+}
+
+TEST(SemanticEpochGate, SameGenerationSceneRestartResetsAdmissionAndRejectsMalformedIds) {
+  SemanticEpochGate gate;
+  auto first = snapshot(3, "mic");
+  first.header.stamp.sec = 100;
+  first.sources.push_back(source("old", 3, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+
+  auto bad = snapshot(3, "mic");
+  bad.scene_session_id = "not-a-valid-session";
+  bad.sources.push_back(source("injected", 3, "mic"));
+  EXPECT_EQ(gate.observe(bad), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_TRUE(gate.accept(audio("old", 3, "mic")));
+
+  auto next = snapshot(3, "mic");
+  next.scene_session_id = "11111111111111111111111111111111";
+  next.sequence_number = 1;
+  next.header.stamp.sec = 101;
+  next.sources.push_back(source("new", 3, "mic"));
+  EXPECT_EQ(gate.observe(next), SemanticEpochGate::SnapshotResult::NewGeneration);
+  EXPECT_FALSE(gate.accept(audio("old", 3, "mic")));
+  auto fresh = audio("new", 3, "mic");
+  fresh.header.stamp.sec = 102;
+  EXPECT_TRUE(gate.accept(fresh));
+  EXPECT_EQ(status(gate).stream_resets, 1U);
 }

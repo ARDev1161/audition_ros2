@@ -146,6 +146,16 @@ public:
     (void)msg;
 #endif
   }
+  void resetStream() {
+#ifdef AUDITION_ROS2_WITH_SPEECH
+    if (!enabled_) return;
+    runtime_->reset();
+    active_.clear();
+    meta_.clear();
+    have_stream_ = false;
+    stream_generation_ = 0;
+#endif
+  }
   void onSources(const audition_msgs::msg::AcousticSourceArray & msg) {
     if(!enabled_) return;
 #ifdef AUDITION_ROS2_WITH_SPEECH
@@ -220,6 +230,7 @@ SpeechBridge::SpeechBridge(rclcpp::Node & node)
 SpeechBridge::~SpeechBridge() = default;
 bool SpeechBridge::enabled() const noexcept {return impl_->enabled();}
 void SpeechBridge::onAudio(const audition_msgs::msg::SourceAudioFrame & f) {impl_->onAudio(f);}
+void SpeechBridge::resetStream() {impl_->resetStream();}
 void SpeechBridge::onSources(const audition_msgs::msg::AcousticSourceArray & s) {
   impl_->onSources(s);
 }

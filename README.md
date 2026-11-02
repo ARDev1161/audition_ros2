@@ -223,3 +223,13 @@ Humble unit tests cover duplicated, reordered and cross-generation snapshots;
 ROS graph smoke injects a zero-sequence canonical snapshot and checks that
 live admission remains intact. This is ordering hardening, **not** the
 cross-node transactional `ReloadPipeline`.
+
+### M2j: acoustic scene process restart fencing
+
+Canonical `/sources` now carries a per-process `scene_session_id` alongside
+its ordered sequence. Semantic workers reset and re-admit on a fresh scene
+incarnation, including when the scene's sequence/generation starts over.
+Old scene sessions cannot reclaim admission. Inspect
+`/audition/semantic_perception/get_semantic_status` for the active session
+and restart count. This is **not** full cross-node `ReloadPipeline` or
+publisher authentication; see [M2j details](docs/M2_SCENE_SESSION_HANDSHAKE.md).
