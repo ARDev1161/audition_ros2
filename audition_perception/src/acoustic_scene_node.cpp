@@ -21,6 +21,11 @@ AcousticSceneNode::AcousticSceneNode(const rclcpp::NodeOptions & options)
 
   event_ledger_ = std::make_unique<EventLedger>(
     static_cast<std::size_t>(declare_parameter<int>("max_active_events", 128)));
+  transcript_sub_ = create_subscription<audition_msgs::msg::Transcript>(
+    "internal/transcripts", rclcpp::QoS(20).reliable(),
+    [this](const audition_msgs::msg::Transcript & msg) {onTranscript(msg);});
+  transcript_pub_ = create_publisher<audition_msgs::msg::Transcript>(
+    "transcripts", rclcpp::QoS(20).reliable());
   event_sub_ = create_subscription<audition_msgs::msg::AcousticEvent>(
     "internal/events", rclcpp::QoS(20).reliable(),
     [this](const audition_msgs::msg::AcousticEvent & msg) { onEvent(msg); });
@@ -111,6 +116,14 @@ void AcousticSceneNode::onClassification(
       msg.class_label.empty() || !std::isfinite(msg.score) ||
       msg.score < 0.0f || msg.score > 1.0f) return;
   class_pub_->publish(msg);
+}
+void AcousticSceneNode::onTranscript(const audition_msgs::msg::Transcript & msg) {
+  if (!have_stream_ || msg.source_generation != stream_generation_ ||
+      msg.header.frame_id != frame_id_ || !msg.is_final ||
+      msg.source_id.empty() || msg.text.empty() ||
+      (msg.has_score && (!std::isfinite(msg.score) ||
+       msg.score < 0.0f || msg.score > 1.0f))) return;
+  transcript_pub_->publish(msg);
 }
 }  // namespace audition_perception
 RCLCPP_COMPONENTS_REGISTER_NODE(audition_perception::AcousticSceneNode)
