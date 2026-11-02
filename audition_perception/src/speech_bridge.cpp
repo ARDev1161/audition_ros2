@@ -89,3 +89,130 @@ public:
     active_.erase(it);
   }
 #endif
+  void onAudio(const audition_msgs::msg::SourceAudioFrame & msg) {
+    if(!enabled_) return;
+#ifdef AUDITION_ROS2_WITH_SPEECH
+    if(msg.source_id.empty() || msg.header.frame_id.empty() ||
+       msg.sample_rate_hz!=16000 || msg.frame_count==0 || msg.frame_count>4096 ||
+       msg.pcm.size()!=msg.frame_count ||
+       !std::all_of(msg.pcm.begin(),msg.pcm.end(),[](float v){
+         return std::isfinite(v) && v>=-1.0f && v<=1.0f;
+       })) throw std::invalid_argument("Expected normalized mono 16k PCM");
+    const auto stamp=ns(msg.header.stamp);
+    auto it=active_.find(msg.source_id);
+    if(it!=active_.end()) {
+      if(msg.source_generation < it->second.generation) return;
+      if(msg.source_generation!=it->second.generation ||
+         it->second.frame_id!=msg.header.frame_id ||
+         msg.sequence_number<=it->second.sequence ||
+         stamp<it->second.last_stamp ||
+         stamp>it->second.next_stamp+250000000LL) {
+        // A reset invalidates old queued ASR, rather than stitching sources.
+        forget(it);
+        it=active_.end();
+      }
+    }
+    if(it==active_.end()) {
+      if(active_.size()>=max_sources_) throw std::runtime_error("Speech max_sources");
+      Source s;
+      s.id=next_id_++;s.generation=msg.source_generation;
+      s.name=msg.source_id;s.frame_id=msg.header.frame_id;
+      it=active_.emplace(s.name,std::move(s)).first;
+    }
+    auto & s=it->second;
+    s.sequence=msg.sequence_number;s.last_stamp=stamp;
+    s.next_stamp=stamp+static_cast<std::int64_t>(msg.frame_count)*1000000000LL/16000;
+    audition::AudioView audio{
+      msg.pcm.data(),msg.pcm.size(),
+      {16000U,1U,audition::AudioLayout::Interleaved},
+      {stamp,{audition::ClockDomain::External,1}},msg.sequence_number};
+    runtime_->push(s.id,audio); // Synchronous VAD in separate semantic process.
+    const auto gen=runtime_->activeGeneration(s.id);
+    if(gen && !s.worker_generation) {
+      s.worker_generation=*gen;meta_[*gen]=s;
+    }
+#else
+    (void)msg;
+#endif
+  }
+  void onSources(const audition_msgs::msg::AcousticSourceArray & msg) {
+    if(!enabled_) return;
+#ifdef AUDITION_ROS2_WITH_SPEECH
+    if(have_stream_ && msg.generation<stream_generation_) return;
+    if(have_stream_ && msg.generation!=stream_generation_) {
+      runtime_->reset();active_.clear();meta_.clear();
+    }
+    have_stream_=true;stream_generation_=msg.generation;
+    for(const auto & src:msg.sources) {
+      if(src.state!=audition_msgs::msg::AcousticSource::ENDED) continue;
+      auto it=active_.find(src.source_id);
+      if(it==active_.end() || it->second.generation!=src.source_generation) continue;
+      const auto gen=runtime_->retire(it->second.id);
+      if(gen) {
+        meta_[*gen]=it->second;active_.erase(it);
+      } else forget(it);
+    }
+#else
+    (void)msg;
+#endif
+  }
+  std::vector<audition_msgs::msg::Transcript> drain() {
+    std::vector<audition_msgs::msg::Transcript> out;
+#ifdef AUDITION_ROS2_WITH_SPEECH
+    if(!enabled_) return out;
+    const auto drained=runtime_->drainReady();
+    for(const auto & item:drained.results) {
+      const auto m=meta_.find(item.generation);
+      if(m==meta_.end() || item.transcript.text.empty()) continue;
+      const auto & source=m->second;
+      if(have_stream_ && source.generation!=stream_generation_) continue;
+      audition_msgs::msg::Transcript t;
+      t.header.frame_id=source.frame_id;
+      t.header.stamp=rosTime(item.end_time.nanoseconds());
+      t.source_id=source.name;t.source_generation=source.generation;
+      t.speaker_id=""; // Source ID is NOT speaker identity.
+      t.model_id="whispercpp";
+      t.language=item.transcript.language;
+      t.text=item.transcript.text;
+      t.is_final=true;
+      t.observed_start=rosTime(item.start_time.nanoseconds());
+      t.observed_end=rosTime(item.end_time.nanoseconds());
+      t.has_score=item.transcript.confidence.has_value();
+      t.score_kind=audition_msgs::msg::Transcript::UNCALIBRATED_SCORE;
+      if(item.transcript.confidence)
+        t.score=static_cast<float>(item.transcript.confidence->value());
+      out.push_back(std::move(t));
+    }
+    for(auto gen:drained.ready_retired_generations) {
+      runtime_->releaseRetired(gen);meta_.erase(gen);
+    }
+#endif
+    return out;
+  }
+private:
+#ifdef AUDITION_ROS2_WITH_SPEECH
+  std::uint64_t next_id_{1},stream_generation_{0};
+  std::size_t max_sources_{8};
+  bool have_stream_{false};
+  std::map<std::string,Source> active_;
+  std::map<std::uint64_t,Source> meta_;
+  // Member teardown is reverse order: the ASR worker stops before the models.
+  std::unique_ptr<audition::SherpaVad> vad_;
+  std::shared_ptr<audition::WhisperCppAsr> asr_;
+  std::unique_ptr<audition::PerSourceSpeechRuntime> runtime_;
+#endif
+  bool enabled_{false};
+};
+
+SpeechBridge::SpeechBridge(rclcpp::Node & node)
+  : impl_(std::make_unique<Impl>(node)) {}
+SpeechBridge::~SpeechBridge() = default;
+bool SpeechBridge::enabled() const noexcept {return impl_->enabled();}
+void SpeechBridge::onAudio(const audition_msgs::msg::SourceAudioFrame & f) {impl_->onAudio(f);}
+void SpeechBridge::onSources(const audition_msgs::msg::AcousticSourceArray & s) {
+  impl_->onSources(s);
+}
+std::vector<audition_msgs::msg::Transcript> SpeechBridge::drain() {
+  return impl_->drain();
+}
+}  // namespace audition_perception
