@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 interfaces, M1 WAV replay and opt-in live ALSA/ODAS, and an initial M2 YAMNet/classification-event adapter are implemented. CI validates native builds and synthetic pipeline contracts, **not model accuracy or physical ReSpeaker calibration**. VAD/ASR, attention, fusion and navigation integration remain to be implemented.
+**Status:** M0 interfaces, M1 WAV replay and opt-in live ALSA/ODAS, and M2 YAMNet event and optional Sherpa VAD + whisper.cpp speech adapters are implemented. CI validates native builds and synthetic pipeline contracts, **not model accuracy or physical ReSpeaker calibration**. VAD/ASR, attention, fusion and navigation integration remain to be implemented.
 
 ## Interaction overview
 
@@ -71,6 +71,27 @@ ros2 launch audition_bringup m2_wav_pipeline.launch.py \
 When spatial separation is available, ROS 2 exposes `/audition/classifications`, `/audition/events` and `/audition/scene`. The inference worker is provided by libaudition and receives per-source mono 16 kHz PCM. Threshold hysteresis and event transitions are also provided by libaudition, not reimplemented here. The default YAML disables inference; no model weights are bundled. A mono/no-ODAS semantic bypass is not yet implemented.
 
 See the [M2 implementation guide](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/M2_IMPLEMENTATION.md).
+
+### Optional Russian speech recognition
+
+Build `libaudition` with `LIBAUDITION_WITH_SHERPA=ON` and
+`LIBAUDITION_WITH_WHISPERCPP=ON` (compatible installed whisper.cpp), and
+build this ROS package with `AUDITION_ROS2_WITH_SEMANTIC=ON` and
+`AUDITION_ROS2_WITH_SPEECH=ON`. Copy
+[`semantic_m2.yaml`](audition_bringup/config/semantic_m2.yaml) and set
+`speech_enabled: true`, `speech_vad_model`, `speech_asr_model`, and
+`speech_language: ru`. Use the same M2 launch command with
+`semantic_config:=/path/to/your.yaml`.
+
+The speech adapter is part of `semantic_perception` (not a fifth ROS node).
+Native `PerSourceSpeechRuntime` owns VAD segmentation and an asynchronous
+Whisper ASR worker. The canonical `acoustic_scene` republishes accepted final
+results to `/audition/transcripts`. No models are distributed, no transcripts
+are fabricated when disabled, and a source ID is **not** a speaker identity.
+
+See the [Sphinx speech setup and limitations](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/SPEECH_ASR.md).
+This path still requires ODAS-separated mono 16 kHz audio; real hardware and
+Russian recognition accuracy are not yet acceptance-tested.
 
 ## Intended boundaries
 
