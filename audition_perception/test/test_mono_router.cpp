@@ -11,6 +11,7 @@ namespace {
 AudioFrame frame(std::uint64_t seq = 0, std::uint32_t nanosec = 0) {
   AudioFrame f;
   f.header.frame_id = "mic";
+  f.capture_session_id = std::string(32, 'a');
   f.header.stamp.sec = 5;
   f.header.stamp.nanosec = nanosec;
   f.sequence_number = seq;
@@ -102,4 +103,41 @@ TEST(MonoRouter, FrameChangeAndPlanarMonoAreExplicit) {
   EXPECT_EQ(changed.sources.generation, 2U);
   EXPECT_EQ(changed.sources.header.frame_id, "other_mic");
   EXPECT_EQ(changed.sources.sources.front().header.frame_id, "other_mic");
+}
+
+TEST(MonoRouter, CaptureRestartWithContinuousClockAndSequenceStillFencesEpoch) {
+  MonoRouter router;
+  const auto original = router.process(frame(0));
+  auto next_session = frame(1, 10000000);
+  next_session.capture_session_id = std::string(32, 'b');
+  const auto restarted = router.process(next_session);
+  EXPECT_EQ(restarted.sources.generation, 2U);
+  EXPECT_EQ(restarted.audio.source_generation, 2U);
+  EXPECT_EQ(restarted.sources.sources.front().first_seen.nanosec, 10000000U);
+  EXPECT_EQ(restarted.audio.source_id, original.audio.source_id);
+
+  // A delayed packet from the previous process cannot steal the active epoch.
+  EXPECT_THROW(router.process(frame(2, 20000000)), std::invalid_argument);
+  EXPECT_EQ(router.generation(), 2U);
+  auto malformed = frame(2, 20000000);
+  malformed.capture_session_id = "not-a-session";
+  EXPECT_THROW(router.process(malformed), std::invalid_argument);
+  EXPECT_EQ(router.generation(), 2U);
+  next_session.sequence_number = 2;
+  next_session.header.stamp.nanosec = 20000000;
+  EXPECT_EQ(router.process(next_session).sources.generation, 2U);
+}
+
+TEST(MonoRouter, CaptureSessionHistoryFailsClosedAfterBound) {
+  MonoRouter router;
+  auto input = frame(0);
+  for (int i = 0; i < 65; ++i) {
+    input.capture_session_id = std::string(31, '0') +
+      "0123456789abcdef"[i % 16];
+    input.sequence_number = static_cast<std::uint64_t>(i);
+    EXPECT_NO_THROW(router.process(input));
+  }
+  input.capture_session_id = std::string(31, '1') + "f";
+  EXPECT_THROW(router.process(input), std::invalid_argument);
+  EXPECT_EQ(router.generation(), 65U);
 }
