@@ -19,6 +19,7 @@ def generate_launch_description():
         DeclareLaunchArgument("channel_count", default_value="6"),
         DeclareLaunchArgument("frames_per_message", default_value="160"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled"),
+        DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
             "spatial_config",
             default_value=PathJoinSubstitution([
