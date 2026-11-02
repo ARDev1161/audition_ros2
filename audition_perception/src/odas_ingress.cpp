@@ -71,25 +71,30 @@ void OdasIngress::backendFailure() noexcept {
 
 OdasIngress::Batch OdasIngress::push(
   const audition_msgs::msg::AudioFrame & msg) {
+  CaptureSessionGate::Decision session;
   try {
     validate(msg);
+    session = capture_sessions_.inspect(msg.capture_session_id);
   } catch (...) {
     ++stats_.rejected_frames;
     throw;
   }
   const auto stamp = stampNs(msg.header.stamp);
   Batch batch;
-  const bool discontinuity = have_previous_ &&
-    (msg.sequence_number != last_sequence_ + 1 ||
+  const bool discontinuity = session == CaptureSessionGate::Decision::Changed ||
+    (have_previous_ && (msg.sequence_number != last_sequence_ + 1 ||
      stamp < last_stamp_ns_ ||
      stamp > expected_next_ns_ + kMaxJitter ||
-     pending_channels_ != 0 && pending_channels_ != msg.channel_count);
+     (pending_channels_ != 0 && pending_channels_ != msg.channel_count)));
   if (discontinuity) {
     reset();
     ++stats_.discontinuity_resets;
     batch.reset = true;
   }
 
+  // Commit only after payload and session validation. Even an oversized
+  // dropped chunk establishes the new incarnation and fences old replay.
+  capture_sessions_.commit(msg.capture_session_id);
   const auto maximum = static_cast<std::size_t>(hop_) *
     max_pending_hops_ * msg.channel_count;
   if (pending_.size() + msg.pcm.size() > maximum) {
