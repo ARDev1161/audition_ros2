@@ -164,14 +164,14 @@ jobs:
                              for i in range(16000)]
                   wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
           PY
-          ros2 launch audition_bringup m2_profile.launch.py \\
-            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \\
-            audition_namespace:=robot_a/audition frame_id:=robot_a_mic \\
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \
+            audition_namespace:=robot_a/audition frame_id:=robot_a_mic \
             > /tmp/audition_robot_a.log 2>&1 &
           a_pid=$!
-          ros2 launch audition_bringup m2_profile.launch.py \\
-            profile:=replay_ci wav_path:=/tmp/audition_ci_880.wav \\
-            audition_namespace:=robot_b/audition frame_id:=robot_b_mic \\
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci_880.wav \
+            audition_namespace:=robot_b/audition frame_id:=robot_b_mic \
             > /tmp/audition_robot_b.log 2>&1 &
           b_pid=$!
           trap 'kill "$a_pid" "$b_pid" 2>/dev/null || true' EXIT
