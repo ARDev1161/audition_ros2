@@ -11,6 +11,7 @@ AudioFrame frame(std::uint64_t sequence, std::int64_t time_ns,
                  std::uint32_t frames = 160, std::uint32_t channels = 6) {
   AudioFrame f;
   f.header.frame_id = "microphone_array";
+  f.capture_session_id = std::string(32, 'a');
   f.header.stamp.sec = static_cast<std::int32_t>(time_ns / 1000000000LL);
   f.header.stamp.nanosec = static_cast<std::uint32_t>(time_ns % 1000000000LL);
   f.sequence_number = sequence;
@@ -129,4 +130,35 @@ TEST(OdasIngress, OverflowDropsWholeChunkAndFencesOldGeneration) {
   EXPECT_EQ(ingress.generation(), 3U);
   EXPECT_EQ(ingress.stats().backend_resets, 1U);
   EXPECT_EQ(ingress.bufferedFrames(), 0U);
+}
+
+TEST(OdasIngress, CaptureProcessRestartFlushesPendingHopsEvenWithoutSequenceGap) {
+  OdasIngress ingress(16000, 128, "microphone_array", 5);
+  const auto initial = ingress.push(frame(0, 0));
+  ASSERT_EQ(initial.hops.size(), 1U);
+  EXPECT_EQ(ingress.bufferedFrames(), 32U);
+
+  auto replacement = frame(1, 10000000);
+  replacement.capture_session_id = std::string(32, 'b');
+  const auto switched = ingress.push(replacement);
+  EXPECT_TRUE(switched.reset);
+  EXPECT_EQ(switched.generation, 2U);
+  ASSERT_EQ(switched.hops.size(), 1U);
+  EXPECT_EQ(switched.hops.front().capture_ns, 10000000);
+  EXPECT_EQ(switched.hops.front().sequence, 1U);
+  EXPECT_EQ(ingress.bufferedFrames(), 32U);
+
+  // Old process replay and malformed IDs do not mutate pending PCM or epoch.
+  EXPECT_THROW(ingress.push(frame(2, 20000000)), std::invalid_argument);
+  auto malformed = replacement;
+  malformed.sequence_number = 2;
+  malformed.header.stamp.nanosec = 20000000;
+  malformed.capture_session_id = "INVALID";
+  EXPECT_THROW(ingress.push(malformed), std::invalid_argument);
+  EXPECT_EQ(ingress.bufferedFrames(), 32U);
+  EXPECT_EQ(ingress.generation(), 2U);
+  EXPECT_EQ(ingress.stats().rejected_frames, 2U);
+  malformed.capture_session_id = std::string(32, 'b');
+  EXPECT_FALSE(ingress.push(malformed).reset);
+  EXPECT_EQ(ingress.stats().discontinuity_resets, 1U);
 }
