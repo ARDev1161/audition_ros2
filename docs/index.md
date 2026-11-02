@@ -44,9 +44,10 @@ HUMAN_SPATIAL_HEARING
 
 M0_IMPLEMENTATION
 M1_IMPLEMENTATION
+ALSA_CAPTURE
 site_build
 ```
 
 ## Current status
 
-The implementation branch contains ROS message contracts, WAV replay, an isolated spatial adapter and a native ODAS integration tested on synthetic six-channel audio. **Live ALSA capture, measured ReSpeaker geometry, semantic inference, sensor fusion and navigation integration remain separate work.** This site does not present proposed YAML profiles as functional runtime configuration.
+The implementation branch contains ROS message contracts, WAV replay, an isolated spatial adapter and a native ODAS integration tested on synthetic six-channel audio. **Experimental ALSA live capture and canonical source lifetime logic are now present in the code branch, but physical ReSpeaker calibration and acceptance, semantic inference, sensor fusion and navigation remain separate work.** This site does not present proposed YAML profiles as functional runtime configuration.

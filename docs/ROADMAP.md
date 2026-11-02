@@ -1,11 +1,11 @@
 # audition_ros2 — Engineering Roadmap
 
 **Document status:** Proposed architecture and staged implementation plan  
-**Updated:** 2026-10-24  
+**Updated:** 2026-11-02  
 **Baseline:** ROS 2 Humble, Nav2, C++17 `libaudition`, initial ReSpeaker USB 4-Mic Array v2.0; optional OAK-D, 2D LiDAR, IMU, odometry and radar.  
 **Scope:** This document describes targets, not existing `audition_ros2` functionality. Backend availability does not establish field accuracy or hardware real-time performance.
 
-See [Human spatial hearing and robot perception](HUMAN_SPATIAL_HEARING.md) for the perceptual rationale and a comparison of biological and engineering approaches.
+See [live ALSA capture and source lifecycle status](ALSA_CAPTURE.md) and [Human spatial hearing and robot perception](HUMAN_SPATIAL_HEARING.md) for the perceptual rationale and a comparison of biological and engineering approaches.
 
 ## 1. Objective and design boundaries
 

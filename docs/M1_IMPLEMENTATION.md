@@ -5,16 +5,22 @@
 This implementation is **not** a complete spatial perception stack and is not
 ready for a release gate.
 
-## What works in this branch
+## What is implemented in the code branch
 
 - `audition_capture`: C++17 RIFF/WAV reader for uncompressed PCM16 or normalized
   IEEE float32, with bounded chunks and explicit channel metadata.
+- **New M1 slice:** optional `alsa_capture` executable for live multichannel
+  S16_LE PCM with finite sample normalization, XRUN/suspend recovery, bounded
+  read buffers and deliberate sequence gaps after recovery. Build flag:
+  `-DAUDITION_ROS2_WITH_ALSA=ON`. See [ALSA capture](ALSA_CAPTURE.md).
 - `wav_capture` publishes timestamped `audition_msgs/msg/AudioFrame` at the
   file's nominal playback rate. Source timestamp means ROS replay time, not
   the original recording time (a generic WAV has no ROS clock identity).
 - `spatial_perception`: with `backend=disabled`, validates PCM and publishes **empty** spatial source snapshots; with an ODAS-enabled libaudition build, it converts native spatial tracks and source-separated audio into ROS messages. Both modes require testing.
-- `acoustic_scene`: republishes the empty spatial snapshots as canonical
-  `AcousticScene` and `AcousticSourceArray` messages.
+- `acoustic_scene`: publishes canonical `AcousticScene` and
+  `AcousticSourceArray` messages; a new bounded lifecycle policy reports
+  `ACTIVE`, reversible `LOST`, and one-shot `ENDED` notifications, including
+  expiry when capture stalls. It does not infer source range/position.
 - `semantic_perception`: separately buildable and subscribes to
   `SourceAudioFrame`, but no classifier/ASR inference is available.
 - Launch uses an isolated spatial process to reserve a safe boundary for a
@@ -117,8 +123,8 @@ inside a fatal error path.
 
 ## What must happen next
 
-1. Add deterministic audio frame validation tests and a source/clock generation
-   reset contract.
+1. Complete source/clock generation and backpressure contracts, plus live
+   hardware test coverage (synthetic CI is not a physical microphone test).
 2. Complete measured microphone geometry and physically validate the now-wired native
    libaudition ODAS adapter, including real-device hop/rate calibration.
 3. Implement bounded ingestion and source ID retirement, real separated frames,

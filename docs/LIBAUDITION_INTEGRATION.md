@@ -120,10 +120,10 @@ An additional small `attention.yaml` and `fusion.yaml` should configure Nav2 and
 
 | Functionality in libaudition | ROS adapter/consumer | Priority | User-visible result | Implementation status |
 | --- | --- | --- | --- | --- |
-| AudioBuffer, PCM, format and time handling | capture / scene | M0–M1 | `audio/raw`; capture diagnostics | **WAV replay implemented** |
+| AudioBuffer, PCM, format and time handling | capture / scene | M0–M1 | `audio/raw`; capture diagnostics | **WAV replay + opt-in live ALSA implemented; hardware unvalidated** |
 | ODAS SSL/SST/SSS | spatial | M1 | `sources`, `scene`, `internal/source_audio` | **Optional native adapter and synthetic CI implemented; real array unvalidated** |
 | Channel calibration via AudioFrontend | capture / spatial input | M1 | array calibration and quality diagnostics | Proposed |
-| Spatial identity and lifecycle | spatial / scene | M1–M2 | coherent source IDs, LOST/ENDED, generations | Partial ad-hoc IDs; source retirement pending |
+| Spatial identity and lifecycle | spatial / scene | M1–M2 | coherent source IDs, LOST/ENDED, generations | **Canonical ROS lifecycle implemented; persistent ID resolution pending** |
 | YAMNet or sherpa audio tagging | semantic | M2 | per-source `SoundClassification`, `AcousticEvent` | Proposed |
 | Progressive 1s/5s classification | semantic | M2 | fast event first, refined later | Proposed; available upstream |
 | Temporal hysteresis, events and change detection | semantic / scene | M2 | STARTED/UPDATED/ENDED/CANCELLED | Proposed |
@@ -185,8 +185,8 @@ Acceptance: each enabled module needs build-time availability test, malformed-co
 
 ## 8. Current implementation vs this proposal
 
-**Implemented:** `audition_msgs`, WAV replay, safe no-backend scene scaffold, and opt-in native ODAS conversion (tested with a synthetic six-channel WAV). An initial ReSpeaker profile exists but intentionally has no calibrated coordinates. Basic ROS Humble and native ODAS integration workflows have been run.
+**Implemented:** `audition_msgs`, WAV replay, optional ALSA live capture (CI virtual source), canonical source ACTIVE/LOST/ENDED lifecycle, safe no-backend scene scaffold, and opt-in native ODAS conversion (tested with a synthetic six-channel WAV). An initial ReSpeaker profile exists but intentionally has no calibrated coordinates. Basic ROS Humble and native ODAS integration workflows have been run.
 
-**Not implemented:** the generic runtime backend registry, automatic user YAML presets, ALSA capture in audition_ros2, a native semantic pipeline, class/event reconciliation, lifecycle reset/reload service, confidence calibration, multi-sensor fusion and navigation consumers.
+**Not implemented:** the generic runtime backend registry, automatic user YAML presets, real-hardware ALSA acceptance and reconnect policy, a native semantic pipeline, class/event reconciliation, lifecycle reset/reload service, confidence calibration, multi-sensor fusion and navigation consumers.
 
 This document describes the desired developer/user-facing experience and gives a concrete contract for further implementation; it must not be misread as completed functionality.
