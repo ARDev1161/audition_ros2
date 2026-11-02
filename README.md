@@ -262,3 +262,13 @@ reset mono/ODAS source generations. Real forward gaps still reset the
 pipeline; ODAS overflow and backend failures retain the capture high-water
 mark. Inspect `GetIngressStatus.replayed_frames` for ODAS replay drops.
 See [M2n ordering contract](docs/M2_CAPTURE_SEQUENCE_ORDERING.md).
+
+
+### M2o supervised pipeline profile switching
+
+An opt-in, process-owning supervisor validates a new M2c profile, stops the
+old graph, starts the candidate, checks ROS graph readiness and restarts the
+old profile if activation fails. It is a **bounded stop/start with failback**,
+not zero-downtime atomic model/ODAS reconfiguration. See
+[supervisor contract](docs/M2_PIPELINE_SUPERVISOR.md). Never run it alongside
+an independently launched pipeline in the same namespace.

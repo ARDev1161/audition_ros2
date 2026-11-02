@@ -1,0 +1,13 @@
+# Supervisor-owned process-level stop/start; not zero-downtime atomic reload.
+string profile
+string wav_path
+string device
+string models_dir
+string frame_id
+bool dry_run
+---
+bool success
+bool rollback_succeeded
+uint64 reload_epoch
+string active_profile
+string message

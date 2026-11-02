@@ -440,3 +440,15 @@ reordering, overflow, restart and recovery. See
 [M2n capture sequence ordering](M2_CAPTURE_SEQUENCE_ORDERING.md).
 This does not implement cross-node `ReloadPipeline`, DDS authentication or
 physical ReSpeaker acceptance.
+
+
+## M2o: supervised process-level profile switch (2026-11-02)
+
+The optional [M2o supervisor](M2_PIPELINE_SUPERVISOR.md) owns the full launch
+process group, validates a candidate profile before shutdown, waits for old
+DDS graph removal, starts a candidate and checks capture/spatial/scene/semantic
+node discovery. If readiness fails it attempts a bounded rollback to the old
+profile and reports rollback success separately. This **interrupts capture**;
+it is not a zero-downtime cross-node two-phase commit. Session IDs prevent
+old audio from being accepted after restart. Hardware calibration and latency
+remain unverified.

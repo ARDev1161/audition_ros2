@@ -534,3 +534,16 @@ reordering, overflow, restart and recovery. See
 [M2n capture sequence ordering](M2_CAPTURE_SEQUENCE_ORDERING.md).
 This does not implement cross-node `ReloadPipeline`, DDS authentication or
 physical ReSpeaker acceptance.
+
+
+## M2o: process-owned profile reload with verified failback (2026-11-02)
+
+A standalone ROS 2 supervisor now exposes a typed pipeline/reload service.
+It validates M2c profiles and ODAS geometry before stopping the old graph,
+then starts the candidate and waits for all core ROS nodes and the semantic
+capability service. A failed candidate is cleaned up and the prior profile
+is restarted; rollback is reported as successful **only** after readiness.
+This is an opt-in **stop/start operation with an audio gap**, not a full
+atomic multi-node in-place ReloadPipeline. See
+[M2o supervisor details](M2_PIPELINE_SUPERVISOR.md). ODAS native integration
+and physical ReSpeaker performance still require separate validation.

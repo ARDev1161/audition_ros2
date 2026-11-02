@@ -23,6 +23,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetCaptureStatus.srv"
   "srv/GetSemanticStatus.srv"
   "srv/ReloadSemanticWorkers.srv"
+  "srv/ReloadPipeline.srv"
   DEPENDENCIES std_msgs geometry_msgs builtin_interfaces
 )
 ament_export_dependencies(rosidl_default_runtime)

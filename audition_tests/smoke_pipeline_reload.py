@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Real Humble graph: M2o dry-run, rejected preflight, and owned restart."""
+import rclpy
+from audition_msgs.srv import ReloadPipeline, GetCapabilities
+
+
+def call(node, client, request, timeout=90):
+    assert client.wait_for_service(timeout_sec=40), client.srv_name
+    future = client.call_async(request)
+    rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+    assert future.done() and future.exception() is None, client.srv_name
+    return future.result()
+
+
+def main():
+    rclpy.init()
+    node = rclpy.create_node("pipeline_reload_ci")
+    try:
+        reload = node.create_client(ReloadPipeline, "/audition/pipeline/reload")
+        capabilities = node.create_client(
+            GetCapabilities, "/audition/semantic_perception/get_capabilities")
+        assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
+        dry = ReloadPipeline.Request()
+        dry.dry_run = True
+        result = call(node, reload, dry)
+        assert result.success and result.reload_epoch == 0, result
+        invalid = ReloadPipeline.Request()
+        invalid.profile = "/definitely/not/a/profile.yaml"
+        result = call(node, reload, invalid)
+        assert not result.success and result.active_profile == "replay_ci", result
+        assert result.reload_epoch == 0 and not result.rollback_succeeded
+        result = call(node, reload, ReloadPipeline.Request())
+        assert result.success and result.reload_epoch == 1, result
+        assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
+        nodes = node.get_node_names_and_namespaces()
+        for name in ("audio_capture", "mono_source", "acoustic_scene", "semantic_perception"):
+            assert nodes.count((name, "/audition")) == 1, (name, nodes)
+        print("Pipeline reload PASS: preflight, dry-run, owned restart, readiness")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
