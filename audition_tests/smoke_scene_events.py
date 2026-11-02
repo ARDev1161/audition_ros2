@@ -207,11 +207,20 @@ def main():
         if not wait(probe, lambda: probe.retire_cancelled and not probe.source_present, deadline):
             print("FAIL: retirement did not cancel source event", file=sys.stderr)
             return 1
+        probe.pub.publish(probe.event(AcousticEvent.STARTED, "ci-ghost"))
+        stale_class = probe.classification()
+        stale_class.class_label = "Ghost"
+        probe.cpub.publish(stale_class)
         spoken.source_generation = probe.scene_generation
         spoken.text = "late"
         probe.tpub.publish(spoken)
         if not wait(probe, lambda: probe.late_seen, deadline):
             print("FAIL: final ASR after source retirement lost", file=sys.stderr)
+            return 1
+        for _ in range(10):
+            rclpy.spin_once(probe, timeout_sec=0.02)
+        if probe.ghost_event or probe.ghost_classified:
+            print("FAIL: ended source produced a new class/event", file=sys.stderr)
             return 1
         probe.heartbeat = True
         probe.send_source()
@@ -222,6 +231,7 @@ def main():
         if not wait(probe, lambda: probe.reset_active, deadline):
             print("FAIL: reset fixture never became active", file=sys.stderr)
             return 1
+        probe.heartbeat = False
         new_stream = AcousticSourceArray()
         new_stream.header.frame_id = probe.frame_id
         new_stream.header.stamp = probe.get_clock().now().to_msg()
