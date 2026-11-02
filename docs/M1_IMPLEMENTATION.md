@@ -452,3 +452,14 @@ profile and reports rollback success separately. This **interrupts capture**;
 it is not a zero-downtime cross-node two-phase commit. Session IDs prevent
 old audio from being accepted after restart. Hardware calibration and latency
 remain unverified.
+
+## M2p: supervisor failure containment and manual recovery (2026-11-02)
+
+The optional supervisor detects launch-parent death, cleans up surviving
+process-group children and reports offline faults rather than silently
+restarting. A failed cleanup retains ownership and blocks another launch.
+Existing namespaces are rejected before startup. The typed GetPipelineStatus
+service reports liveness, ownership, active/last-good profile, epoch and fault.
+Explicit ReloadPipeline recovery requires cleanup and graph disappearance.
+See [M2 supervisor](M2_PIPELINE_SUPERVISOR.md). Hardware/model health and
+zero-downtime reload are not guaranteed.

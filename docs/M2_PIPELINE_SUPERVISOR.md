@@ -59,3 +59,32 @@ Unit tests inject candidate failure, graph disappearance failure, rollback
 failure and preflight rejection. Humble CI exercises the real service on a
 synthetic mono WAV graph. Native ODAS CI is a separate required gate;
 physical ReSpeaker acceptance remains unverified.
+
+## M2p: process death, ownership and explicit recovery
+
+The supervisor refuses to start when the namespace already contains expected
+pipeline nodes; it never adopts or kills an unrelated graph. Readiness requires
+exactly one of each expected ROS node. A 1-second watchdog checks the owned
+launch process. If it exits, the supervisor attempts to terminate the entire
+owned process group (including children surviving the parent), records a fault,
+and does not silently restart an unsafe microphone/model configuration.
+
+    ros2 service call /audition/pipeline/get_status audition_msgs/srv/GetPipelineStatus "{}"
+
+The typed status reports process liveness, owned process presence, active and
+last-good profiles, reload epoch and fault. Running means the launch parent
+remains alive and initial graph readiness passed; it does NOT continuously
+verify child nodes, hardware, model inference or audio quality.
+
+After an unexpected exit and successful cleanup, an explicit ReloadPipeline
+request with empty profile recovers the last healthy profile and overrides.
+Recovery first requires old graph disappearance, then preflight and startup.
+Epoch increments only after successful readiness. Failed cleanup retains
+the owned handle, blocks new launches and requires operator intervention.
+Process group cleanup sends SIGINT for up to 8s, then SIGKILL for up to 5s,
+even when the launch parent already exited. ROS graph disappearance is
+discovery evidence, not proof of microphone health.
+
+Unit tests inject crash, failed cleanup, occupied namespace, stale graph and
+successful manual recovery. Humble graph smoke checks typed status before
+and after a real profile switch. This is not zero-downtime two-phase commit.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real Humble graph: M2o dry-run, rejected preflight, and owned restart."""
 import rclpy
-from audition_msgs.srv import ReloadPipeline, GetCapabilities
+from audition_msgs.srv import ReloadPipeline, GetCapabilities, GetPipelineStatus
 
 
 def call(node, client, request, timeout=90):
@@ -17,9 +17,14 @@ def main():
     node = rclpy.create_node("pipeline_reload_ci")
     try:
         reload = node.create_client(ReloadPipeline, "/audition/pipeline/reload")
+        status_client = node.create_client(GetPipelineStatus, "/audition/pipeline/get_status")
         capabilities = node.create_client(
             GetCapabilities, "/audition/semantic_perception/get_capabilities")
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
+        initial = call(node, status_client, GetPipelineStatus.Request())
+        assert initial.running and initial.owned_process_present, initial
+        assert initial.active_profile == "replay_ci" and initial.reload_epoch == 0
+        assert not initial.fault
         dry = ReloadPipeline.Request()
         dry.dry_run = True
         result = call(node, reload, dry)
@@ -31,6 +36,9 @@ def main():
         assert result.reload_epoch == 0 and not result.rollback_succeeded
         result = call(node, reload, ReloadPipeline.Request())
         assert result.success and result.reload_epoch == 1, result
+        healthy = call(node, status_client, GetPipelineStatus.Request())
+        assert healthy.running and healthy.owned_process_present, healthy
+        assert healthy.last_good_profile == "replay_ci" and not healthy.fault
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
         nodes = node.get_node_names_and_namespaces()
         for name in ("audio_capture", "mono_source", "acoustic_scene", "semantic_perception"):

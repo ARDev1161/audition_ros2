@@ -1,0 +1,8 @@
+# Process ownership/liveness only; not proof of audio quality.
+---
+bool running
+bool owned_process_present
+string active_profile
+string last_good_profile
+uint64 reload_epoch
+string fault

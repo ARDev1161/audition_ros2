@@ -547,3 +547,12 @@ This is an opt-in **stop/start operation with an audio gap**, not a full
 atomic multi-node in-place ReloadPipeline. See
 [M2o supervisor details](M2_PIPELINE_SUPERVISOR.md). ODAS native integration
 and physical ReSpeaker performance still require separate validation.
+
+## M2p: supervised process failure containment (2026-11-02)
+
+The optional ReloadPipeline supervisor now detects exited launch parents,
+attempts surviving process-group cleanup and exposes typed GetPipelineStatus
+with last-good profile and faults. Recovery is explicit, guarded by preflight
+and graph disappearance; it never adopts an occupied namespace. This is not
+two-phase resource reservation or a guarantee of continued model/hardware
+health. See [supervisor contract](M2_PIPELINE_SUPERVISOR.md).
