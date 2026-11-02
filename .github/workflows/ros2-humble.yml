@@ -44,7 +44,7 @@ jobs:
           ros2 interface show audition_msgs/msg/SourceAudioFrame
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py
 
       - name: Smoke WAV to acoustic scene over ROS graph
         shell: bash
@@ -87,5 +87,22 @@ jobs:
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
           if ! python3 audition_tests/smoke_alsa_pipeline.py; then
             cat /tmp/audition_alsa_launch.log
+            exit 1
+          fi
+
+      - name: Smoke canonical acoustic events and classification (no ML model)
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=103
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav classifier_backend:=disabled \
+            > /tmp/audition_m2_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_scene_events.py; then
+            cat /tmp/audition_m2_launch.log
             exit 1
           fi
