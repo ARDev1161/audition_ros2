@@ -578,3 +578,13 @@ replay is observed but exempt from stall enforcement after EOF. Old session
 replays and duplicate sequence numbers cannot refresh the heartbeat. See
 [M2r supervisor flow contract](M2_PIPELINE_SUPERVISOR.md). This is not
 proof of ASR inference, speaker separation, or physical microphone health.
+
+## M2s: supervised downstream source PCM progress (2026-11-02)
+
+The optional supervisor observes `internal/source_audio` with spatial
+session, generation and sequence validation. `GetPipelineStatus` exposes
+source PCM counters, freshness and debounce. Live ALSA + mono is monitored
+for sustained missing source PCM **only when raw capture PCM is healthy**;
+ODAS and finite WAV replay remain observation-only. See
+[M2 supervisor](M2_PIPELINE_SUPERVISOR.md). This checks spatial transport,
+not semantic model completion or physical separation quality.

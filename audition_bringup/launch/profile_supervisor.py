@@ -11,11 +11,12 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from audition_msgs.msg import AudioFrame
+from audition_msgs.msg import AudioFrame, SourceAudioFrame
 from audition_msgs.srv import ReloadPipeline, GetPipelineStatus
 from profile_config import resolve_profile, validate_namespace, ProfileError
 from profile_supervisor_core import PipelineSupervisor, ProfileSpec
 from profile_audio_flow import AudioFlowMonitor
+from profile_source_flow import SourceFlowMonitor
 
 
 class OwnedLaunch:
@@ -132,13 +133,20 @@ class SupervisorNode(Node):
         self.share = Path(__file__).resolve().parents[1]
         self.audio_flow = AudioFlowMonitor(
             lambda spec: self.validate(spec).capture["kind"])
+        def source_mode(spec):
+            resolved = self.validate(spec)
+            return resolved.capture["kind"], resolved.spatial_backend
+        self.source_flow = SourceFlowMonitor(source_mode)
         self.supervisor = PipelineSupervisor(
             self.validate, OwnedLaunch, GraphProbe(self, self.validate),
-            timeout, audio_flow=self.audio_flow)
+            timeout, audio_flow=self.audio_flow, source_flow=self.source_flow)
         # Subscribe before starting the owned graph. The flow monitor ignores
         # callbacks outside an active incarnation and fences old session IDs.
         self.audio_subscription = self.create_subscription(
             AudioFrame, "audio/raw", self.on_audio, qos_profile_sensor_data)
+        self.source_subscription = self.create_subscription(
+            SourceAudioFrame, "internal/source_audio", self.on_source,
+            qos_profile_sensor_data)
         self.supervisor.start(initial)
         self.service = self.create_service(
             ReloadPipeline, "pipeline/reload", self.on_reload)
@@ -158,6 +166,12 @@ class SupervisorNode(Node):
     def on_audio(self, msg):
         self.audio_flow.observe(msg.capture_session_id, msg.sequence_number,
                                 msg.frame_count, msg.channel_count, len(msg.pcm))
+
+    def on_source(self, msg):
+        self.source_flow.observe(
+            msg.spatial_session_id, msg.source_id, msg.source_generation,
+            msg.sequence_number, msg.sample_rate_hz, msg.frame_count,
+            len(msg.pcm))
 
     def on_monitor(self):
         previous = self.supervisor.status().running
@@ -182,6 +196,11 @@ class SupervisorNode(Node):
         response.audio_miss_count = status.audio_miss_count
         response.accepted_audio_frames = status.accepted_audio_frames
         response.last_audio_age_ms = status.last_audio_age_ms
+        response.source_watchdog_enabled = status.source_watchdog_enabled
+        response.source_healthy = status.source_healthy
+        response.source_miss_count = status.source_miss_count
+        response.accepted_source_frames = status.accepted_source_frames
+        response.last_source_age_ms = status.last_source_age_ms
         return response
 
     def on_reload(self, request, response):

@@ -484,3 +484,13 @@ and require explicit recovery after a sustained no-PCM condition, whereas
 finite WAV playback is not faulted after EOF. See
 [M2r PCM watchdog](M2_PIPELINE_SUPERVISOR.md). This checks transport progress,
 not non-silence, ASR output or calibrated ReSpeaker performance.
+
+## M2s: supervised downstream source PCM progress (2026-11-02)
+
+The optional supervisor observes `internal/source_audio` with spatial
+session, generation and sequence validation. `GetPipelineStatus` exposes
+source PCM counters, freshness and debounce. Live ALSA + mono is monitored
+for sustained missing source PCM **only when raw capture PCM is healthy**;
+ODAS and finite WAV replay remain observation-only. See
+[M2 supervisor](M2_PIPELINE_SUPERVISOR.md). This checks spatial transport,
+not semantic model completion or physical separation quality.

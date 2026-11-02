@@ -146,3 +146,36 @@ callbacks to be serviced; a blocking reload intentionally resets the
 heartbeat for the new process. Humble tests cover missing PCM, live progress,
 replay/duplicates, malformed packets, transient recovery, session retirement,
 status serialization, and both replay and virtual ALSA ROS graph smokes.
+
+## M2s: downstream source PCM watchdog (2026-11-02)
+
+The supervisor now subscribes to the namespaced `internal/source_audio`
+(`SourceAudioFrame`) stream. A source heartbeat requires a valid 128-bit
+spatial session ID, nonempty source identity, positive generation,
+monotonically increasing per-source sequence, valid sample rate and exactly
+`frame_count` mono PCM samples. Replays, malformed frames and retired
+spatial sessions do not refresh progress. Per-session cursors are bounded
+to 256 source-generation keys; at most 64 retired spatial sessions are
+remembered, with fail-closed behavior on exhaustion.
+
+The typed `GetPipelineStatus` response adds `source_watchdog_enabled`,
+`source_healthy`, `source_miss_count`, `accepted_source_frames` and
+`last_source_age_ms`. Counters reset after successful activation.
+These fields report *spatial output transport progress*, not classifier
+or ASR completion.
+
+**Enforcement is limited to live ALSA + mono routing.** That route emits
+source PCM for each valid capture frame even during silence. After 10 seconds
+without initial source PCM or 5 seconds without fresh source PCM, five
+consecutive one-second checks trigger owned process containment **only
+while upstream raw PCM is fresh**. A raw capture failure is diagnosed by
+the capture watchdog instead. Transient delays reset the debounce.
+WAV replay is finite and ODAS may legitimately have no separated source
+during silence; both are observation-only to avoid false-positive restarts.
+
+Humble tests cover mono progress/stall, upstream-vs-downstream fault
+attribution, replay, malformed frames, spatial incarnation fencing,
+recovery, profile switching, and service serialization. The virtual ALSA
+ROS graph smoke requires both raw and mono source PCM progress. This does
+not measure semantic inference latency, DOA accuracy, physical ReSpeaker
+behavior or zero-downtime switching.

@@ -38,6 +38,7 @@ def main():
         assert not initial.fault and initial.graph_healthy
         assert initial.graph_miss_count == 0
         assert not initial.audio_watchdog_enabled  # finite replay may reach EOF
+        assert not initial.source_watchdog_enabled
         assert wait_audio(node, status_client).accepted_audio_frames > 0
         dry = ReloadPipeline.Request()
         dry.dry_run = True
@@ -55,6 +56,7 @@ def main():
         assert healthy.last_good_profile == "replay_ci" and not healthy.fault
         assert healthy.graph_healthy and healthy.graph_miss_count == 0
         assert healthy.audio_miss_count == 0
+        assert healthy.source_miss_count == 0
         assert wait_audio(node, status_client).accepted_audio_frames > 0
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
         nodes = node.get_node_names_and_namespaces()

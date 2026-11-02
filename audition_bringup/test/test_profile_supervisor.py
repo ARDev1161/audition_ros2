@@ -16,6 +16,12 @@ flow_module = importlib.util.module_from_spec(flow_spec)
 sys.modules[flow_spec.name] = flow_module
 flow_spec.loader.exec_module(flow_module)
 AudioFlowMonitor = flow_module.AudioFlowMonitor
+source_spec = importlib.util.spec_from_file_location(
+    "profile_source_flow", PATH.with_name("profile_source_flow.py"))
+source_module = importlib.util.module_from_spec(source_spec)
+sys.modules[source_spec.name] = source_module
+source_spec.loader.exec_module(source_module)
+SourceFlowMonitor = source_module.SourceFlowMonitor
 
 
 class FakeClock:
@@ -353,6 +359,116 @@ class AudioFlowTests(unittest.TestCase):
         flow.reset(ProfileSpec("third"))
         self.assertFalse(flow.observe("c" * 32, 1, 160, 1, 160))
         self.assertTrue(flow.snapshot().timed_out)
+
+
+class SourceFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.events = []
+        self.probe = FakeProbe(self.events)
+        self.raw = AudioFlowMonitor(lambda spec: "alsa", clock=self.clock,
+                                    start_grace_s=2, stall_timeout_s=2)
+        self.source = SourceFlowMonitor(
+            lambda spec: ("alsa", "mono"), clock=self.clock,
+            start_grace_s=2, stall_timeout_s=2)
+        self.supervisor = PipelineSupervisor(
+            lambda spec: None,
+            lambda spec: FakeProcess(spec.profile, self.events),
+            self.probe, timeout=1, clock=self.clock, audio_flow=self.raw,
+            source_flow=self.source, source_failure_threshold=3)
+        self.supervisor.start(ProfileSpec("old"))
+        self.capture_session = "a" * 32
+        self.spatial_session = "b" * 32
+
+    def tearDown(self):
+        self.supervisor.shutdown()
+
+    def raw_tick(self, seq):
+        assert self.raw.observe(self.capture_session, seq, 160, 1, 160)
+        self.clock.advance()
+        self.supervisor.monitor()
+
+    def source_frame(self, seq, session=None, generation=1, source_id="mono"):
+        return self.source.observe(
+            session or self.spatial_session, source_id, generation, seq,
+            16000, 160, 160)
+
+    def test_live_mono_source_stall_contained_while_capture_flows(self):
+        for seq in range(4):
+            self.raw_tick(seq)
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertIn("source PCM stalled", state.fault)
+        self.assertEqual(self.events.count("stop:old"), 1)
+
+    def test_source_pcm_progress_keeps_live_mono_running(self):
+        for seq in range(12):
+            self.assertTrue(self.source_frame(seq))
+            self.raw_tick(seq)
+        state = self.supervisor.status()
+        self.assertTrue(state.running and state.source_healthy)
+        self.assertTrue(state.source_watchdog_enabled)
+        self.assertEqual(state.accepted_source_frames, 12)
+        self.assertEqual(state.source_miss_count, 0)
+
+    def test_raw_stall_is_not_misdiagnosed_as_downstream_failure(self):
+        self.raw_tick(0)
+        for _ in range(8):
+            self.clock.advance()
+            self.supervisor.monitor()
+        self.assertIn("capture PCM stalled", self.supervisor.status().fault)
+        self.assertNotIn("source PCM stalled", self.supervisor.status().fault)
+
+    def test_source_replay_invalid_frames_and_retired_session_rejected(self):
+        self.assertFalse(self.source_frame(0, session="not-hex"))
+        self.assertFalse(self.source.observe(self.spatial_session, "mono", 1,
+                                            0, 16000, 160, 159))
+        self.assertTrue(self.source_frame(0))
+        self.assertFalse(self.source_frame(0))
+        self.assertFalse(self.source_frame(1, generation=0))
+        self.assertTrue(self.source_frame(1, session="c" * 32))
+        self.assertFalse(self.source_frame(100))
+        self.assertEqual(self.source.snapshot().accepted_frames, 2)
+
+    def test_transient_source_stall_resets_debounce(self):
+        self.assertTrue(self.source_frame(0))
+        self.raw_tick(0)
+        self.clock.advance(2.1)
+        self.assertTrue(self.raw.observe(self.capture_session, 1, 160, 1, 160))
+        self.supervisor.monitor()
+        self.assertEqual(self.supervisor.status().source_miss_count, 1)
+        self.assertTrue(self.source_frame(1))
+        self.raw_tick(2)
+        self.assertTrue(self.supervisor.status().running)
+        self.assertEqual(self.supervisor.status().source_miss_count, 0)
+
+    def test_switch_retires_old_spatial_session_and_resets_status(self):
+        self.assertTrue(self.source_frame(1))
+        self.assertTrue(self.supervisor.switch(ProfileSpec("new")).success)
+        self.assertFalse(self.source_frame(2))
+        self.assertTrue(self.source_frame(0, session="c" * 32))
+        state = self.supervisor.status()
+        self.assertEqual(state.accepted_source_frames, 1)
+        self.assertEqual(state.reload_epoch, 1)
+
+    def test_odas_and_finite_wav_do_not_enforce_source_stall(self):
+        for mode in (("alsa", "odas"), ("wav", "mono")):
+            monitor = SourceFlowMonitor(lambda spec, m=mode: m,
+                                        clock=self.clock, start_grace_s=1,
+                                        stall_timeout_s=1)
+            monitor.reset(ProfileSpec("test"))
+            self.clock.advance(20)
+            self.assertFalse(monitor.snapshot().enabled)
+            self.assertFalse(monitor.snapshot().timed_out)
+
+    def test_source_session_limit_fails_closed(self):
+        monitor = SourceFlowMonitor(lambda spec: ("alsa", "mono"),
+                                    clock=self.clock, max_sessions=1)
+        monitor.reset(ProfileSpec("old"))
+        self.assertTrue(monitor.observe("a" * 32, "mono", 1, 0, 16000, 1, 1))
+        self.assertTrue(monitor.observe("b" * 32, "mono", 1, 0, 16000, 1, 1))
+        self.assertFalse(monitor.observe("c" * 32, "mono", 1, 0, 16000, 1, 1))
+        self.assertTrue(monitor.snapshot().timed_out)
 
 
 if __name__ == "__main__":

@@ -17,3 +17,11 @@ uint32 audio_miss_count
 uint64 accepted_audio_frames
 # 0 if no accepted PCM in this supervised activation.
 uint64 last_audio_age_ms
+# Spatial source-local PCM progress, enforced only for live mono ALSA
+# while raw capture PCM is fresh. ODAS and WAV are observation-only.
+bool source_watchdog_enabled
+bool source_healthy
+uint32 source_miss_count
+uint64 accepted_source_frames
+# 0 before the first accepted source PCM.
+uint64 last_source_age_ms
