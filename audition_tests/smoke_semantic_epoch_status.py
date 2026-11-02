@@ -19,6 +19,11 @@ def status(node, client):
 def main():
     rclpy.init()
     node = rclpy.create_node("semantic_epoch_ci")
+    captured = []
+    capture_sub = node.create_subscription(
+        SourceAudioFrame, "/audition/internal/source_audio",
+        lambda msg: captured.append(msg) if len(captured) < 1 else None,
+        qos_profile_sensor_data)
     try:
         client = node.create_client(
             GetSemanticStatus, "/audition/semantic_perception/get_semantic_status")
@@ -56,6 +61,27 @@ def main():
         assert value.rejected_source_snapshots > initial_rejected, value
         assert value.admitted_sources > 0, value
 
+        # Replay actual mono PCM after the live source has advanced.
+        deadline = time.monotonic() + 6
+        while not captured and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        assert captured, "No real source PCM available for replay regression"
+        time.sleep(0.3)
+        initial_reorders = status(node, client).out_of_order_audio_frames
+        replay_pub = node.create_publisher(
+            SourceAudioFrame, "/audition/internal/source_audio",
+            qos_profile_sensor_data)
+        for _ in range(8):
+            replay_pub.publish(captured[0])
+            time.sleep(0.05)
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            value = status(node, client)
+            if value.out_of_order_audio_frames > initial_reorders:
+                break
+            time.sleep(0.1)
+        assert value.out_of_order_audio_frames > initial_reorders, value
+
         initial_drops = value.dropped_audio_frames
         pub = node.create_publisher(
             SourceAudioFrame, "/audition/internal/source_audio",
@@ -78,7 +104,7 @@ def main():
             time.sleep(0.1)
         assert value.dropped_audio_frames > initial_drops, value
         assert value.have_stream and value.source_generation >= 1
-        print("Semantic epoch graph PASS: admitted PCM, orphan rejection, status service")
+        print("Semantic epoch graph PASS: admitted PCM, replay/orphan rejection, status service")
     finally:
         node.destroy_node()
         rclpy.shutdown()

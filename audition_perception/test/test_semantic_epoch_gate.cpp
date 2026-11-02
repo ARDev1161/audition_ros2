@@ -1,6 +1,8 @@
 #include "audition_perception/semantic_epoch_gate.hpp"
 
 #include <gtest/gtest.h>
+
+#include <cstdint>
 #include <audition_msgs/msg/acoustic_source.hpp>
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <audition_msgs/msg/source_audio_frame.hpp>
@@ -35,6 +37,9 @@ static Audio audio(const char * id, std::uint64_t generation,
   out.source_id = id;
   out.source_generation = generation;
   out.header.frame_id = frame;
+  static std::uint64_t next_audio_sequence = 0;
+  out.sequence_number = ++next_audio_sequence;
+  out.header.stamp.sec = static_cast<std::int32_t>(next_audio_sequence);
   return out;
 }
 static audition_msgs::srv::GetSemanticStatus::Response status(
@@ -228,6 +233,8 @@ TEST(SemanticEpochGate, SceneRestartAcceptsNewSessionWithResetSequenceAndGenerat
   // Old session cannot reclaim authority, even with an enormous sequence.
   first.sequence_number = 9999;
   EXPECT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Rejected);
+  ++queued.sequence_number;
+  queued.header.stamp.sec = 103;
   EXPECT_TRUE(gate.accept(queued));
   EXPECT_EQ(status(gate).scene_session_resets, 1U);
 }
@@ -256,4 +263,75 @@ TEST(SemanticEpochGate, SameGenerationSceneRestartResetsAdmissionAndRejectsMalfo
   fresh.header.stamp.sec = 102;
   EXPECT_TRUE(gate.accept(fresh));
   EXPECT_EQ(status(gate).stream_resets, 1U);
+}
+
+TEST(SemanticEpochGate, RejectsDuplicateReorderedAndRegressingPCMWithoutPoisoningCursor) {
+  SemanticEpochGate gate;
+  auto sources = snapshot(91, "mic");
+  sources.sources.push_back(source("s", 91, "mic"));
+  ASSERT_EQ(gate.observe(sources), SemanticEpochGate::SnapshotResult::Accepted);
+  auto packet = audio("s", 91, "mic");
+  packet.sequence_number = 100;
+  packet.header.stamp.sec = 100;
+  ASSERT_TRUE(gate.accept(packet));
+  EXPECT_FALSE(gate.accept(packet));
+  auto older = packet;
+  older.sequence_number = 99;
+  older.header.stamp.sec = 101;
+  EXPECT_FALSE(gate.accept(older));
+  older.sequence_number = 101;
+  older.header.stamp.sec = 99;
+  EXPECT_FALSE(gate.accept(older));
+  auto fresh = packet;
+  fresh.sequence_number = 101;
+  fresh.header.stamp.sec = 101;
+  EXPECT_TRUE(gate.accept(fresh));
+  EXPECT_EQ(status(gate).accepted_audio_frames, 2U);
+  EXPECT_EQ(status(gate).out_of_order_audio_frames, 3U);
+  EXPECT_EQ(status(gate).dropped_audio_frames, 3U);
+}
+
+TEST(SemanticEpochGate, PerSourceCursorsResetOnlyOnRetirementReloadOrSceneEpoch) {
+  SemanticEpochGate gate;
+  auto first = snapshot(92, "mic");
+  first.sources = {source("a", 92, "mic"), source("b", 92, "mic")};
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  auto a = audio("a", 92, "mic");
+  a.sequence_number = 55;
+  a.header.stamp.sec = 100;
+  auto b = audio("b", 92, "mic");
+  b.sequence_number = 2;
+  b.header.stamp.sec = 100;
+  ASSERT_TRUE(gate.accept(a));
+  ASSERT_TRUE(gate.accept(b));
+  auto refresh = first;
+  ++refresh.sequence_number;
+  ASSERT_EQ(gate.observe(refresh), SemanticEpochGate::SnapshotResult::Accepted);
+  EXPECT_FALSE(gate.accept(a));
+  ++b.sequence_number;
+  b.header.stamp.sec = 101;
+  EXPECT_TRUE(gate.accept(b));
+  auto retire = refresh;
+  ++retire.sequence_number;
+  retire.sources = {source("b", 92, "mic")};
+  ASSERT_EQ(gate.observe(retire), SemanticEpochGate::SnapshotResult::Accepted);
+  EXPECT_FALSE(gate.accept(a));
+  gate.beginReload();
+  EXPECT_FALSE(gate.accept(b));
+  auto readmit = retire;
+  ++readmit.sequence_number;
+  readmit.header.stamp.sec = 102;
+  ASSERT_EQ(gate.observe(readmit), SemanticEpochGate::SnapshotResult::Accepted);
+  b.header.stamp.sec = 103;
+  b.sequence_number = 1;
+  EXPECT_TRUE(gate.accept(b));
+  auto new_scene = readmit;
+  new_scene.scene_session_id = "99999999999999999999999999999999";
+  new_scene.sequence_number = 1;
+  new_scene.header.stamp.sec = 104;
+  ASSERT_EQ(gate.observe(new_scene), SemanticEpochGate::SnapshotResult::NewGeneration);
+  b.header.stamp.sec = 105;
+  b.sequence_number = 0;
+  EXPECT_TRUE(gate.accept(b));
+  EXPECT_EQ(status(gate).out_of_order_audio_frames, 1U);
 }

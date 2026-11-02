@@ -233,3 +233,12 @@ Old scene sessions cannot reclaim admission. Inspect
 `/audition/semantic_perception/get_semantic_status` for the active session
 and restart count. This is **not** full cross-node `ReloadPipeline` or
 publisher authentication; see [M2j details](docs/M2_SCENE_SESSION_HANDSHAKE.md).
+
+
+### M2k semantic PCM continuity
+
+Per-source sequence and capture-time high-water marks reject duplicated,
+reordered or backwards-time source PCM before YAMNet/VAD/ASR. A namespaced
+`GetSemanticStatus.out_of_order_audio_frames` counter exposes these drops.
+See [M2k PCM continuity](docs/M2_PCM_CONTINUITY.md) for tests and limits.
+This does not implement cross-node transactional reload or DDS authentication.

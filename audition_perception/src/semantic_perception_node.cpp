@@ -37,6 +37,7 @@ T readOrDeclare(rclcpp::Node & node, const std::string & name, const T & fallbac
 
 bool validInput(const audition_msgs::msg::SourceAudioFrame & msg) {
   return !msg.source_id.empty() && !msg.header.frame_id.empty() &&
+    msg.header.stamp.nanosec < 1000000000U &&
     msg.sample_rate_hz == 16000 && msg.frame_count > 0 &&
     msg.frame_count <= 4096 && msg.pcm.size() == msg.frame_count &&
     std::all_of(msg.pcm.begin(), msg.pcm.end(), [](float value) {

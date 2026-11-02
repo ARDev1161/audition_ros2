@@ -6,6 +6,8 @@ string frame_id
 uint32 admitted_sources
 uint64 accepted_audio_frames
 uint64 dropped_audio_frames
+# Subset of dropped_audio_frames: duplicate/reordered sequence or backwards capture time.
+uint64 out_of_order_audio_frames
 uint64 rejected_source_snapshots
 uint64 stream_resets
 

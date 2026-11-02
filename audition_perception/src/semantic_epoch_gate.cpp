@@ -15,6 +15,7 @@ std::int64_t stampNs(const builtin_interfaces::msg::Time & stamp) noexcept {
 
 void SemanticEpochGate::beginReload() noexcept {
   admitted_.clear();
+  audio_cursors_.clear();
   reload_pending_ = have_stream_;
   reload_audio_fence_ = have_stream_;
   reload_fence_generation_ = generation_;
@@ -94,6 +95,14 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
   scene_session_id_ = session;
   seen_scene_sessions_.insert(session);
   frame_id_ = snapshot.header.frame_id;
+  if (reset) {
+    audio_cursors_.clear();
+  } else {
+    for (auto it = audio_cursors_.begin(); it != audio_cursors_.end();) {
+      if (admitted.count(it->first) == 0) it = audio_cursors_.erase(it);
+      else ++it;
+    }
+  }
   admitted_.swap(admitted);
   last_snapshot_stamp_ns_ = stampNs(snapshot.header.stamp);
   if (reload_pending_) {
@@ -122,9 +131,23 @@ bool SemanticEpochGate::accept(
     audio.source_generation == generation_ &&
     audio.header.frame_id == frame_id_ &&
     admitted_.count(audio.source_id) != 0;
-  if (ok) ++accepted_audio_frames_;
-  else ++dropped_audio_frames_;
-  return ok;
+  if (!ok) {
+    ++dropped_audio_frames_;
+    return false;
+  }
+  const auto capture_ns = stampNs(audio.header.stamp);
+  const auto previous = audio_cursors_.find(audio.source_id);
+  if (previous != audio_cursors_.end() &&
+      (audio.sequence_number <= previous->second.sequence ||
+       capture_ns < previous->second.capture_ns)) {
+    // Rejected packets never advance the high-water mark.
+    ++out_of_order_audio_frames_;
+    ++dropped_audio_frames_;
+    return false;
+  }
+  audio_cursors_[audio.source_id] = {audio.sequence_number, capture_ns};
+  ++accepted_audio_frames_;
+  return true;
 }
 
 void SemanticEpochGate::status(
@@ -139,6 +162,7 @@ void SemanticEpochGate::status(
   out.admitted_sources = static_cast<std::uint32_t>(admitted_.size());
   out.accepted_audio_frames = accepted_audio_frames_;
   out.dropped_audio_frames = dropped_audio_frames_;
+  out.out_of_order_audio_frames = out_of_order_audio_frames_;
   out.rejected_source_snapshots = rejected_source_snapshots_;
   out.stream_resets = stream_resets_;
 }

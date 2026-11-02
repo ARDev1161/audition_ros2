@@ -454,3 +454,22 @@ security. PCM has no scene incarnation field, so independently restarted
 capture/spatial publishers and clock resets still require coordinated
 generation fencing or a complete pipeline restart. Model accuracy, HIL
 calibration and a full cross-node `ReloadPipeline` remain unverified.
+
+
+## M2k: per-source PCM anti-replay and capture-order fencing (2026-11-02)
+
+The semantic admission gate retains a bounded (sequence, capture-time)
+high-water mark per admitted source and rejects duplicate/reordered
+`SourceAudioFrame.sequence_number` or backwards capture timestamps before
+YAMNet/VAD/ASR. Sequence gaps are permitted; no audio is synthesized.
+`GetSemanticStatus.out_of_order_audio_frames` counts such drops and is a
+subset of `dropped_audio_frames`. Accepted source refreshes preserve cursors;
+retirement prunes them; new generations/sessions and successful worker
+reloads clear them. Rejected packets cannot move the high-water mark.
+
+Humble tests exercise duplicate/reordered PCM, timestamp regressions,
+source independence, retirement, reload and scene restarts. ROS graph smoke
+replays a real mono source packet and verifies the diagnostic counter.
+This is transport ordering protection, not cryptographic replay prevention,
+publisher authentication or full multi-node `ReloadPipeline`. See
+[M2k PCM continuity](M2_PCM_CONTINUITY.md).

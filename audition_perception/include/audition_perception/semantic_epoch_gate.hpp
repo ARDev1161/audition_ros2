@@ -5,6 +5,7 @@
 #include <audition_msgs/srv/get_semantic_status.hpp>
 
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 
@@ -41,6 +42,12 @@ private:
   std::uint64_t scene_session_resets_{0};
   std::string frame_id_;
   std::set<std::string> admitted_;
+  struct AudioCursor {
+    std::uint64_t sequence{0};
+    std::int64_t capture_ns{0};
+  };
+  std::map<std::string, AudioCursor> audio_cursors_;
+  std::uint64_t out_of_order_audio_frames_{0};
   std::uint64_t accepted_audio_frames_{0};
   std::uint64_t dropped_audio_frames_{0};
   std::uint64_t rejected_source_snapshots_{0};

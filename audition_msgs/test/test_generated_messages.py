@@ -143,6 +143,7 @@ def test_semantic_status_service_round_trip():
     response.admitted_sources = 2
     response.accepted_audio_frames = 31
     response.dropped_audio_frames = 4
+    response.out_of_order_audio_frames = 3
     response.stream_resets = 3
     response.scene_session_id = "0123456789abcdef0123456789abcdef"
     response.scene_session_resets = 2
@@ -151,6 +152,7 @@ def test_semantic_status_service_round_trip():
     assert back.frame_id == "robot_a_mic"
     assert back.admitted_sources == 2
     assert back.dropped_audio_frames == 4
+    assert back.out_of_order_audio_frames == 3
     assert back.stream_resets == 3
     assert back.scene_session_id == response.scene_session_id
     assert back.scene_session_resets == 2
