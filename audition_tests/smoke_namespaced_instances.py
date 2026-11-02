@@ -16,14 +16,14 @@ class Probe(Node):
         self.audio = set()
         self.scenes = set()
         self.errors = []
-        self.clients = {}
+        self.capability_clients = {}
         for robot in self.frames:
             ns = "/" + robot + "/audition"
             self.create_subscription(SourceAudioFrame, ns + "/internal/source_audio",
                 lambda msg, robot=robot: self.on_audio(robot, msg), qos_profile_sensor_data)
             self.create_subscription(AcousticScene, ns + "/scene",
                 lambda msg, robot=robot: self.on_scene(robot, msg), 10)
-            self.clients[robot] = self.create_client(
+            self.capability_clients[robot] = self.create_client(
                 GetCapabilities, ns + "/semantic_perception/get_capabilities")
 
     def on_audio(self, robot, msg):
@@ -60,12 +60,12 @@ def main():
             if node.errors:
                 break
             if len(node.audio) == len(node.scenes) == 2 and all(
-                    c.service_is_ready() for c in node.clients.values()):
+                    c.service_is_ready() for c in node.capability_clients.values()):
                 break
         assert not node.errors, node.errors
         assert len(node.audio) == len(node.scenes) == 2, (
             node.audio, node.scenes, node.get_node_names_and_namespaces())
-        for robot, client in node.clients.items():
+        for robot, client in node.capability_clients.items():
             assert client.wait_for_service(timeout_sec=5.0), robot
             future = client.call_async(GetCapabilities.Request())
             rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
