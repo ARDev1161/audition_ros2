@@ -4,7 +4,7 @@ import time
 
 import rclpy
 from rclpy.qos import qos_profile_sensor_data
-from audition_msgs.msg import SourceAudioFrame
+from audition_msgs.msg import SourceAudioFrame, AcousticSourceArray
 from audition_msgs.srv import GetSemanticStatus
 
 
@@ -32,6 +32,27 @@ def main():
             time.sleep(0.1)
         else:
             raise AssertionError("No canonical semantic admission / PCM: " + str(value))
+
+        assert value.last_source_sequence > 0, value
+        initial_rejected = value.rejected_source_snapshots
+        # Simulate a second publisher replaying a zero-order canonical snapshot.
+        stale_pub = node.create_publisher(
+            AcousticSourceArray, "/audition/sources", 10)
+        stale = AcousticSourceArray()
+        stale.header.frame_id = value.frame_id
+        stale.generation = value.source_generation
+        stale.sequence_number = 0
+        for _ in range(8):
+            stale_pub.publish(stale)
+            time.sleep(0.05)
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            value = status(node, client)
+            if value.rejected_source_snapshots > initial_rejected:
+                break
+            time.sleep(0.1)
+        assert value.rejected_source_snapshots > initial_rejected, value
+        assert value.admitted_sources > 0, value
 
         initial_drops = value.dropped_audio_frames
         pub = node.create_publisher(

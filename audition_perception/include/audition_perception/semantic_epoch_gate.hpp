@@ -33,6 +33,7 @@ private:
   std::int64_t reload_cutoff_ns_{0};
   bool have_stream_{false};
   std::uint64_t generation_{0};
+  std::uint64_t last_snapshot_sequence_{0};
   std::string frame_id_;
   std::set<std::string> admitted_;
   std::uint64_t accepted_audio_frames_{0};

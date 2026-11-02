@@ -70,6 +70,8 @@ void AcousticSceneNode::publish(SourceLifecycle::Update update) {
   update.scene.active_events = event_ledger_->active();
   // /scene contains only ACTIVE and LOST sources; /sources additionally
   // carries one-shot ENDED notifications. Both share the same generation.
+  // A single process-local order key also covers timer and event updates.
+  update.sources.sequence_number = ++canonical_sequence_;
   source_pub_->publish(std::move(update.sources));
   scene_pub_->publish(std::move(update.scene));
 }

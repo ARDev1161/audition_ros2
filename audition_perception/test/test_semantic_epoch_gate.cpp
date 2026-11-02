@@ -23,6 +23,8 @@ static Source source(const char * id, std::uint64_t generation,
 static Snapshot snapshot(std::uint64_t generation, const char * frame) {
   Snapshot out;
   out.generation = generation;
+  static std::uint64_t sequence = 0;
+  out.sequence_number = ++sequence;
   out.header.frame_id = frame;
   return out;
 }
@@ -126,6 +128,7 @@ TEST(SemanticEpochGate, ReloadRejectsQueuedSnapshotsAndAudioUntilNewAdmission) {
 
   auto fresh = first;
   fresh.header.stamp.sec = 101;
+  ++fresh.sequence_number;
   EXPECT_EQ(gate.observe(fresh), SemanticEpochGate::SnapshotResult::Accepted);
   EXPECT_FALSE(gate.reloadPending());
   EXPECT_FALSE(gate.accept(old_pcm));
@@ -150,4 +153,46 @@ TEST(SemanticEpochGate, ReloadAcceptsRealUpstreamGenerationChange) {
   EXPECT_FALSE(gate.reloadPending());
   EXPECT_TRUE(gate.accept(audio("s", 6, "new")));
   EXPECT_FALSE(gate.accept(audio("s", 5, "old")));
+}
+
+TEST(SemanticEpochGate, RejectsReorderedAndDuplicatedCanonicalSnapshots) {
+  SemanticEpochGate gate;
+  auto first = snapshot(40, "mic");
+  first.header.stamp.sec = 100;
+  first.sources.push_back(source("live", 40, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  const auto accepted = status(gate).last_source_sequence;
+
+  auto retirement = snapshot(40, "mic");
+  retirement.header.stamp.sec = 99;  // Capture stamps may regress vs timers.
+  retirement.sources.push_back(source("live", 40, "mic", Source::ENDED));
+  ASSERT_EQ(gate.observe(retirement), SemanticEpochGate::SnapshotResult::Accepted);
+  EXPECT_FALSE(gate.accept(audio("live", 40, "mic")));
+
+  // A replayed ACTIVE snapshot cannot resurrect the retired source.
+  EXPECT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_EQ(gate.observe(retirement), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_FALSE(gate.accept(audio("live", 40, "mic")));
+  EXPECT_EQ(status(gate).last_source_sequence, retirement.sequence_number);
+  EXPECT_GT(status(gate).last_source_sequence, accepted);
+  EXPECT_EQ(status(gate).rejected_source_snapshots, 2U);
+}
+
+TEST(SemanticEpochGate, RejectsZeroAndOldSequenceAcrossGenerations) {
+  SemanticEpochGate gate;
+  auto first = snapshot(70, "mic");
+  first.sources.push_back(source("old", 70, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  auto reset = snapshot(71, "new_mic");
+  reset.sources.push_back(source("new", 71, "new_mic"));
+  reset.sequence_number = first.sequence_number;
+  EXPECT_EQ(gate.observe(reset), SemanticEpochGate::SnapshotResult::Rejected);
+  reset.sequence_number = 0;
+  EXPECT_EQ(gate.observe(reset), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_TRUE(gate.accept(audio("old", 70, "mic")));
+  EXPECT_FALSE(gate.accept(audio("new", 71, "new_mic")));
+  reset.sequence_number = first.sequence_number + 1;
+  EXPECT_EQ(gate.observe(reset), SemanticEpochGate::SnapshotResult::NewGeneration);
+  EXPECT_FALSE(gate.accept(audio("old", 70, "mic")));
+  EXPECT_TRUE(gate.accept(audio("new", 71, "new_mic")));
 }

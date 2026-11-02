@@ -29,7 +29,9 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
     ++rejected_source_snapshots_;
     return SnapshotResult::Rejected;
   };
-  if (snapshot.generation == 0 || snapshot.header.frame_id.empty() ||
+  if (snapshot.generation == 0 || snapshot.sequence_number == 0 ||
+      (have_stream_ && snapshot.sequence_number <= last_snapshot_sequence_) ||
+      snapshot.header.frame_id.empty() ||
       snapshot.header.stamp.nanosec >= 1000000000U ||
       snapshot.sources.size() > 256U ||
       (have_stream_ && snapshot.generation < generation_) ||
@@ -69,6 +71,7 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
   if (reset) ++stream_resets_;
   have_stream_ = true;
   generation_ = snapshot.generation;
+  last_snapshot_sequence_ = snapshot.sequence_number;
   frame_id_ = snapshot.header.frame_id;
   admitted_.swap(admitted);
   last_snapshot_stamp_ns_ = stampNs(snapshot.header.stamp);
@@ -106,6 +109,7 @@ void SemanticEpochGate::status(
 {
   out.have_stream = have_stream_;
   out.source_generation = generation_;
+  out.last_source_sequence = last_snapshot_sequence_;
   out.frame_id = frame_id_;
   out.admitted_sources = static_cast<std::uint32_t>(admitted_.size());
   out.accepted_audio_frames = accepted_audio_frames_;

@@ -29,6 +29,7 @@ private:
   std::unique_ptr<EventLedger> event_ledger_;
   std::uint64_t stream_generation_{0};
   bool have_stream_{false};
+  std::uint64_t canonical_sequence_{0};
   rclcpp::Subscription<audition_msgs::msg::AcousticSourceArray>::SharedPtr source_sub_;
   rclcpp::Publisher<audition_msgs::msg::AcousticSourceArray>::SharedPtr source_pub_;
   rclcpp::Publisher<audition_msgs::msg::AcousticScene>::SharedPtr scene_pub_;

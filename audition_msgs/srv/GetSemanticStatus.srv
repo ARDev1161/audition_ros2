@@ -14,3 +14,6 @@ uint64 reload_epoch
 uint64 reload_successes
 uint64 reload_failures
 bool reload_pending
+
+# Last accepted canonical /sources sequence (0 before first admission).
+uint64 last_source_sequence
