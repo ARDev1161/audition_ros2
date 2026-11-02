@@ -15,6 +15,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("wav_path", description="Absolute mono/multichannel WAV"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled"),
+        DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
             "spatial_config",
             default_value=PathJoinSubstitution([
