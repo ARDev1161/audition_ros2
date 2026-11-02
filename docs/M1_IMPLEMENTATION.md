@@ -379,3 +379,22 @@ replays a real mono source packet and verifies the diagnostic counter.
 This is transport ordering protection, not cryptographic replay prevention,
 publisher authentication or full multi-node `ReloadPipeline`. See
 [M2k PCM continuity](M2_PCM_CONTINUITY.md).
+
+## M2l: capture-process restart handshake (2026-11-02)
+
+Every raw `AudioFrame` now requires a per-process 32-character lowercase
+hexadecimal `capture_session_id`. WAV replay creates a new ID for each
+capture node; ALSA preserves the same ID across XRUN and reconnect.
+Mono/ODAS ingress validates the ID and resets its source generation when a
+new capture process appears, **even if sequence numbers and timestamps
+look continuous**. ODAS discards pending hop audio and resets native tracks;
+old-session and malformed frames are rejected before modifying state.
+The disabled spatial route also fences its empty snapshot generation.
+
+Consumers retain up to 64 retired session IDs; subsequent transitions
+fail closed and require a consumer restart. This is not DDS authentication.
+Humble tests cover the mono+scene ROS graph and model-independent ODAS
+ingress regressions; physical unplug/replug is not certified.
+See [M2l capture-session contract](M2_CAPTURE_SESSION_HANDSHAKE.md).
+Independent spatial-process restart and transactional `ReloadPipeline`
+remain open.
