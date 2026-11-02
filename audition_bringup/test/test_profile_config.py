@@ -165,6 +165,22 @@ class ProfileTests(unittest.TestCase):
             self._write(), ROOT, {"device": "hw:1,0"})
         self.assertEqual(resolved.capture["device"], "hw:1,0")
 
+    def test_relative_namespaces(self):
+        for value in ("audition", "robot_a/audition", "Robot2/mic_1"):
+            self.assertEqual(profile.validate_namespace(value), value)
+        for value in ("", "/", "/audition", "robot//audition",
+                      "robot/../audition", "robot-a/audition",
+                      "robot/audition/", "1robot/audition", "a" * 129):
+            with self.subTest(value=value), self.assertRaises(profile.ProfileError):
+                profile.validate_namespace(value)
+
+    def test_frame_override(self):
+        resolved = profile.resolve_profile(
+            self._write(), ROOT, {"frame_id": "robot_a_mic"})
+        self.assertEqual(resolved.capture["frame_id"], "robot_a_mic")
+        with self.assertRaisesRegex(profile.ProfileError, "relative TF frame"):
+            profile.resolve_profile(self._write(), ROOT, {"frame_id": "/shared_mic"})
+
     def _write(self):
         self.path.write_text(yaml.safe_dump(self.base), encoding="utf-8")
         return str(self.path)

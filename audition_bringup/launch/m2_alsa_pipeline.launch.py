@@ -14,6 +14,8 @@ def generate_launch_description():
     ])
     return LaunchDescription([
         DeclareLaunchArgument("device", description="ALSA capture PCM name"),
+        DeclareLaunchArgument("audition_namespace", default_value="audition",
+                              description="Relative namespace, e.g. robot_a/audition"),
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
         DeclareLaunchArgument("sample_rate_hz", default_value="16000"),
         DeclareLaunchArgument("channel_count", default_value="6"),
@@ -43,11 +45,12 @@ def generate_launch_description():
                 "spatial_backend": LaunchConfiguration("spatial_backend"),
                 "spatial_config": LaunchConfiguration("spatial_config"),
                 "scene_config": LaunchConfiguration("scene_config"),
+                "audition_namespace": LaunchConfiguration("audition_namespace"),
             }.items(),
         ),
         ComposableNodeContainer(
             name="audition_semantic_container",
-            namespace="audition",
+            namespace=LaunchConfiguration("audition_namespace"),
             package="rclcpp_components",
             executable="component_container",
             output="screen",
@@ -55,7 +58,7 @@ def generate_launch_description():
                 ComposableNode(
                     package="audition_perception",
                     plugin="audition_perception::SemanticPerceptionNode",
-                    namespace="/audition",
+                    namespace=["/", LaunchConfiguration("audition_namespace")],
                     name="semantic_perception",
                     parameters=[LaunchConfiguration("semantic_config")],
                 ),

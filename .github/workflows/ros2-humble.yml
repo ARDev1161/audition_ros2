@@ -145,3 +145,37 @@ jobs:
             cat /tmp/audition_profile_launch.log
             exit 1
           fi
+
+      - name: Smoke two isolated M2c instances on one DDS domain
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=106
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          python3 - <<'PY'
+          import math, struct, wave
+          with wave.open('/tmp/audition_ci_880.wav', 'wb') as wav:
+              wav.setnchannels(1)
+              wav.setsampwidth(2)
+              wav.setframerate(16000)
+              for _ in range(40):
+                  samples = [int(7000 * math.sin(2 * math.pi * 880 * i / 16000))
+                             for i in range(16000)]
+                  wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+          PY
+          ros2 launch audition_bringup m2_profile.launch.py \\
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \\
+            audition_namespace:=robot_a/audition frame_id:=robot_a_mic \\
+            > /tmp/audition_robot_a.log 2>&1 &
+          a_pid=$!
+          ros2 launch audition_bringup m2_profile.launch.py \\
+            profile:=replay_ci wav_path:=/tmp/audition_ci_880.wav \\
+            audition_namespace:=robot_b/audition frame_id:=robot_b_mic \\
+            > /tmp/audition_robot_b.log 2>&1 &
+          b_pid=$!
+          trap 'kill "$a_pid" "$b_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_namespaced_instances.py; then
+            cat /tmp/audition_robot_a.log /tmp/audition_robot_b.log
+            exit 1
+          fi

@@ -145,10 +145,18 @@ def discover_models(directory):
                   if p.is_file() and p.suffix.lower() in extensions)[:128]
 
 
+def validate_namespace(namespace):
+    """Reject global, malformed or ambiguous ROS namespace paths."""
+    if (not isinstance(namespace, str) or len(namespace) > 128 or
+            not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:/[A-Za-z][A-Za-z0-9_]*)*", namespace)):
+        raise ProfileError("audition_namespace must be relative, e.g. robot_a/audition")
+    return namespace
+
+
 def resolve_profile(profile, package_share, overrides=None):
     """Validate a named preset or explicit YAML path; return ROS launch arguments."""
     overrides = overrides or {}
-    _keys(overrides, {"wav_path", "device", "models_dir"}, "launch overrides")
+    _keys(overrides, {"wav_path", "device", "models_dir", "frame_id"}, "launch overrides")
     share = Path(package_share).resolve()
     if re.fullmatch(r"[a-z][a-z0-9_]*", profile):
         path = share / "config" / "profiles" / (profile + ".yaml")
@@ -170,6 +178,8 @@ def resolve_profile(profile, package_share, overrides=None):
     kind = capture.get("kind")
     if kind not in ("wav", "alsa"):
         raise ProfileError("capture.kind must be wav or alsa")
+    if overrides.get("frame_id"):
+        capture["frame_id"] = overrides["frame_id"]
     frame = capture.get("frame_id", "microphone_array")
     if not isinstance(frame, str) or not frame or frame.startswith("/"):
         raise ProfileError("capture.frame_id must be a nonempty relative TF frame")

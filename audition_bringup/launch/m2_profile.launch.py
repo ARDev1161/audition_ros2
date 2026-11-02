@@ -23,22 +23,28 @@ def _resolver():
     import sys
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module.resolve_profile
+    return module
 
 
 def _configure(context, *args, **kwargs):
     share = Path(get_package_share_directory("audition_bringup"))
     value = lambda key: LaunchConfiguration(key).perform(context)
-    profile = _resolver()(value("profile"), share, {
+    resolver = _resolver()
+    namespace = resolver.validate_namespace(value("audition_namespace"))
+    profile = resolver.resolve_profile(value("profile"), share, {
         "wav_path": value("wav_path"),
         "device": value("device"),
         "models_dir": value("models_dir"),
+        "frame_id": value("frame_id"),
     })
     capture = profile.capture
+    if namespace != "audition" and capture["frame_id"] == "microphone_array":
+        raise resolver.ProfileError("Non-default namespace requires unique frame_id:=...")
     kind = capture["kind"]
     base = share / "launch" / ("m1_wav_pipeline.launch.py" if kind == "wav"
                                else "m1_alsa_pipeline.launch.py")
     arguments = {
+        "audition_namespace": namespace,
         "spatial_backend": profile.spatial_backend,
         "spatial_config": profile.spatial_config,
         "scene_config": profile.scene_config,
@@ -58,7 +64,7 @@ def _configure(context, *args, **kwargs):
                                  launch_arguments=arguments.items()),
         ComposableNodeContainer(
             name="audition_semantic_container",
-            namespace="audition",
+            namespace=namespace,
             package="rclcpp_components",
             executable="component_container",
             output="screen",
@@ -66,7 +72,7 @@ def _configure(context, *args, **kwargs):
                 ComposableNode(
                     package="audition_perception",
                     plugin="audition_perception::SemanticPerceptionNode",
-                    namespace="/audition",
+                    namespace="/" + namespace,
                     name="semantic_perception",
                     parameters=[profile.semantic],
                 ),
@@ -77,6 +83,9 @@ def _configure(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument("audition_namespace", default_value="audition"),
+        DeclareLaunchArgument("frame_id", default_value="",
+                              description="Explicit unique TF frame for additional sensors"),
         DeclareLaunchArgument("profile", default_value="mono_speech",
                               description="Built-in profile name or absolute YAML path"),
         DeclareLaunchArgument("wav_path", default_value="",

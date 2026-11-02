@@ -132,3 +132,41 @@ provided; no model is automatically downloaded or enabled. The typed
 capability service reports compiled/active semantic stages. Semantic ROS
 parameters are startup-only and rejected on hot update to avoid stale native
 workers. See [M2c configuration, validation and limitations](docs/M2_PROFILE_CONFIGURATION.md).
+
+## M2d: multiple sensors / robots
+
+
+## M2d: multi-instance ROS namespace isolation (implemented 2026-11-02)
+
+All M1/M2 WAV/ALSA launch files and M2c profiles accept
+`audition_namespace` (default `audition`). M2c accepts `frame_id`
+override and validates relative namespaces before launching. A non-default
+namespace cannot reuse the built-in `microphone_array` frame; provide a
+unique frame for each robot/sensor. For ODAS, the measured geometry YAML
+must specify the same `microphone_frame`.
+
+~~~bash
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/data/mic_a.wav \
+  audition_namespace:=robot_a/audition frame_id:=robot_a_mic
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/data/mic_b.wav \
+  audition_namespace:=robot_b/audition frame_id:=robot_b_mic
+ros2 service call /robot_a/audition/semantic_perception/get_capabilities \
+  audition_msgs/srv/GetCapabilities "{}"
+ros2 topic echo /robot_b/audition/scene
+~~~
+
+Capture, spatial/mono, scene and semantic components share the selected
+namespace. All public and internal topics and the typed capability service
+are scoped to it; no global `/audition` topic is intentionally created.
+Source IDs and generations are local to one namespace. Cross-robot consumers
+must key observations by (namespace, source_id, generation), not source_id
+alone. Legacy M1/M2 launch files accept these arguments but do not perform
+M2c preflight; operators must supply distinct TF frames and ALSA devices.
+
+Humble CI starts two simultaneous mono graphs on one DDS domain with 440Hz
+and 880Hz WAVs, validates PCM, canonical scene frames and independent
+capability services, and rejects unexpected global /audition topics.
+This is graph isolation, not physical ODAS calibration, a fleet registry
+or transactional model reload. Runtime semantic parameters remain immutable.

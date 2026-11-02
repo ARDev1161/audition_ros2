@@ -14,6 +14,9 @@ def generate_launch_description():
     ])
     return LaunchDescription([
         DeclareLaunchArgument("wav_path", description="Absolute mono/multichannel WAV"),
+        DeclareLaunchArgument("frame_id", default_value="microphone_array"),
+        DeclareLaunchArgument("audition_namespace", default_value="audition",
+                              description="Relative namespace, e.g. robot_a/audition"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled"),
         DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
@@ -33,16 +36,18 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(base),
             launch_arguments={
                 "wav_path": LaunchConfiguration("wav_path"),
+                "frame_id": LaunchConfiguration("frame_id"),
                 "spatial_backend": LaunchConfiguration("spatial_backend"),
                 "spatial_config": LaunchConfiguration("spatial_config"),
                 "scene_config": LaunchConfiguration("scene_config"),
+                "audition_namespace": LaunchConfiguration("audition_namespace"),
             }.items(),
         ),
         # Isolate model inference from spatial processing even when the native
         # libaudition backend is enabled. Its worker is independently bounded.
         ComposableNodeContainer(
             name="audition_semantic_container",
-            namespace="audition",
+            namespace=LaunchConfiguration("audition_namespace"),
             package="rclcpp_components",
             executable="component_container",
             output="screen",
@@ -50,7 +55,7 @@ def generate_launch_description():
                 ComposableNode(
                     package="audition_perception",
                     plugin="audition_perception::SemanticPerceptionNode",
-                    namespace="/audition",
+                    namespace=["/", LaunchConfiguration("audition_namespace")],
                     name="semantic_perception",
                     parameters=[LaunchConfiguration("semantic_config")],
                 ),
