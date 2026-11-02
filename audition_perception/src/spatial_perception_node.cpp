@@ -205,7 +205,7 @@ public:
         if (!track.track_id.valid()) continue;
         auto it = tracks_.find(id);
         if (it == tracks_.end()) {
-          const std::string source_id = frame_id_ + "-" + std::to_string(session_) +
+          const std::string source_id = frame_id_ + "-" + spatial_session_id_ +
             "-" + std::to_string(++source_counter_);
           it = tracks_.emplace(id, source_id).first;
         }
@@ -288,8 +288,6 @@ private:
   std::unordered_map<std::uint64_t, std::string> tracks_{};
   std::uint32_t sample_rate_{0}, hop_{0};
   std::uint64_t source_counter_{0};
-  std::uint64_t session_{static_cast<std::uint64_t>(
-    std::chrono::steady_clock::now().time_since_epoch().count())};
 #endif
   CaptureSessionGate capture_sessions_;
   std::string spatial_session_id_{makeSpatialSessionId()};

@@ -18,7 +18,6 @@ static Source source(const char * id, std::uint64_t generation,
   Source out;
   out.source_id = id;
   out.source_generation = generation;
-  out.spatial_session_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   out.header.frame_id = frame;
   out.state = state;
   return out;
@@ -38,6 +37,7 @@ static Audio audio(const char * id, std::uint64_t generation,
   Audio out;
   out.source_id = id;
   out.source_generation = generation;
+  out.spatial_session_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   out.header.frame_id = frame;
   static std::uint64_t next_audio_sequence = 0;
   out.sequence_number = ++next_audio_sequence;
