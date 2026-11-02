@@ -14,3 +14,19 @@
     event_stop_threshold: 0.40
     event_min_start_observations: 2
     event_min_stop_observations: 2
+
+    # Speech is optional and independent of YAMNet.
+    # Set enabled only after building libaudition with Sherpa + whisper.cpp,
+    # and audition_perception with AUDITION_ROS2_WITH_SPEECH=ON.
+    speech_enabled: false
+    speech_vad_backend: sherpa
+    speech_asr_backend: whispercpp
+    speech_vad_model: ""
+    speech_asr_model: ""
+    speech_language: "ru"
+    speech_asr_threads: 4
+    speech_vad_threshold: 0.5
+    speech_max_sources: 8
+    speech_max_pending_segments: 16
+    speech_native_initial_context_ms: 1000
+    speech_normalize_asr_segments: false
