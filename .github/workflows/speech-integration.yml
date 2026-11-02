@@ -1,0 +1,72 @@
+name: Native Sherpa VAD + whisper.cpp ASR integration
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-speech:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git build-essential cmake ninja-build ca-certificates pkg-config \
+            python3-colcon-common-extensions \
+            ros-humble-ament-cmake-gtest ros-humble-rosidl-default-generators \
+            ros-humble-rclcpp ros-humble-rclcpp-components \
+            ros-humble-geometry-msgs ros-humble-launch-ros ros-humble-rclpy
+      - name: Build pinned whisper.cpp 1.7.6 library
+        shell: bash
+        run: |
+          set -eo pipefail
+          git init /tmp/whisper
+          git -C /tmp/whisper remote add origin https://github.com/ggml-org/whisper.cpp.git
+          git -C /tmp/whisper fetch --depth 1 origin a8d002cfd879315632a579e73f0148d06959de36
+          git -C /tmp/whisper checkout --detach FETCH_HEAD
+          cmake -S /tmp/whisper -B /tmp/whisper-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/speech-install \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DGGML_NATIVE=OFF
+          cmake --build /tmp/whisper-build --parallel 3
+          cmake --install /tmp/whisper-build
+      - name: Build pinned libaudition with Sherpa and whisper.cpp
+        shell: bash
+        run: |
+          set -eo pipefail
+          git init /tmp/libaudition
+          git -C /tmp/libaudition remote add origin https://github.com/ARDev1161/libaudition.git
+          git -C /tmp/libaudition fetch --depth 1 origin 72fc4040f0e21f1271a6b14c787cc8fa73cb3ad3
+          git -C /tmp/libaudition checkout --detach FETCH_HEAD
+          cmake -S /tmp/libaudition -B /tmp/libaudition-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/speech-install \
+            -DLIBAUDITION_WITH_SPDLOG=OFF \
+            -DLIBAUDITION_WITH_SHERPA=ON \
+            -DLIBAUDITION_WITH_WHISPERCPP=ON \
+            -DWHISPERCPP_INCLUDE_DIR=/tmp/speech-install/include \
+            -DWHISPERCPP_LIBRARY=/tmp/speech-install/lib/libwhisper.so \
+            -DLIBAUDITION_BUILD_QT_DEMO=OFF \
+            -DLIBAUDITION_BUILD_TESTS=OFF \
+            -DLIBAUDITION_BUILD_EXAMPLES=OFF \
+            -DLIBAUDITION_FETCH_DEPENDENCIES=ON -DBUILD_TESTING=OFF
+          cmake --build /tmp/libaudition-build --parallel 3
+          cmake --install /tmp/libaudition-build
+      - name: Build ROS speech bridge and run model-independent regressions
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          export CMAKE_PREFIX_PATH="/tmp/speech-install:${CMAKE_PREFIX_PATH}"
+          export LD_LIBRARY_PATH="/tmp/speech-install/lib:${LD_LIBRARY_PATH:-}"
+          colcon build --event-handlers console_direct+ \
+            --cmake-args -DAUDITION_ROS2_WITH_SEMANTIC=ON \
+                         -DAUDITION_ROS2_WITH_SPEECH=ON \
+                         -DBUILD_TESTING=ON
+          source install/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
