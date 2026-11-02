@@ -44,6 +44,21 @@ ros2 launch audition_bringup m2_wav_pipeline.launch.py \
   semantic_config:=/path/to/semantic_speech.yaml
 ```
 
+For a live ALSA microphone instead of WAV, build `audition_capture` with
+`-DAUDITION_ROS2_WITH_ALSA=ON` and use:
+
+```bash
+ros2 launch audition_bringup m2_alsa_pipeline.launch.py \
+  device:=hw:2,0 sample_rate_hz:=16000 channel_count:=6 \
+  spatial_backend:=odas \
+  spatial_config:=/path/to/calibrated_mics.yaml \
+  semantic_config:=/path/to/semantic_speech.yaml
+```
+
+The ALSA card name `hw:2,0` is illustrative. Inspect `arecord -l` for
+the device actually connected to the robot. The demo has no automated
+microphone calibration or automatic conversion from a mono capture stream.
+
 This launch also requires the optional **ODAS** backend to emit per-source PCM. The ReSpeaker microphone geometry must be physically calibrated before real localization. The example paths above are placeholders.
 
 ## User profile
