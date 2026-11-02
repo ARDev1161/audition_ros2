@@ -174,7 +174,7 @@ jobs:
           export ROS_DOMAIN_ID=108
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          ros2 launch audition_bringup m2_capture_session_fixture.launch.py \\
+          ros2 launch audition_bringup m2_capture_session_fixture.launch.py \
             > /tmp/audition_capture_session.log 2>&1 &
           launch_pid=$!
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
