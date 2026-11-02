@@ -10,6 +10,10 @@ option(AUDITION_ROS2_WITH_YAMNET "Enable native YAMNet ONNX classifier" OFF)
 if(AUDITION_ROS2_WITH_YAMNET AND NOT AUDITION_ROS2_WITH_SEMANTIC)
   message(FATAL_ERROR "YAMNet requires AUDITION_ROS2_WITH_SEMANTIC=ON")
 endif()
+option(AUDITION_ROS2_WITH_SPEECH "Build Sherpa VAD + whisper.cpp ASR adapter" OFF)
+if(AUDITION_ROS2_WITH_SPEECH AND NOT AUDITION_ROS2_WITH_SEMANTIC)
+  message(FATAL_ERROR "Speech requires AUDITION_ROS2_WITH_SEMANTIC=ON")
+endif()
 option(AUDITION_ROS2_WITH_ODAS "Build native libaudition ODAS spatial adapter" OFF)
 if(AUDITION_ROS2_WITH_ODAS OR AUDITION_ROS2_WITH_SEMANTIC)
   find_package(libaudition 1 CONFIG REQUIRED)
@@ -27,7 +31,8 @@ add_library(audition_perception_components SHARED
   src/source_lifecycle.cpp
   src/event_ledger.cpp
   src/acoustic_scene_node.cpp
-  src/semantic_perception_node.cpp)
+  src/semantic_perception_node.cpp
+  src/speech_bridge.cpp)
 target_compile_features(audition_perception_components PUBLIC cxx_std_17)
 target_include_directories(audition_perception_components PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -55,6 +60,16 @@ if(AUDITION_ROS2_WITH_YAMNET)
   target_link_libraries(audition_perception_components audition::backend_yamnet)
   target_compile_definitions(audition_perception_components PRIVATE
     AUDITION_ROS2_WITH_YAMNET=1)
+endif()
+if(AUDITION_ROS2_WITH_SPEECH)
+  if(NOT TARGET audition::backend_sherpa OR
+     NOT TARGET audition::backend_whispercpp)
+    message(FATAL_ERROR "Speech needs libaudition built with Sherpa and whisper.cpp")
+  endif()
+  target_link_libraries(audition_perception_components
+    audition::backend_sherpa audition::backend_whispercpp)
+  target_compile_definitions(audition_perception_components PRIVATE
+    AUDITION_ROS2_WITH_SPEECH=1)
 endif()
 rclcpp_components_register_nodes(audition_perception_components
   "audition_perception::SpatialPerceptionNode"
