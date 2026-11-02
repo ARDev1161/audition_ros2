@@ -4,7 +4,7 @@ import sys
 import time
 import rclpy
 from rclpy.node import Node
-from audition_msgs.msg import AcousticEvent, AcousticScene, AcousticSourceArray, SoundClassification, Transcript
+from audition_msgs.msg import AcousticEvent, AcousticScene, AcousticSource, AcousticSourceArray, SoundClassification, Transcript
 
 
 class Probe(Node):
@@ -21,6 +21,14 @@ class Probe(Node):
         self.stale_seen = False
         self.started = False
         self.classified = False
+        self.source_present = False
+        self.heartbeat = False
+        self.retire_started = False
+        self.retire_cancelled = False
+        self.late_seen = False
+        self.ghost_event = False
+        self.ghost_classified = False
+        self.ghost_transcript = False
         self.pub = self.create_publisher(AcousticEvent, "/audition/internal/events", 20)
         self.tpub = self.create_publisher(Transcript, "/audition/internal/transcripts", 20)
         self.create_subscription(Transcript, "/audition/transcripts", self.on_transcript, 20)
@@ -32,12 +40,34 @@ class Probe(Node):
         self.create_subscription(AcousticEvent, "/audition/events", self.on_event, 20)
         self.create_subscription(
             SoundClassification, "/audition/classifications", self.on_class, 20)
+        self.create_timer(0.1, self.send_source)
+
+    def send_source(self):
+        if not self.heartbeat or self.scene_generation is None:
+            return
+        frame = AcousticSourceArray()
+        frame.header.frame_id = self.frame_id
+        frame.header.stamp = self.get_clock().now().to_msg()
+        frame.generation = self.scene_generation
+        src = AcousticSource()
+        src.header = frame.header
+        src.source_id = "ci-source"
+        src.source_generation = frame.generation
+        src.state = AcousticSource.ACTIVE
+        src.spatial_track_id = "fixture"
+        src.has_direction = True
+        src.direction_unit.x = 1.0
+        src.first_seen = frame.header.stamp
+        src.last_seen = frame.header.stamp
+        frame.sources.append(src)
+        self.spatial_pub.publish(frame)
 
     def on_scene(self, msg):
         self.scene_generation = msg.generation
         self.frame_id = msg.header.frame_id
         self.active = any(e.event_id == "ci-speech" for e in msg.active_events)
         self.reset_active = any(e.event_id == "ci-reset" for e in msg.active_events)
+        self.source_present = any(s.source_id == "ci-source" for s in msg.sources)
 
     def on_event(self, msg):
         if msg.event_id == "ci-speech" and msg.transition == AcousticEvent.STARTED:
@@ -46,6 +76,12 @@ class Probe(Node):
             self.ended = True
         if msg.event_id == "ci-speech" and msg.transition == AcousticEvent.UPDATED:
             self.updated = True
+        if msg.event_id == "ci-retire" and msg.transition == AcousticEvent.STARTED:
+            self.retire_started = True
+        if msg.event_id == "ci-retire" and msg.transition == AcousticEvent.CANCELLED:
+            self.retire_cancelled = msg.termination_reason == "source_ended"
+        if msg.event_id == "ci-ghost":
+            self.ghost_event = True
         if msg.event_id == "ci-reset" and msg.transition == AcousticEvent.CANCELLED:
             self.cancelled = msg.termination_reason == "spatial_stream_reset"
 
@@ -54,10 +90,16 @@ class Probe(Node):
             self.transcript_seen += 1
         if msg.text == "stale":
             self.stale_seen = True
+        if msg.text == "late":
+            self.late_seen = True
+        if msg.text == "ghost":
+            self.ghost_transcript = True
 
     def on_class(self, msg):
         if msg.source_id == "ci-source" and msg.class_label == "Speech":
             self.classified = True
+        if msg.class_label == "Ghost":
+            self.ghost_classified = True
 
     def event(self, transition, event_id='ci-speech'):
         e = AcousticEvent()
@@ -101,7 +143,7 @@ def wait(node, predicate, deadline):
 def main():
     rclpy.init()
     probe = Probe()
-    deadline = time.monotonic() + 18
+    deadline = time.monotonic() + 27
     try:
         if not wait(probe, lambda: probe.scene_generation is not None, deadline):
             print("FAIL: no canonical scene", file=sys.stderr)
