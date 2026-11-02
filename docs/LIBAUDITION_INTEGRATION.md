@@ -190,3 +190,39 @@ Acceptance: each enabled module needs build-time availability test, malformed-co
 **Not implemented:** the generic runtime backend registry, automatic user YAML presets, ALSA capture in audition_ros2, a native semantic pipeline, class/event reconciliation, lifecycle reset/reload service, confidence calibration, multi-sensor fusion and navigation consumers.
 
 This document describes the desired developer/user-facing experience and gives a concrete contract for further implementation; it must not be misread as completed functionality.
+
+
+## 9. Implemented canonical source/semantic provenance (M2 increment)
+
+The `acoustic_scene` component now validates spatial source generation and
+sensor frame identity before mutating canonical state. A malformed spatial
+snapshot cannot cancel legitimate events or switch the active generation.
+
+Only **known, not-yet-ended** sources may introduce classifications and
+acoustic events to public topics. Source `LOST` remains provisional; a later
+ACTIVE observation can recover it. When a source reaches `ENDED`, every
+still-active event for that source is published once as `CANCELLED` with
+`termination_reason=source_ended` and removed from `/audition/scene`.
+A generation reset similarly cancels events with
+`termination_reason=spatial_stream_reset`. A delayed worker result cannot
+recreate an event on a retired source.
+
+A *final* ASR transcript may arrive after source retirement: to avoid dropping
+the last spoken words, `acoustic_scene` retains a bounded, generation-specific
+retirement marker for `late_transcript_grace_ms` (default 5000 ms). Only known
+retired source IDs in the **current** spatial generation are allowed; reset
+invalidates the grace. Unknown IDs, future/old generations, non-final
+transcripts and invalid scores are discarded. The grace is limited in time
+and in memory (up to 4× the configured `max_sources`).
+
+Set policy via the installed
+[`audition_bringup/config/acoustic_scene.yaml`](../audition_bringup/config/acoustic_scene.yaml).
+Pass `scene_config:=/path/to/scene.yaml` to M1/M2 WAV or ALSA launch.
+The lifecycle uses wall-monotonic arrival time; ROS `header.stamp` remains
+the source observation timestamp and may use simulated time.
+
+These contracts have unit tests and an end-to-end ROS graph regression with
+an explicit synthetic source, source expiry, late final ASR, stale rejection
+and stream reset. The regression uses **injected messages**, not a claim of
+real classifier accuracy.
+
