@@ -9,7 +9,7 @@ import threading
 import time
 
 
-_SESSION = re.compile(r"[0-9a-f]{32}\\Z")
+_SESSION = re.compile(r"[0-9a-f]{32}")
 
 
 @dataclass(frozen=True)

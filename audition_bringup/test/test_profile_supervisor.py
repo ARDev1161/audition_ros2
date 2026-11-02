@@ -334,6 +334,15 @@ class AudioFlowTests(unittest.TestCase):
         self.assertTrue(replay.observe(self.session_a, 0, 160, 1, 160))
         self.assertTrue(replay.snapshot().healthy)
 
+    def test_invalid_capture_session_and_sequence_never_count_as_pcm(self):
+        self.assertFalse(self.flow.observe("not-a-session", 0, 160, 1, 160))
+        self.assertFalse(self.flow.observe(self.session_a, -1, 160, 1, 160))
+        self.assertFalse(self.flow.observe(self.session_a, 0, 0, 1, 0))
+        self.assertEqual(self.flow.snapshot().accepted_frames, 0)
+        self.assertTrue(self.flow.observe(self.session_a, 0, 160, 1, 160))
+        self.assertFalse(self.flow.observe(self.session_a, 0, 160, 1, 160))
+        self.assertEqual(self.flow.snapshot().accepted_frames, 1)
+
     def test_retired_session_limit_fails_closed(self):
         flow = AudioFlowMonitor(lambda spec: "alsa", clock=self.clock,
                                 max_sessions=1)
