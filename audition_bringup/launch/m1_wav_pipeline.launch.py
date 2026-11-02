@@ -16,6 +16,8 @@ def generate_launch_description():
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled",
                               description="disabled (safe default) or odas (requires calibrated geometry)"),
+        DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([
+            FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
             "spatial_config",
             default_value=PathJoinSubstitution([
@@ -62,6 +64,7 @@ def generate_launch_description():
                     plugin="audition_perception::AcousticSceneNode",
                     name="acoustic_scene",
                     namespace="/audition",
+                    parameters=[LaunchConfiguration("scene_config")],
                 ),
             ],
         ),
