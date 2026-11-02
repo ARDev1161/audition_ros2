@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 messages and an experimental M1 WAV replay/scaffold exist. An optional native ODAS integration is implemented but **not hardware validated**; semantic inference, live capture and navigation remain unimplemented.
+**Status:** M0 interfaces, M1 WAV replay and opt-in live ALSA/ODAS, and an initial M2 YAMNet/classification-event adapter are implemented. CI validates native builds and synthetic pipeline contracts, **not model accuracy or physical ReSpeaker calibration**. VAD/ASR, attention, fusion and navigation integration remain to be implemented.
 
 ## Interaction overview
 
@@ -28,7 +28,10 @@ The M1 perception path has three ROS nodes: `audio_capture`, `spatial_perception
 
 [Editable Mermaid diagram](docs/diagrams/acoustic_interaction_flow.mmd) · [Node responsibilities and interaction contracts](docs/ROS2_ARCHITECTURE.md)
 
-## Design documents
+## Documentation
+
+The canonical Sphinx documentation, roadmap and user configuration guide live in the [independent `documentation` branch](https://github.com/ARDev1161/audition_ros2/tree/documentation). It is an orphan branch without ROS sources or code history.
+
 
 - [libaudition integration and user configuration](docs/LIBAUDITION_INTEGRATION.md) — backend selection, proposed YAML presets, exposed ROS features and runtime configuration rules.
 - [Node architecture and interaction contracts](docs/ROS2_ARCHITECTURE.md) — how many nodes, who owns data, internal/public topics, process isolation, QoS and lifecycle.
@@ -52,6 +55,22 @@ ros2 topic echo /audition/scene audition_msgs/msg/AcousticScene --once
 Only uncompressed PCM16 and normalized float32 RIFF/WAV are currently supported. The spatial backend is explicitly **disabled**: it produces empty source observations, not fake DOA measurements. This runs transport and scene-adapter plumbing rather than a functional source localization pipeline.
 
 An optional `spatial_backend:=odas` mode is available with an ODAS-enabled libaudition CMake installation and separately calibrated array YAML. See [M1 implementation and native ODAS setup](docs/M1_IMPLEMENTATION.md).
+
+## Experimental M2 semantic perception
+
+Build/install libaudition with `LIBAUDITION_WITH_YAMNET=ON`, then enable `AUDITION_ROS2_WITH_SEMANTIC=ON` and `AUDITION_ROS2_WITH_YAMNET=ON` during the ROS build. Copy [the fail-closed M2 YAML template](audition_bringup/config/semantic_m2.yaml) to a user configuration file and provide a compatible **waveform-input YAMNet ONNX model**, its **521-class label map**, and `classifier_backend: yamnet`.
+
+```bash
+ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+  wav_path:=/path/to/six-channel.wav \
+  spatial_backend:=odas \
+  spatial_config:=/path/to/calibrated_microphones.yaml \
+  semantic_config:=/path/to/semantic_yamnet.yaml
+```
+
+When spatial separation is available, ROS 2 exposes `/audition/classifications`, `/audition/events` and `/audition/scene`. The inference worker is provided by libaudition and receives per-source mono 16 kHz PCM. Threshold hysteresis and event transitions are also provided by libaudition, not reimplemented here. The default YAML disables inference; no model weights are bundled. A mono/no-ODAS semantic bypass is not yet implemented.
+
+See the [M2 implementation guide](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/M2_IMPLEMENTATION.md).
 
 ## Intended boundaries
 
