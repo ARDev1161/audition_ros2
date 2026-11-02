@@ -242,3 +242,14 @@ reordered or backwards-time source PCM before YAMNet/VAD/ASR. A namespaced
 `GetSemanticStatus.out_of_order_audio_frames` counter exposes these drops.
 See [M2k PCM continuity](docs/M2_PCM_CONTINUITY.md) for tests and limits.
 This does not implement cross-node transactional reload or DDS authentication.
+
+### M2l capture process restart protection
+
+Raw `AudioFrame` now carries a per-process `capture_session_id`.
+Mono and ODAS detect a replaced capture publisher even when sequence and
+timestamp appear continuous, reset generations, and reject replay from
+retired sessions. ALSA reconnect keeps its original ID; existing XRUN
+sequence-gap fencing remains. A capture-free Humble ROS graph regression
+checks session handoff and old-session rejection.
+See [M2l capture session handshake](docs/M2_CAPTURE_SESSION_HANDSHAKE.md).
+This is not full cross-node transactional reload or DDS authentication.
