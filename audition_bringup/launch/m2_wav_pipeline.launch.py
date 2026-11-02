@@ -22,6 +22,12 @@ def generate_launch_description():
                 FindPackageShare("audition_bringup"), "config", "respeaker_usb_v2.yaml",
             ]),
         ),
+        DeclareLaunchArgument(
+            "semantic_config",
+            default_value=PathJoinSubstitution([
+                FindPackageShare("audition_bringup"), "config", "semantic_m2.yaml",
+            ]),
+        ),
         DeclareLaunchArgument("classifier_backend", default_value="disabled"),
         DeclareLaunchArgument("yamnet_model", default_value=""),
         DeclareLaunchArgument("yamnet_labels", default_value=""),
@@ -49,7 +55,7 @@ def generate_launch_description():
                     plugin="audition_perception::SemanticPerceptionNode",
                     namespace="/audition",
                     name="semantic_perception",
-                    parameters=[{
+                    parameters=[LaunchConfiguration("semantic_config"), {
                         "classifier_backend": ParameterValue(
                             LaunchConfiguration("classifier_backend"), value_type=str),
                         "yamnet_model": ParameterValue(

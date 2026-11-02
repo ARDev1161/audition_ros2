@@ -1,0 +1,16 @@
+# M2 semantic defaults; no real model is bundled.
+# With a YAMNet-enabled build, supply yamnet_model + yamnet_labels.
+"/**/semantic_perception":
+  ros__parameters:
+    classifier_backend: disabled
+    yamnet_model: ""
+    yamnet_labels: ""
+    yamnet_top_k: 5
+    yamnet_threads: 1
+    window_samples: 15600
+    hop_samples: 7800
+    max_sources: 16
+    event_start_threshold: 0.70
+    event_stop_threshold: 0.40
+    event_min_start_observations: 2
+    event_min_stop_observations: 2
