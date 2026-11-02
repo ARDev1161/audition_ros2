@@ -78,7 +78,11 @@ void AlsaPcmReader::recoverOrThrow(int error) {
   }
   const int result = snd_pcm_recover(pcm_, error, 1);
   check(result, "ALSA XRUN/suspend recovery");
-  check(snd_pcm_start(pcm_), "ALSA capture restart");
+  // EPIPE recovery usually leaves capture PREPARED; ESTRPIPE may resume
+  // directly into RUNNING. Starting an already running PCM is an error.
+  if (snd_pcm_state(pcm_) == SND_PCM_STATE_PREPARED) {
+    check(snd_pcm_start(pcm_), "ALSA capture restart");
+  }
   ++recoveries_;
   discontinuity_pending_ = true;
 }
