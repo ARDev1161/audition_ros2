@@ -207,6 +207,17 @@ def main():
         if not wait(probe, lambda: probe.retire_cancelled and not probe.source_present, deadline):
             print("FAIL: retirement did not cancel source event", file=sys.stderr)
             return 1
+        spoken.source_generation = probe.scene_generation
+        spoken.text = "late"
+        probe.tpub.publish(spoken)
+        if not wait(probe, lambda: probe.late_seen, deadline):
+            print("FAIL: final ASR after source retirement lost", file=sys.stderr)
+            return 1
+        probe.heartbeat = True
+        probe.send_source()
+        if not wait(probe, lambda: probe.source_present, deadline):
+            print("FAIL: source was not reacquired", file=sys.stderr)
+            return 1
         probe.pub.publish(probe.event(AcousticEvent.STARTED, "ci-reset"))
         if not wait(probe, lambda: probe.reset_active, deadline):
             print("FAIL: reset fixture never became active", file=sys.stderr)
