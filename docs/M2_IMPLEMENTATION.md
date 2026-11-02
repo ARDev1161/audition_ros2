@@ -20,7 +20,7 @@ flowchart LR
 
 The C++ ROS adapter does not duplicate upstream classifiers, bounded inference scheduling or threshold hysteresis. It converts `SourceAudioFrame` observations to the existing `libaudition` runtime, then converts completed classifications and `TemporalAcousticEvent` transitions to ROS message contracts.
 
-The scene node remains the **only publisher** of canonical external classification/event topics. It retains a bounded active-event ledger, updates `AcousticScene.active_events` on event transitions, and rejects inconsistent event IDs or stale stream generations. A completed event is removed from active scene state.
+The scene node remains the **only publisher** of canonical external classification/event topics. It retains a bounded active-event ledger, updates `AcousticScene.active_events` on event transitions, and rejects inconsistent event IDs or stale stream generations. A completed event is removed from active scene state. Once an event is active, new supporting classification observations produce `UPDATED` transitions; a spatial stream-generation reset produces terminal `CANCELLED` notifications with reason `spatial_stream_reset`. No artificial sound ending timestamp is invented.
 
 ## Build-time choices
 
@@ -72,7 +72,7 @@ The `semantic_perception` node supports:
 | `event_min_start_observations` | 2 | Consecutive above-threshold observations |
 | `event_min_stop_observations` | 2 | Consecutive below-threshold observations |
 
-The initial launch exposes the commonly changed parameters; the remaining settings can be supplied through a node-specific ROS parameters YAML (future full preset support). Invalid model/configuration must fail startup rather than silently falling back to `disabled`.
+The initial launch exposes the commonly changed parameters. Other options are supported by the node but **not yet exposed via a user-friendly launch YAML preset**; extending the launch interface remains a follow-up. Invalid model/configuration must fail startup rather than silently falling back to `disabled`.
 
 ## Source identity and time
 
@@ -84,8 +84,8 @@ The emitted scores are explicitly **uncalibrated** model outputs; they do not pr
 
 ## Validation still required
 
-- A deterministic native `libaudition` classification-to-event regression using an injected fake classifier (test only; no fake production events).
-- Full native YAMNet/ONNX compile and configured model-load checks in CI, without distributing weights.
+- **Implemented:** deterministic native `libaudition` classification-to-event regression using an injected fake classifier (test only; no fake production events).
+- **Implemented:** full native YAMNet/ONNX compile in dedicated CI. Real model-load and model-weight inference checks remain pending.
 - Real pinned model inference on a recorded mono source; compare with independent ONNX output, count dropped windows, record per-source inference and queue latency.
 - Source retirement and stream reset regressions with in-flight inference; cross-generation event filtering.
 - Real ReSpeaker/ODAS separation and microphone calibration, hardware performance on RK3588/Qualcomm.
