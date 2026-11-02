@@ -1,6 +1,6 @@
 # libaudition Integration and User Configuration
 
-**Status:** Proposed public configuration contract; do not assume that the parameters in the examples already exist.  
+**Status:** Architecture and proposed public configuration contract, with M0–M2 implementation notes in sections 9–10. The section 3 example is still future YAML, not a runnable preset.  
 **Baseline:** libaudition `72fc4040f0e21f1271a6b14c787cc8fa73cb3ad3` (main, 2026-11-01); ROS 2 Humble.  
 **Companions:** [ROS node architecture](ROS2_ARCHITECTURE.md), [roadmap](ROADMAP.md), [M1 implementation status](M1_IMPLEMENTATION.md).
 
@@ -185,9 +185,9 @@ Acceptance: each enabled module needs build-time availability test, malformed-co
 
 ## 8. Current implementation vs this proposal
 
-**Implemented:** `audition_msgs`, WAV replay, safe no-backend scene scaffold, and opt-in native ODAS conversion (tested with a synthetic six-channel WAV). An initial ReSpeaker profile exists but intentionally has no calibrated coordinates. Basic ROS Humble and native ODAS integration workflows have been run.
+**Implemented:** `audition_msgs`, WAV/ALSA capture, safe disabled-spatial scaffold, strict mono capture-to-semantic routing, optional native ODAS, YAMNet classification/events and Sherpa/Whisper speech adapters. Canonical scene source/event/transcript generation fences are tested. ReSpeaker geometry is still uncalibrated and real-model accuracy has not been established.
 
-**Not implemented:** the generic runtime backend registry, automatic user YAML presets, ALSA capture in audition_ros2, a native semantic pipeline, class/event reconciliation, lifecycle reset/reload service, confidence calibration, multi-sensor fusion and navigation consumers.
+**Not implemented:** generic runtime backend registry, validated user-facing profile selector, model discovery/capabilities service, transactional reload, hardware-validated DOA/speech accuracy, confidence calibration, multi-sensor fusion and navigation consumers.
 
 This document describes the desired developer/user-facing experience and gives a concrete contract for further implementation; it must not be misread as completed functionality.
 
@@ -230,18 +230,18 @@ real classifier accuracy.
 
 ## 10. Implemented mono/no-ODAS routing (2026-11-02)
 
-The M2 launch parameter \`spatial_backend:=mono\` now chooses a dedicated
-\`MonoSourceNode\`, not a disabled spatial engine. One real 16 kHz mono
+The M2 launch parameter `spatial_backend:=mono` now chooses a dedicated
+`MonoSourceNode`, not a disabled spatial engine. One real 16 kHz mono
 capture stream becomes one source-local PCM stream for the existing semantic
-runtime. The canonical source has \`has_direction=false\`,
-\`has_range=false\`, \`has_position=false\`, empty spatial/speaker IDs and
+runtime. The canonical source has `has_direction=false`,
+`has_range=false`, `has_position=false`, empty spatial/speaker IDs and
 an explicit generation fence. This is **not** speaker diarization or a
 localization estimate. Sequence gaps, capture-clock regressions and long
 timestamp gaps reset the generation; invalid PCM never advances it.
 See [M1 implementation](M1_IMPLEMENTATION.md) for launch commands, limits
 and test coverage.
 
-The earlier proposed \`mono_speech\` preset is **not yet** a validated
+The earlier proposed `mono_speech` preset is **not yet** a validated
 profile selector: the executable route exists, but M2c profile schema,
 capabilities discovery and transactional reload still remain. Do not
 interpret the future-YAML example in section 3 as runnable configuration.

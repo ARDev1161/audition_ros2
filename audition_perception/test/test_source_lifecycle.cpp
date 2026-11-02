@@ -147,3 +147,27 @@ TEST(SourceLifecycle, MalformedSnapshotsCannotCorruptStreamOrSources) {
   ASSERT_EQ(recovered.scene.sources.size(), 1U);
   EXPECT_EQ(recovered.scene.sources.front().source_id, "known");
 }
+
+
+TEST(SourceLifecycle, MonoCaptureIsAdmittedWithoutFabricatedGeometry) {
+  SourceLifecycle lifecycle(100ms, 600ms, 8);
+  const auto t = SourceLifecycle::TimePoint{};
+  auto mono = source(1, "mono-stream");
+  mono.sources.front().has_direction = false;
+  mono.sources.front().direction_unit.x = 0;
+  mono.sources.front().spatial_track_id.clear();
+  const auto admitted = lifecycle.observe(mono, t);
+  ASSERT_EQ(admitted.scene.sources.size(), 1U);
+  EXPECT_TRUE(lifecycle.isLive("mono-stream", 1));
+  EXPECT_FALSE(admitted.scene.sources.front().has_direction);
+  EXPECT_FALSE(admitted.scene.sources.front().has_range);
+  EXPECT_FALSE(admitted.scene.sources.front().has_position);
+  const auto lost = lifecycle.tick(t + 150ms, mono.header);
+  ASSERT_EQ(lost.scene.sources.size(), 1U);
+  EXPECT_EQ(lost.scene.sources.front().state, AcousticSource::LOST);
+  const auto ended = lifecycle.tick(t + 600ms, mono.header);
+  EXPECT_TRUE(ended.scene.sources.empty());
+  ASSERT_EQ(ended.sources.sources.size(), 1U);
+  EXPECT_EQ(ended.sources.sources.front().state, AcousticSource::ENDED);
+  EXPECT_FALSE(lifecycle.isLive("mono-stream", 1));
+}
