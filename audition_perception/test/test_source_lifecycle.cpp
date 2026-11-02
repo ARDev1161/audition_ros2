@@ -14,6 +14,7 @@ AcousticSourceArray source(std::uint64_t generation = 1, const char * id = "a") 
   snapshot.generation = generation;
   AcousticSource s;
   s.source_id = id;
+  s.header.frame_id = snapshot.header.frame_id;
   s.source_generation = generation;
   s.state = AcousticSource::ACTIVE;
   s.has_direction = true;
