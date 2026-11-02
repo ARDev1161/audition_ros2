@@ -210,3 +210,21 @@ and 880Hz WAVs, validates PCM, canonical scene frames and independent
 capability services, and rejects unexpected global /audition topics.
 This is graph isolation, not physical ODAS calibration, a fleet registry
 or transactional model reload. Runtime semantic parameters remain immutable.
+
+## M2e: bounded ODAS ingress, generation fencing and observability
+
+The ODAS adapter stages at most eight hops of normalized multichannel PCM,
+processes fixed-size timestamped hops, and rejects malformed frames without
+mutating buffered audio. Capture sequence gaps, backward time, >250 ms
+unexpected forward gaps and channel-count changes reset the ODAS session and
+increment the spatial source generation. Overflow drops the **whole** chunk
+and resets the session; ODAS exceptions also fence the stream. An empty
+new-generation snapshot is published before any replacement tracks.
+
+Inspect `/audition/spatial_perception/get_ingress_status` with
+`audition_msgs/srv/GetIngressStatus`; counters are monotonic since startup.
+With a custom namespace, replace `/audition` accordingly. The helper has
+deterministic unit tests in the default Humble build; the native ODAS workflow
+tests the service while processing a synthetic multichannel WAV. No physical
+array calibration or real-time performance is implied. Transactional
+reconfiguration and HIL metrics remain outstanding.

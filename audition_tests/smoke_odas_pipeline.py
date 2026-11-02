@@ -7,6 +7,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from audition_msgs.msg import AcousticScene, AcousticSourceArray
+from audition_msgs.srv import GetIngressStatus
 
 
 class Probe(Node):
@@ -16,6 +17,9 @@ class Probe(Node):
         self.saw_scene = False
         self.internal_generation = None
         self.invalid_spatial_observation = False
+        self.status_client = self.create_client(GetIngressStatus,
+            "/audition/spatial_perception/get_ingress_status")
+        self.status_future = None
         self.create_subscription(
             AcousticSourceArray,
             "/audition/internal/spatial_sources",
@@ -60,8 +64,18 @@ def main():
             if probe.invalid_spatial_observation:
                 print('ODAS violated bearing/source contract', file=sys.stderr)
                 return 1
-            if probe.saw_internal and probe.saw_scene:
-                print("ODAS integration smoke PASS: spatial worker and scene messages received.")
+            if probe.saw_internal and probe.saw_scene and probe.status_future is None:
+                if probe.status_client.service_is_ready():
+                    probe.status_future = probe.status_client.call_async(
+                        GetIngressStatus.Request())
+            if probe.status_future is not None and probe.status_future.done():
+                result = probe.status_future.result()
+                if (result is None or result.backend != "odas" or
+                        result.generation < 1 or result.accepted_frames == 0 or
+                        result.processed_hops == 0 or result.rejected_frames != 0):
+                    print("ODAS ingress status invalid", result, file=sys.stderr)
+                    return 1
+                print("ODAS integration smoke PASS: native spatial hops, scene, ingress counters.")
                 print("NOTE: this only verifies ROS integration, not measured DOA accuracy.")
                 return 0
         print("ODAS integration smoke FAILED: no processed spatial scene.", file=sys.stderr)

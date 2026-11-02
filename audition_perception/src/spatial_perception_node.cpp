@@ -1,4 +1,5 @@
 #include "audition_perception/spatial_perception_node.hpp"
+#include "audition_perception/odas_ingress.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -131,81 +132,55 @@ public:
     sample_rate_ = options.sample_rate_hz;
     hop_ = options.hop_size;
     odas_ = std::make_unique<audition::OdasSpatialEngine>(std::move(options));
+    ingress_ = std::make_unique<OdasIngress>(sample_rate_, hop_, frame_id_,
+      static_cast<std::uint32_t>(*std::max_element(input_channels_.begin(), input_channels_.end()) + 1));
 #endif
   }
 
   void process(const audition_msgs::msg::AudioFrame & msg,
       const rclcpp::Publisher<audition_msgs::msg::AcousticSourceArray>::SharedPtr & source_pub,
       const rclcpp::Publisher<audition_msgs::msg::SourceAudioFrame>::SharedPtr & audio_pub) {
-    if (!validFrame(msg)) throw std::invalid_argument("Invalid AudioFrame payload/layout");
-
     audition_msgs::msg::AcousticSourceArray snapshot;
     snapshot.header = msg.header;
     snapshot.generation = generation_;
 
     if (backend_ == "disabled") {
+      if (!validFrame(msg)) throw std::invalid_argument("Invalid AudioFrame payload/layout");
       source_pub->publish(std::move(snapshot));
       return;
     }
 #ifdef AUDITION_ROS2_WITH_ODAS
-    if (msg.header.frame_id != frame_id_ || msg.sample_rate_hz != sample_rate_ ||
-        *std::max_element(input_channels_.begin(), input_channels_.end()) >= msg.channel_count) {
-      throw std::invalid_argument("Input does not match the calibrated ODAS frame/rate/channels");
+    auto batch = ingress_->push(msg);
+    snapshot.generation = batch.generation;
+    if (batch.reset) {
+      // Publish a new empty epoch before any new tracks/PCM: the scene
+      // cancels stale events and ASR cannot reattach old worker results.
+      odas_->reset();
+      tracks_.clear();
+      source_pub->publish(snapshot);
     }
-    // A discontinuity must never join samples from different source generations.
-    const auto stamp_ns = toNanoseconds(msg.header.stamp);
-    if ((have_sequence_ && msg.sequence_number != last_sequence_ + 1) ||
-        (have_stamp_ && stamp_ns < last_stamp_ns_)) {
-      restart();
-      snapshot.generation = generation_;
-    }
-    have_sequence_ = true;
-    last_sequence_ = msg.sequence_number;
-    have_stamp_ = true;
-    last_stamp_ns_ = stamp_ns;
-
-    if (pending_channels_ != 0 && pending_channels_ != msg.channel_count) {
-      restart();
-      audition_msgs::msg::AcousticSourceArray empty;
-      empty.header = msg.header;
-      empty.generation = generation_;
-      source_pub->publish(empty);
-      throw std::invalid_argument("Channel count changed; ODAS restarted");
-    }
-    if (msg.frame_count > hop_ * 4) {
-      throw std::invalid_argument("AudioFrame exceeds bounded ODAS ingress chunk");
-    }
-    if (pending_.empty()) pending_stamp_ns_ = stamp_ns;
-    const auto frame_count = static_cast<std::size_t>(msg.frame_count);
-    const auto channel_count = static_cast<std::size_t>(msg.channel_count);
-    const auto pending_count = pending_.size();
-    const auto maximum = (hop_ * channel_count) * 8;
-    if (pending_count + msg.pcm.size() > maximum) {
-      restart();
-      snapshot.generation = generation_;
-      pending_stamp_ns_ = stamp_ns;
-    }
-    if (msg.layout == audition_msgs::msg::AudioFrame::INTERLEAVED) {
-      pending_.insert(pending_.end(), msg.pcm.begin(), msg.pcm.end());
-    } else {
-      for (std::size_t n = 0; n < frame_count; ++n)
-        for (std::size_t ch = 0; ch < channel_count; ++ch)
-          pending_.push_back(msg.pcm[ch * frame_count + n]);
-    }
-    pending_channels_ = msg.channel_count;
-    const auto hop_samples = static_cast<std::size_t>(hop_) * channel_count;
-    while (pending_.size() >= hop_samples) {
-      std::vector<float> hop_pcm(pending_.begin(), pending_.begin() + hop_samples);
-      pending_.erase(pending_.begin(), pending_.begin() + hop_samples);
-      const auto hop_stamp = pending_stamp_ns_;
-      pending_stamp_ns_ += static_cast<std::int64_t>(hop_) * 1000000000LL / sample_rate_;
+    for (auto & hop : batch.hops) {
+      const auto hop_stamp = hop.capture_ns;
       audition::AudioBuffer buffer{
-        std::move(hop_pcm),
-        audition::AudioFormat{sample_rate_, msg.channel_count, audition::AudioLayout::Interleaved},
+        std::move(hop.pcm),
+        audition::AudioFormat{sample_rate_, hop.channels, audition::AudioLayout::Interleaved},
         audition::Timestamp{hop_stamp, {audition::ClockDomain::External, 1}},
-        ++hop_sequence_
+        hop.sequence
       };
-      auto result = odas_->process(buffer.view());
+      audition::SpatialResult result;
+      try {
+        result = odas_->process(buffer.view());
+      } catch (...) {
+        ingress_->backendFailure();
+        tracks_.clear();
+        snapshot.sources.clear();
+        snapshot.generation = ingress_->generation();
+        snapshot.header.stamp = asStamp(hop_stamp);
+        source_pub->publish(snapshot);
+        odas_->reset();
+        throw;
+      }
+
       std::unordered_map<std::uint64_t, bool> seen;
       snapshot.sources.clear();
       snapshot.header.stamp = asStamp(hop_stamp);
@@ -267,27 +242,35 @@ public:
 #endif
   }
 
+  void status(audition_msgs::srv::GetIngressStatus::Response & response) const {
+    response.backend = backend_;
+    response.generation = backend_ == "odas" ? ingress_->generation() : generation_;
+#ifdef AUDITION_ROS2_WITH_ODAS
+    if (backend_ == "odas") {
+      const auto & stats = ingress_->stats();
+      response.accepted_frames = stats.accepted_frames;
+      response.rejected_frames = stats.rejected_frames;
+      response.overflow_drops = stats.overflow_drops;
+      response.discontinuity_resets = stats.discontinuity_resets;
+      response.backend_resets = stats.backend_resets;
+      response.processed_hops = stats.processed_hops;
+      response.buffered_frames = ingress_->bufferedFrames();
+    }
+#endif
+    response.note = "Counters since process startup; resets fence source generations. "
+      "No measured ODAS accuracy or upstream DDS queue drop estimate.";
+  }
+
 private:
 #ifdef AUDITION_ROS2_WITH_ODAS
-  void restart() {
-    odas_->reset();
-    pending_.clear();
-    tracks_.clear();
-    pending_channels_ = 0;
-    have_sequence_ = false;
-    have_stamp_ = false;
-    ++generation_;
-  }
   std::unique_ptr<audition::OdasSpatialEngine> odas_;
+  std::unique_ptr<OdasIngress> ingress_;
   std::vector<std::size_t> input_channels_{};
   std::unordered_map<std::uint64_t, std::string> tracks_{};
-  std::vector<float> pending_{};
-  std::uint32_t sample_rate_{0}, hop_{0}, pending_channels_{0};
-  std::int64_t pending_stamp_ns_{0}, last_stamp_ns_{0};
-  std::uint64_t last_sequence_{0}, hop_sequence_{0}, source_counter_{0};
+  std::uint32_t sample_rate_{0}, hop_{0};
+  std::uint64_t source_counter_{0};
   std::uint64_t session_{static_cast<std::uint64_t>(
     std::chrono::steady_clock::now().time_since_epoch().count())};
-  bool have_sequence_{false}, have_stamp_{false};
 #endif
   std::string backend_, frame_id_;
   std::uint64_t generation_{1};
@@ -304,6 +287,13 @@ SpatialPerceptionNode::SpatialPerceptionNode(const rclcpp::NodeOptions & options
     "internal/spatial_sources", rclcpp::QoS(10).reliable());
   separated_pub_ = create_publisher<audition_msgs::msg::SourceAudioFrame>(
     "internal/source_audio", rclcpp::SensorDataQoS());
+  status_srv_ = create_service<audition_msgs::srv::GetIngressStatus>(
+    "spatial_perception/get_ingress_status",
+    [this](
+      const std::shared_ptr<audition_msgs::srv::GetIngressStatus::Request>,
+      std::shared_ptr<audition_msgs::srv::GetIngressStatus::Response> response) {
+      impl_->status(*response);
+    });
   RCLCPP_INFO(get_logger(), "Spatial backend: %s", backend_.c_str());
 }
 SpatialPerceptionNode::~SpatialPerceptionNode() = default;

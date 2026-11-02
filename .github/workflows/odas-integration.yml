@@ -46,7 +46,17 @@ jobs:
           source /opt/ros/humble/setup.bash
           export CMAKE_PREFIX_PATH="/tmp/audition-install:${CMAKE_PREFIX_PATH}"
           colcon build --event-handlers console_direct+ \
-            --cmake-args -DAUDITION_ROS2_WITH_ODAS=ON -DAUDITION_ROS2_WITH_ALSA=ON -DAUDITION_ROS2_WITH_SEMANTIC=ON -DBUILD_TESTING=OFF
+            --cmake-args -DAUDITION_ROS2_WITH_ODAS=ON -DAUDITION_ROS2_WITH_ALSA=ON -DAUDITION_ROS2_WITH_SEMANTIC=ON -DBUILD_TESTING=ON
+      - name: Test bounded ODAS ingress and generation fences
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          export CMAKE_PREFIX_PATH="/tmp/audition-install:${CMAKE_PREFIX_PATH}"
+          export LD_LIBRARY_PATH="/tmp/audition-install/lib:${LD_LIBRARY_PATH:-}"
+          source install/setup.bash
+          colcon test --packages-select audition_perception --ctest-args -R odas_ingress_test --event-handlers console_direct+
+          colcon test-result --verbose
       - name: Smoke actual ODAS pipeline on synthetic multichannel WAV
         shell: bash
         run: |

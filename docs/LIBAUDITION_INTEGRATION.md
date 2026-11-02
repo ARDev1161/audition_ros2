@@ -303,3 +303,39 @@ and 880Hz WAVs, validates PCM, canonical scene frames and independent
 capability services, and rejects unexpected global /audition topics.
 This is graph isolation, not physical ODAS calibration, a fleet registry
 or transactional model reload. Runtime semantic parameters remain immutable.
+
+## 13. M2e ODAS bounded ingress and capture continuity (2026-11-02)
+
+The native ODAS adapter now uses a model-independent `OdasIngress` stage.
+It validates complete normalized PCM frames (including channel mapping, time,
+calibrated frame, rate and chunk size) **before** changing its state. Accepted
+frames are converted to fixed-size, timestamped interleaved hops without
+resampling, channel mixing or phase-altering enhancement. The default buffer
+limit is eight hops, with at most four hops in one capture message.
+
+Sequence gaps, backwards capture time, gaps greater than 250 ms beyond the
+expected next sample and capture-channel changes reset the ingress and ODAS
+state. The adapter emits an empty **new-generation** spatial snapshot before
+any new results, allowing canonical scene/event and speech workers to reject
+stale generations. On buffer overflow, the entire incoming chunk is dropped
+and the epoch resets; on an ODAS exception, the epoch also resets and the
+failure propagates to the ROS error log. Malformed frames are rejected without
+mutating the generation or pending audio.
+
+A typed, namespaced read-only service exposes counters:
+```bash
+ros2 service call /audition/spatial_perception/get_ingress_status \
+  audition_msgs/srv/GetIngressStatus "{}"
+# or /robot_a/audition/spatial_perception/get_ingress_status
+```
+Counters include accepted/rejected frames, overflow drops, discontinuity and
+backend resets, processed hops, buffered frames and current source generation.
+They are since node startup, not DDS transport drop counters. The service
+exists for `spatial_backend:=disabled` too, returning zero ingress counts.
+The mono route has its own generation logic and does not expose this service.
+
+Deterministic C++ tests cover interleaving, timestamps, malformed input,
+reset causes, buffer overflow and recovery. Native ODAS CI additionally
+checks the service against actual synthetic WAV processing. Neither test
+certifies ReSpeaker calibration, measured DOA accuracy or end-to-end latency.
+A full transactional `ReloadPipeline` is still future work.

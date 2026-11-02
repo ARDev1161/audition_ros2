@@ -3,6 +3,7 @@
 #include <audition_msgs/msg/audio_frame.hpp>
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <audition_msgs/msg/source_audio_frame.hpp>
+#include <audition_msgs/srv/get_ingress_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include <cstdint>
@@ -26,6 +27,7 @@ private:
   rclcpp::Subscription<audition_msgs::msg::AudioFrame>::SharedPtr audio_sub_;
   rclcpp::Publisher<audition_msgs::msg::AcousticSourceArray>::SharedPtr sources_pub_;
   rclcpp::Publisher<audition_msgs::msg::SourceAudioFrame>::SharedPtr separated_pub_;
+  rclcpp::Service<audition_msgs::srv::GetIngressStatus>::SharedPtr status_srv_;
   std::string backend_;
 };
 }  // namespace audition_perception

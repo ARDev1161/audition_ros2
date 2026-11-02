@@ -29,6 +29,7 @@ endif()
 
 add_library(audition_perception_components SHARED
   src/spatial_perception_node.cpp
+  src/odas_ingress.cpp
   src/mono_router.cpp
   src/mono_source_node.cpp
   src/source_lifecycle.cpp
@@ -95,6 +96,11 @@ if(BUILD_TESTING)
     target_compile_features(semantic_runtime_test PUBLIC cxx_std_17)
     target_link_libraries(semantic_runtime_test audition::pipeline)
   endif()
+  ament_add_gtest(odas_ingress_test test/test_odas_ingress.cpp)
+  target_compile_features(odas_ingress_test PUBLIC cxx_std_17)
+  target_include_directories(odas_ingress_test PRIVATE include)
+  target_link_libraries(odas_ingress_test audition_perception_components)
+  ament_target_dependencies(odas_ingress_test audition_msgs)
   ament_add_gtest(mono_router_test test/test_mono_router.cpp)
   target_compile_features(mono_router_test PUBLIC cxx_std_17)
   target_include_directories(mono_router_test PRIVATE include)
