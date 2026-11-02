@@ -29,6 +29,7 @@ public:
     std::uint64_t overflow_drops{0};
     std::uint64_t discontinuity_resets{0};
     std::uint64_t backend_resets{0};
+    std::uint64_t staged_hops{0};
     std::uint64_t processed_hops{0};
   };
 
@@ -37,6 +38,7 @@ public:
               std::uint32_t max_pending_hops = 8);
   Batch push(const audition_msgs::msg::AudioFrame & frame);
   void backendFailure() noexcept;
+  void markProcessedHop() noexcept { ++stats_.processed_hops; }
   std::uint64_t generation() const noexcept { return generation_; }
   std::uint32_t bufferedFrames() const noexcept;
   const Stats & stats() const noexcept { return stats_; }

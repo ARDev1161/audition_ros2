@@ -8,6 +8,7 @@ uint64 rejected_frames
 uint64 overflow_drops
 uint64 discontinuity_resets
 uint64 backend_resets
+uint64 staged_hops
 uint64 processed_hops
 uint32 buffered_frames
 string note

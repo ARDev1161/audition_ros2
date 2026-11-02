@@ -222,7 +222,8 @@ and resets the session; ODAS exceptions also fence the stream. An empty
 new-generation snapshot is published before any replacement tracks.
 
 Inspect `/audition/spatial_perception/get_ingress_status` with
-`audition_msgs/srv/GetIngressStatus`; counters are monotonic since startup.
+`audition_msgs/srv/GetIngressStatus`; counters are monotonic since startup. `staged_hops` counts ingress-produced
+hops; `processed_hops` counts only successful native ODAS process calls.
 With a custom namespace, replace `/audition` accordingly. The helper has
 deterministic unit tests in the default Humble build; the native ODAS workflow
 tests the service while processing a synthetic multichannel WAV. No physical

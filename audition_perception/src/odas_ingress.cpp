@@ -131,7 +131,7 @@ OdasIngress::Batch OdasIngress::push(
     hop.channels = msg.channel_count;
     batch.hops.push_back(std::move(hop));
     pending_stamp_ns_ += static_cast<std::int64_t>(hop_) * kSecond / rate_;
-    ++stats_.processed_hops;
+    ++stats_.staged_hops;
   }
   batch.generation = generation_;
   return batch;

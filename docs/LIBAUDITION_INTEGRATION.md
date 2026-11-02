@@ -329,7 +329,8 @@ ros2 service call /audition/spatial_perception/get_ingress_status \
 # or /robot_a/audition/spatial_perception/get_ingress_status
 ```
 Counters include accepted/rejected frames, overflow drops, discontinuity and
-backend resets, processed hops, buffered frames and current source generation.
+backend resets, staged hops, successfully processed native ODAS hops,
+buffered frames and current source generation.
 They are since node startup, not DDS transport drop counters. The service
 exists for `spatial_backend:=disabled` too, returning zero ingress counts.
 The mono route has its own generation logic and does not expose this service.

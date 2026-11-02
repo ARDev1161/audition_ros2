@@ -181,6 +181,7 @@ public:
           throw;
         }
       }();
+      ingress_->markProcessedHop();
 
       std::unordered_map<std::uint64_t, bool> seen;
       snapshot.sources.clear();
@@ -255,6 +256,7 @@ public:
       response.overflow_drops = stats.overflow_drops;
       response.discontinuity_resets = stats.discontinuity_resets;
       response.backend_resets = stats.backend_resets;
+      response.staged_hops = stats.staged_hops;
       response.processed_hops = stats.processed_hops;
       response.buffered_frames = ingress_->bufferedFrames();
     }

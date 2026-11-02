@@ -44,7 +44,10 @@ TEST(OdasIngress, BoundedHopsPreserveCaptureClockAndPCM) {
   EXPECT_EQ(seqs, (std::vector<std::uint64_t>{1, 2, 3, 4, 5}));
   EXPECT_EQ(ingress.bufferedFrames(), 0U);
   EXPECT_EQ(ingress.stats().accepted_frames, 4U);
-  EXPECT_EQ(ingress.stats().processed_hops, 5U);
+  EXPECT_EQ(ingress.stats().staged_hops, 5U);
+  EXPECT_EQ(ingress.stats().processed_hops, 0U);
+  ingress.markProcessedHop();
+  EXPECT_EQ(ingress.stats().processed_hops, 1U);
 }
 
 TEST(OdasIngress, PlanarFramesBecomeInterleavedWithoutMixingChannels) {
