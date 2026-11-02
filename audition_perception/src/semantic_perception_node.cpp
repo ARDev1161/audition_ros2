@@ -1,23 +1,337 @@
 #include "audition_perception/semantic_perception_node.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#ifdef AUDITION_ROS2_WITH_SEMANTIC
+#include <audition/classify/source_classification_runtime.hpp>
+#include <audition/pipeline/temporal_acoustic_event_detector.hpp>
+#ifdef AUDITION_ROS2_WITH_YAMNET
+#include <audition/backends/yamnet/audio_tagger.hpp>
+#endif
+#endif
+
 #include <rclcpp_components/register_node_macro.hpp>
 
 namespace audition_perception {
+namespace {
+bool validInput(const audition_msgs::msg::SourceAudioFrame & msg) {
+  return !msg.source_id.empty() && !msg.header.frame_id.empty() &&
+    msg.sample_rate_hz == 16000 && msg.frame_count > 0 &&
+    msg.frame_count <= 4096 && msg.pcm.size() == msg.frame_count &&
+    std::all_of(msg.pcm.begin(), msg.pcm.end(), [](float value) {
+      return std::isfinite(value) && value >= -1.0f && value <= 1.0f;
+    });
+}
+#ifdef AUDITION_ROS2_WITH_SEMANTIC
+std::int64_t stampNs(const builtin_interfaces::msg::Time & stamp) {
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
+}
+builtin_interfaces::msg::Time stampFromNs(std::int64_t ns) {
+  constexpr auto billion = std::int64_t{1000000000};
+  auto sec = ns / billion;
+  auto sub = ns % billion;
+  if (sub < 0) { --sec; sub += billion; }
+  if (sec < std::numeric_limits<std::int32_t>::min() ||
+      sec > std::numeric_limits<std::int32_t>::max()) {
+    throw std::overflow_error("Semantic observation stamp outside ROS range");
+  }
+  builtin_interfaces::msg::Time stamp;
+  stamp.sec = static_cast<std::int32_t>(sec);
+  stamp.nanosec = static_cast<std::uint32_t>(sub);
+  return stamp;
+}
+#endif
+}  // namespace
+
+class SemanticPerceptionNode::Impl {
+public:
+  Impl(SemanticPerceptionNode & node) {
+    backend_ = node.declare_parameter<std::string>("classifier_backend", "disabled");
+    if (backend_ == "disabled") return;
+    if (backend_ != "yamnet") {
+      throw std::invalid_argument("Unknown semantic classifier backend: " + backend_);
+    }
+#ifndef AUDITION_ROS2_WITH_YAMNET
+    throw std::runtime_error("YAMNet requested but this binary lacks "
+                             "-DAUDITION_ROS2_WITH_YAMNET=ON");
+#else
+    const auto model = node.declare_parameter<std::string>("yamnet_model", "");
+    const auto labels = node.declare_parameter<std::string>("yamnet_labels", "");
+    const auto top_k = node.declare_parameter<int>("yamnet_top_k", 5);
+    const auto threads = node.declare_parameter<int>("yamnet_threads", 1);
+    const auto window = node.declare_parameter<int>("window_samples", 15600);
+    const auto hop = node.declare_parameter<int>("hop_samples", 7800);
+    max_sources_ = node.declare_parameter<int>("max_sources", 16);
+    const auto start = node.declare_parameter<double>("event_start_threshold", 0.70);
+    const auto stop = node.declare_parameter<double>("event_stop_threshold", 0.40);
+    const auto rising = node.declare_parameter<int>("event_min_start_observations", 2);
+    const auto falling = node.declare_parameter<int>("event_min_stop_observations", 2);
+    if (model.empty() || labels.empty() || top_k <= 0 || top_k > 521 ||
+        threads <= 0 || threads > 32 || window <= 0 || window > 160000 ||
+        hop <= 0 || hop > window || max_sources_ <= 0 || max_sources_ > 128 ||
+        rising < 1 || falling < 1) {
+      throw std::invalid_argument("Invalid YAMNet model paths/window/event limits");
+    }
+    audition::YamnetOnnxOptions options;
+    options.model = model;
+    options.labels = labels;
+    options.top_k = static_cast<std::size_t>(top_k);
+    options.intra_op_threads = threads;
+    auto classifier = std::make_unique<audition::YamnetAudioTagger>(options);
+    if (!classifier->supportsWindowSamples(static_cast<std::size_t>(window))) {
+      throw std::invalid_argument("YAMNet ONNX input shape conflicts with window_samples");
+    }
+    audition::TemporalAcousticEventDetectorOptions detector_options;
+    detector_options.start_threshold = audition::Probability::from(start);
+    detector_options.stop_threshold = audition::Probability::from(stop);
+    detector_options.min_start_observations = static_cast<std::size_t>(rising);
+    detector_options.min_stop_observations = static_cast<std::size_t>(falling);
+    detector_options.max_sources = static_cast<std::size_t>(max_sources_);
+    detector_options.max_labels_per_source = 64;
+    detector_options.max_observation_gap = audition::Duration{2000000000};
+    detector_ = std::make_unique<audition::TemporalAcousticEventDetector>(detector_options);
+    // This is libaudition's bounded inference worker, not a new ROS worker.
+    runtime_ = std::make_unique<audition::SourceClassificationRuntime>(
+      std::move(classifier), 16000, static_cast<std::size_t>(window),
+      static_cast<std::size_t>(max_sources_), static_cast<std::size_t>(hop));
+#endif
+  }
+
+  bool enabled() const noexcept { return backend_ == "yamnet"; }
+
+  void onAudio(const audition_msgs::msg::SourceAudioFrame & msg,
+    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub)
+  {
+    if (!enabled()) return;
+#ifdef AUDITION_ROS2_WITH_YAMNET
+    const auto timestamp = stampNs(msg.header.stamp);
+    auto it = sources_.find(msg.source_id);
+    if (it != sources_.end() && msg.source_generation < it->second.generation) return;
+
+    // Never join two separated-source epochs or gaps into one YAMNet window.
+    const auto discontinuity = it != sources_.end() &&
+      (msg.source_generation != it->second.generation ||
+       msg.sequence_number != it->second.sequence + 1 ||
+       timestamp < it->second.last_timestamp_ns ||
+       timestamp > it->second.expected_next_ns + 250000000LL);
+    if (discontinuity) {
+      retire(it, timestamp, event_pub, "source_discontinuity");
+      it = sources_.end();
+    }
+    if (it == sources_.end()) {
+      if (sources_.size() >= static_cast<std::size_t>(max_sources_)) {
+        throw std::runtime_error("Semantic max_sources exceeded");
+      }
+      Source state;
+      state.id = next_id_++;
+      state.generation = msg.source_generation;
+      state.anchor_ns = timestamp;
+      state.frame_id = msg.header.frame_id;
+      it = sources_.emplace(msg.source_id, std::move(state)).first;
+      id_to_name_.emplace(it->second.id, msg.source_id);
+    }
+    if (it->second.frame_id != msg.header.frame_id) {
+      retire(it, timestamp, event_pub, "frame_changed");
+      throw std::invalid_argument("Source frame changed without generation");
+    }
+    it->second.sequence = msg.sequence_number;
+    it->second.last_timestamp_ns = timestamp;
+    it->second.sample_count += msg.frame_count;
+    it->second.expected_next_ns = timestamp +
+      static_cast<std::int64_t>(msg.frame_count) * 1000000000LL / 16000;
+    runtime_->push(it->second.id, msg.pcm.data(), msg.pcm.size());
+#else
+    (void) msg; (void) event_pub;
+#endif
+  }
+
+  void onSources(const audition_msgs::msg::AcousticSourceArray & msg,
+    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub)
+  {
+#ifdef AUDITION_ROS2_WITH_YAMNET
+    if (!enabled()) return;
+    for (const auto & source : msg.sources) {
+      if (source.state != audition_msgs::msg::AcousticSource::ENDED) continue;
+      auto it = sources_.find(source.source_id);
+      if (it != sources_.end() && it->second.generation == source.source_generation) {
+        retire(it, stampNs(msg.header.stamp), event_pub, "source_ended");
+      }
+    }
+#else
+    (void) msg; (void) event_pub;
+#endif
+  }
+
+  void poll(
+    const rclcpp::Publisher<audition_msgs::msg::SoundClassification>::SharedPtr & class_pub,
+    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub)
+  {
+#ifdef AUDITION_ROS2_WITH_YAMNET
+    if (!enabled()) return;
+    for (const auto & completed : runtime_->takeCompleted()) {
+      const auto name = id_to_name_.find(completed.source_id);
+      if (name == id_to_name_.end()) continue;  // retired worker generation
+      const auto it = sources_.find(name->second);
+      if (it == sources_.end() || it->second.id != completed.source_id ||
+          completed.end_sample <= it->second.last_result_end_sample) continue;
+      auto & source = it->second;
+      if (completed.end_sample > source.sample_count) continue;
+      const auto end_ns = source.anchor_ns +
+        static_cast<std::int64_t>(completed.end_sample) * 1000000000LL / 16000;
+      if (end_ns <= source.last_result_ns) continue;
+      source.last_result_end_sample = completed.end_sample;
+      source.last_result_ns = end_ns;
+      const audition::Timestamp observed{end_ns, {audition::ClockDomain::External, 1}};
+      for (const auto & cls : completed.result.classes) {
+        audition_msgs::msg::SoundClassification out;
+        out.header.frame_id = source.frame_id;
+        out.header.stamp = stampFromNs(end_ns);
+        out.source_id = name->second;
+        out.source_generation = source.generation;
+        out.class_label = cls.label;
+        out.taxonomy_version = "AudioSet-521";
+        out.model_id = "yamnet-onnx";
+        out.score_kind = audition_msgs::msg::SoundClassification::UNCALIBRATED_SCORE;
+        out.score = static_cast<float>(cls.probability.value());
+        class_pub->publish(std::move(out));
+      }
+      for (const auto & event : detector_->observe(
+              audition::AcousticSourceId{completed.source_id}, observed,
+              completed.result)) {
+        event_pub->publish(toRosEvent(event, name->second, source,
+          "classification_hysteresis"));
+      }
+    }
+#else
+    (void) class_pub; (void) event_pub;
+#endif
+  }
+
+private:
+#ifdef AUDITION_ROS2_WITH_YAMNET
+  struct Source {
+    std::uint64_t id{0};
+    std::uint64_t generation{0};
+    std::uint64_t sequence{0};
+    std::uint64_t sample_count{0};
+    std::uint64_t last_result_end_sample{0};
+    std::int64_t anchor_ns{0};
+    std::int64_t last_timestamp_ns{0};
+    std::int64_t expected_next_ns{0};
+    std::int64_t last_result_ns{std::numeric_limits<std::int64_t>::min()};
+    std::string frame_id;
+  };
+  audition_msgs::msg::AcousticEvent toRosEvent(
+    const audition::TemporalAcousticEvent & event,
+    const std::string & name, const Source & source,
+    const std::string & reason) const {
+    audition_msgs::msg::AcousticEvent out;
+    out.header.frame_id = source.frame_id;
+    out.header.stamp = stampFromNs(event.last_supported_time.nanoseconds());
+    out.event_id = "yamnet-" + std::to_string(source.id) + "-" +
+                   std::to_string(event.occurrence_id);
+    out.source_id = name;
+    out.source_generation = source.generation;
+    out.class_label = event.label;
+    out.taxonomy_version = "AudioSet-521";
+    out.model_id = "yamnet-onnx";
+    out.transition = event.kind == audition::TemporalAcousticEventKind::Started
+      ? audition_msgs::msg::AcousticEvent::STARTED
+      : audition_msgs::msg::AcousticEvent::ENDED;
+    out.score_kind = audition_msgs::msg::AcousticEvent::UNCALIBRATED_SCORE;
+    out.score = static_cast<float>(event.peak_score.value());
+    out.observed_start = stampFromNs(event.start_time.nanoseconds());
+    out.observed_end = stampFromNs(event.last_supported_time.nanoseconds());
+    if (out.transition == audition_msgs::msg::AcousticEvent::ENDED) {
+      out.termination_reason = reason;
+    }
+    return out;
+  }
+  void retire(
+    std::map<std::string, Source>::iterator it, std::int64_t stamp_ns,
+    const rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr & event_pub,
+    const std::string & reason) {
+    const auto ending = std::max(stamp_ns, it->second.last_result_ns);
+    const audition::Timestamp stamp{
+      ending, {audition::ClockDomain::External, 1}};
+    for (const auto & event : detector_->retire(
+           audition::AcousticSourceId{it->second.id}, stamp)) {
+      event_pub->publish(toRosEvent(event, it->first, it->second, reason));
+    }
+    runtime_->forget(it->second.id);
+    id_to_name_.erase(it->second.id);
+    sources_.erase(it);
+  }
+  std::uint64_t next_id_{1};
+  int max_sources_{16};
+  std::map<std::string, Source> sources_;
+  std::map<std::uint64_t, std::string> id_to_name_;
+  std::unique_ptr<audition::SourceClassificationRuntime> runtime_;
+  std::unique_ptr<audition::TemporalAcousticEventDetector> detector_;
+#endif
+  std::string backend_;
+};
+
 SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("semantic_perception", options)
 {
+  impl_ = std::make_unique<Impl>(*this);
+  class_pub_ = create_publisher<audition_msgs::msg::SoundClassification>(
+    "internal/classifications", rclcpp::QoS(20).reliable());
+  event_pub_ = create_publisher<audition_msgs::msg::AcousticEvent>(
+    "internal/events", rclcpp::QoS(20).reliable());
   sub_ = create_subscription<audition_msgs::msg::SourceAudioFrame>(
     "internal/source_audio", rclcpp::SensorDataQoS(),
     [this](const audition_msgs::msg::SourceAudioFrame & msg) { onSourceAudio(msg); });
-  RCLCPP_WARN(get_logger(), "Semantic inference is not implemented: no classifiers/ASR are run.");
+  sources_sub_ = create_subscription<audition_msgs::msg::AcousticSourceArray>(
+    "sources", rclcpp::QoS(10).reliable(),
+    [this](const audition_msgs::msg::AcousticSourceArray & msg) { onSources(msg); });
+  timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
+  RCLCPP_INFO(get_logger(), "Semantic backend: %s",
+    impl_->enabled() ? "yamnet" : "disabled");
 }
+SemanticPerceptionNode::~SemanticPerceptionNode() = default;
+
 void SemanticPerceptionNode::onSourceAudio(
   const audition_msgs::msg::SourceAudioFrame & msg)
 {
-  if (msg.sample_rate_hz == 0 || msg.frame_count == 0 ||
-      msg.source_id.empty() || msg.pcm.size() != msg.frame_count) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Rejected invalid SourceAudioFrame");
+  if (!validInput(msg)) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+      "Rejected invalid source audio: expected normalized mono 16 kHz");
+    return;
   }
-  // Intentionally emit no fake semantic events or transcripts.
+  try {
+    impl_->onAudio(msg, event_pub_);
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
+      "Semantic source rejected: %s", error.what());
+  }
+}
+void SemanticPerceptionNode::onSources(
+  const audition_msgs::msg::AcousticSourceArray & msg)
+{
+  try {
+    impl_->onSources(msg, event_pub_);
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
+      "Semantic source retirement error: %s", error.what());
+  }
+}
+void SemanticPerceptionNode::pollCompleted() {
+  try {
+    impl_->poll(class_pub_, event_pub_);
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
+      "Semantic inference completion failed: %s", error.what());
+  }
 }
 }  // namespace audition_perception
 RCLCPP_COMPONENTS_REGISTER_NODE(audition_perception::SemanticPerceptionNode)

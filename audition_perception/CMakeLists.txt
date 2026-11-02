@@ -5,9 +5,16 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(audition_msgs REQUIRED)
 
+option(AUDITION_ROS2_WITH_SEMANTIC "Enable libaudition semantic runtime" OFF)
+option(AUDITION_ROS2_WITH_YAMNET "Enable native YAMNet ONNX classifier" OFF)
+if(AUDITION_ROS2_WITH_YAMNET AND NOT AUDITION_ROS2_WITH_SEMANTIC)
+  message(FATAL_ERROR "YAMNet requires AUDITION_ROS2_WITH_SEMANTIC=ON")
+endif()
 option(AUDITION_ROS2_WITH_ODAS "Build native libaudition ODAS spatial adapter" OFF)
-if(AUDITION_ROS2_WITH_ODAS)
+if(AUDITION_ROS2_WITH_ODAS OR AUDITION_ROS2_WITH_SEMANTIC)
   find_package(libaudition 1 CONFIG REQUIRED)
+endif()
+if(AUDITION_ROS2_WITH_ODAS)
   if(NOT TARGET audition::backend_odas)
     message(FATAL_ERROR
       "libaudition was installed without its ODAS backend. Rebuild upstream with "
@@ -32,6 +39,22 @@ if(AUDITION_ROS2_WITH_ODAS)
     audition::backend_odas audition::core)
   target_compile_definitions(audition_perception_components PRIVATE
     AUDITION_ROS2_WITH_ODAS=1)
+endif()
+if(AUDITION_ROS2_WITH_SEMANTIC)
+  if(NOT TARGET audition::pipeline)
+    message(FATAL_ERROR "libaudition pipeline target is required for semantic runtime")
+  endif()
+  target_link_libraries(audition_perception_components audition::pipeline)
+  target_compile_definitions(audition_perception_components PRIVATE
+    AUDITION_ROS2_WITH_SEMANTIC=1)
+endif()
+if(AUDITION_ROS2_WITH_YAMNET)
+  if(NOT TARGET audition::backend_yamnet)
+    message(FATAL_ERROR "libaudition YAMNet backend not installed; enable LIBAUDITION_WITH_YAMNET")
+  endif()
+  target_link_libraries(audition_perception_components audition::backend_yamnet)
+  target_compile_definitions(audition_perception_components PRIVATE
+    AUDITION_ROS2_WITH_YAMNET=1)
 endif()
 rclcpp_components_register_nodes(audition_perception_components
   "audition_perception::SpatialPerceptionNode"
