@@ -1,5 +1,6 @@
 #include "audition_perception/spatial_perception_node.hpp"
 #include "audition_perception/odas_ingress.hpp"
+#include "audition_perception/capture_session_gate.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -146,6 +147,10 @@ public:
 
     if (backend_ == "disabled") {
       if (!validFrame(msg)) throw std::invalid_argument("Invalid AudioFrame payload/layout");
+      const auto session = capture_sessions_.inspect(msg.capture_session_id);
+      if (session == CaptureSessionGate::Decision::Changed) ++generation_;
+      capture_sessions_.commit(msg.capture_session_id);
+      snapshot.generation = generation_;
       source_pub->publish(std::move(snapshot));
       return;
     }
@@ -276,6 +281,7 @@ private:
   std::uint64_t session_{static_cast<std::uint64_t>(
     std::chrono::steady_clock::now().time_since_epoch().count())};
 #endif
+  CaptureSessionGate capture_sessions_;
   std::string backend_, frame_id_;
   std::uint64_t generation_{1};
 };
