@@ -44,12 +44,17 @@ ros2 launch audition_bringup m2_wav_pipeline.launch.py \
   wav_path:=/path/to/6_channel_recording.wav \
   spatial_backend:=odas \
   spatial_config:=/path/to/measured_array.yaml \
-  classifier_backend:=yamnet \
-  yamnet_model:=/path/to/yamnet_waveform.onnx \
-  yamnet_labels:=/path/to/yamnet_class_map.csv
+  semantic_config:=/path/to/semantic_yamnet.yaml
 ```
 
 For a real ODAS path, the microphone geometry must be physically calibrated and native ODAS installed. Without spatial separation, the source audio topic remains empty: the M2 launch currently has no fabricated single-channel shortcut. Do not infer that supplying a mono WAV is sufficient for M2 semantic classification.
+
+Create `semantic_yamnet.yaml` by copying
+[the installed example](https://github.com/ARDev1161/audition_ros2/blob/feat/m0-ros2-foundation/audition_bringup/config/semantic_m2.yaml),
+then set `classifier_backend: yamnet`, the absolute `yamnet_model`
+and `yamnet_labels` paths, and optionally adjust `window_samples`,
+`hop_samples` and event thresholds. The Sphinx documentation branch contains
+no runtime YAML or model binaries.
 
 The ONNX file must be a *waveform-input YAMNet export*, with float32 mono input at 16 kHz and a score tensor with 521 AudioSet classes. It must match the chosen sample window length. The CSV must contain 521 class labels. Model files are not bundled, downloaded or silently substituted by audition_ros2.
 
@@ -72,7 +77,7 @@ The `semantic_perception` node supports:
 | `event_min_start_observations` | 2 | Consecutive above-threshold observations |
 | `event_min_stop_observations` | 2 | Consecutive below-threshold observations |
 
-The initial launch exposes the commonly changed parameters. Other options are supported by the node but **not yet exposed via a user-friendly launch YAML preset**; extending the launch interface remains a follow-up. Invalid model/configuration must fail startup rather than silently falling back to `disabled`.
+The launch uses `semantic_config` as the **authoritative ROS parameters file**; it does not override its settings with default launch arguments. The shipped YAML disables inference until a real model and labels are supplied. Invalid model/configuration must fail startup rather than silently falling back to `disabled`.
 
 ## Source identity and time
 
