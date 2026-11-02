@@ -42,6 +42,7 @@ def generate_launch_description():
                 "frames_per_message": LaunchConfiguration("frames_per_message"),
                 "spatial_backend": LaunchConfiguration("spatial_backend"),
                 "spatial_config": LaunchConfiguration("spatial_config"),
+                "scene_config": LaunchConfiguration("scene_config"),
             }.items(),
         ),
         ComposableNodeContainer(
