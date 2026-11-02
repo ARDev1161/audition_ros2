@@ -199,6 +199,14 @@ def main():
         if not wait(probe, lambda: probe.ended and not probe.active, deadline):
             print("FAIL: ENDED did not remove active event", file=sys.stderr)
             return 1
+        probe.pub.publish(probe.event(AcousticEvent.STARTED, "ci-retire"))
+        if not wait(probe, lambda: probe.retire_started, deadline):
+            print("FAIL: retirement fixture absent", file=sys.stderr)
+            return 1
+        probe.heartbeat = False
+        if not wait(probe, lambda: probe.retire_cancelled and not probe.source_present, deadline):
+            print("FAIL: retirement did not cancel source event", file=sys.stderr)
+            return 1
         probe.pub.publish(probe.event(AcousticEvent.STARTED, "ci-reset"))
         if not wait(probe, lambda: probe.reset_active, deadline):
             print("FAIL: reset fixture never became active", file=sys.stderr)
