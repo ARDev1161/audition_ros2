@@ -23,6 +23,7 @@ def test_capture_frame_round_trip():
     msg = AudioFrame()
     msg.header.frame_id = "microphone_array"
     msg.header.stamp.sec = 17
+    msg.capture_session_id = "0123456789abcdef0123456789abcdef"
     msg.sequence_number = 29
     msg.sample_rate_hz = 16000
     msg.channel_count = 2
@@ -32,6 +33,7 @@ def test_capture_frame_round_trip():
     msg.pcm = [0.25, -0.5, 0.125, -0.25]
     restored = deserialize_message(serialize_message(msg), AudioFrame)
     assert restored.header.stamp.sec == 17
+    assert restored.capture_session_id == msg.capture_session_id
     assert restored.header.frame_id == "microphone_array"
     assert list(restored.channel_indices) == [1, 2]
     assert list(restored.pcm) == pytest.approx([0.25, -0.5, 0.125, -0.25])
