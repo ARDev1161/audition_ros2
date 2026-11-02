@@ -18,6 +18,7 @@ static Source source(const char * id, std::uint64_t generation,
   Source out;
   out.source_id = id;
   out.source_generation = generation;
+  out.spatial_session_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   out.header.frame_id = frame;
   out.state = state;
   return out;
@@ -26,6 +27,7 @@ static Snapshot snapshot(std::uint64_t generation, const char * frame) {
   Snapshot out;
   out.generation = generation;
   out.scene_session_id = "0123456789abcdef0123456789abcdef";
+  out.spatial_session_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   static std::uint64_t sequence = 0;
   out.sequence_number = ++sequence;
   out.header.frame_id = frame;
@@ -334,4 +336,34 @@ TEST(SemanticEpochGate, PerSourceCursorsResetOnlyOnRetirementReloadOrSceneEpoch)
   b.sequence_number = 0;
   EXPECT_TRUE(gate.accept(b));
   EXPECT_EQ(status(gate).out_of_order_audio_frames, 1U);
+}
+
+
+TEST(SemanticEpochGate, SpatialRestartRejectsOldPCMEvenWithFutureTimestamp) {
+  SemanticEpochGate gate;
+  auto first = snapshot(25, "mic");
+  first.sources.push_back(source("same", 25, "mic"));
+  ASSERT_EQ(gate.observe(first), SemanticEpochGate::SnapshotResult::Accepted);
+  auto old = audio("same", 25, "mic");
+  old.header.stamp.sec = 100;
+  ASSERT_TRUE(gate.accept(old));
+  auto restarted = snapshot(1, "mic");
+  restarted.scene_session_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  restarted.spatial_session_id = "cccccccccccccccccccccccccccccccc";
+  restarted.sequence_number = 1;
+  restarted.header.stamp.sec = 101;
+  restarted.sources.push_back(source("same", 1, "mic"));
+  ASSERT_EQ(gate.observe(restarted), SemanticEpochGate::SnapshotResult::NewGeneration);
+  old.source_generation = 1;
+  old.sequence_number = 100000;
+  old.header.stamp.sec = 100000;
+  EXPECT_FALSE(gate.accept(old));
+  auto fresh = old;
+  fresh.spatial_session_id = restarted.spatial_session_id;
+  EXPECT_TRUE(gate.accept(fresh));
+  auto inconsistent = restarted;
+  ++inconsistent.sequence_number;
+  inconsistent.spatial_session_id = old.spatial_session_id;
+  EXPECT_EQ(gate.observe(inconsistent), SemanticEpochGate::SnapshotResult::Rejected);
+  EXPECT_FALSE(gate.accept(old));
 }

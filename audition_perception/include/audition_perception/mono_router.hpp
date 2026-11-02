@@ -25,7 +25,9 @@ public:
 
 private:
   CaptureSessionGate capture_sessions_;
+  std::string spatial_session_id_;
   std::string source_id_;
+  std::uint64_t snapshot_sequence_{0};
   std::string frame_id_;
   builtin_interfaces::msg::Time first_seen_;
   std::uint64_t generation_{1};

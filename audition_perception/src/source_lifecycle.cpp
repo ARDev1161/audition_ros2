@@ -30,6 +30,7 @@ SourceLifecycle::Update SourceLifecycle::build(
   update.changed = changed;
   update.sources.header = header;
   update.sources.generation = stream_generation_;
+  update.sources.spatial_session_id = spatial_sessions_.current();
   update.scene.header = header;
   update.scene.generation = stream_generation_;
   update.sources.sources.reserve(tracked_.size() + ended.size());
@@ -100,10 +101,15 @@ void SourceLifecycle::retireExpired(
 SourceLifecycle::Update SourceLifecycle::observe(
   const audition_msgs::msg::AcousticSourceArray & spatial, TimePoint arrival)
 {
+  const auto decision = spatial_sessions_.inspect(spatial.spatial_session_id);
+  const bool new_session = decision == CaptureSessionGate::Decision::Changed;
   if (spatial.header.frame_id.empty() || spatial.generation == 0 ||
+      spatial.sequence_number == 0 ||
+      (decision == CaptureSessionGate::Decision::Same &&
+       spatial.sequence_number <= last_spatial_sequence_) ||
       spatial.sources.size() > max_sources_ ||
-      (have_stream_ && spatial.generation < stream_generation_) ||
-      (have_stream_ && spatial.generation == stream_generation_ &&
+      (have_stream_ && !new_session && spatial.generation < stream_generation_) ||
+      (have_stream_ && !new_session && spatial.generation == stream_generation_ &&
        spatial.header.frame_id != frame_id_)) {
     throw std::invalid_argument("Invalid frame or excessive source snapshot");
   }
@@ -120,15 +126,21 @@ SourceLifecycle::Update SourceLifecycle::observe(
   }
 
   std::vector<audition_msgs::msg::AcousticSource> ended;
-  if (have_stream_ && stream_generation_ != spatial.generation) {
-    for (const auto & pair : tracked_) {
-      auto source = pair.second.source;
-      source.state = audition_msgs::msg::AcousticSource::ENDED;
-      ended.push_back(std::move(source));
+  if (have_stream_ && (new_session || stream_generation_ != spatial.generation)) {
+    // A new producer invalidates old IDs. Do not mix old ENDED records into
+    // the new scene session; the scene cancels outstanding events separately.
+    if (!new_session) {
+      for (const auto & pair : tracked_) {
+        auto source = pair.second.source;
+        source.state = audition_msgs::msg::AcousticSource::ENDED;
+        ended.push_back(std::move(source));
+      }
     }
     tracked_.clear();
     recently_ended_.clear();
   }
+  spatial_sessions_.commit(spatial.spatial_session_id);
+  last_spatial_sequence_ = spatial.sequence_number;
   stream_generation_ = spatial.generation;
   frame_id_ = spatial.header.frame_id;
   have_stream_ = true;

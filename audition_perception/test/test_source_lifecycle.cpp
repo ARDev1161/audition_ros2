@@ -12,6 +12,9 @@ AcousticSourceArray source(std::uint64_t generation = 1, const char * id = "a") 
   AcousticSourceArray snapshot;
   snapshot.header.frame_id = "mic";
   snapshot.generation = generation;
+  snapshot.spatial_session_id = std::string(32, 'a');
+  static std::uint64_t sequence = 0;
+  snapshot.sequence_number = ++sequence;
   AcousticSource s;
   s.source_id = id;
   s.header.frame_id = snapshot.header.frame_id;
@@ -30,9 +33,8 @@ TEST(SourceLifecycle, MissingTrackIsLostThenEndedExactlyOnce) {
   auto first = lifecycle.observe(source(), t);
   ASSERT_EQ(first.scene.sources.size(), 1U);
   EXPECT_EQ(first.scene.sources[0].state, AcousticSource::ACTIVE);
-  AcousticSourceArray empty;
-  empty.header.frame_id = "mic";
-  empty.generation = 1;
+  auto empty = source();
+  empty.sources.clear();
   auto lost = lifecycle.observe(empty, t + 50ms);
   ASSERT_EQ(lost.scene.sources.size(), 1U);
   EXPECT_EQ(lost.scene.sources[0].state, AcousticSource::LOST);
@@ -51,9 +53,8 @@ TEST(SourceLifecycle, ReacquisitionBeforeDeadlineRestoresActiveState) {
   SourceLifecycle lifecycle(200ms, 1000ms, 8);
   const auto t = SourceLifecycle::TimePoint{};
   lifecycle.observe(source(), t);
-  AcousticSourceArray empty;
-  empty.header.frame_id = "mic";
-  empty.generation = 1;
+  auto empty = source();
+  empty.sources.clear();
   lifecycle.observe(empty, t + 100ms);
   auto recovered = lifecycle.observe(source(), t + 150ms);
   ASSERT_EQ(recovered.scene.sources.size(), 1U);
@@ -170,4 +171,32 @@ TEST(SourceLifecycle, MonoCaptureIsAdmittedWithoutFabricatedGeometry) {
   ASSERT_EQ(ended.sources.sources.size(), 1U);
   EXPECT_EQ(ended.sources.sources.front().state, AcousticSource::ENDED);
   EXPECT_FALSE(lifecycle.isLive("mono-stream", 1));
+}
+
+
+TEST(SourceLifecycle, SpatialRestartWithGenerationReuseRejectsOldAndDuplicateSnapshots) {
+  SourceLifecycle lifecycle(100ms, 600ms, 8);
+  const auto t = SourceLifecycle::TimePoint{};
+  auto old = source(25, "old");
+  ASSERT_EQ(lifecycle.observe(old, t).scene.sources.size(), 1U);
+  auto restart = source(1, "new");
+  restart.spatial_session_id = std::string(32, 'b');
+  restart.sequence_number = 1;
+  auto result = lifecycle.observe(restart, t + 10ms);
+  ASSERT_EQ(result.scene.sources.size(), 1U);
+  EXPECT_EQ(result.scene.sources.front().source_id, "new");
+  EXPECT_EQ(result.sources.spatial_session_id, restart.spatial_session_id);
+  EXPECT_EQ(result.sources.sources.size(), 1U);
+  EXPECT_FALSE(lifecycle.isLive("old", 25));
+  EXPECT_FALSE(lifecycle.allowsFinalTranscript("old", 25, t + 20ms));
+  EXPECT_THROW(lifecycle.observe(old, t + 20ms), std::invalid_argument);
+  EXPECT_THROW(lifecycle.observe(restart, t + 30ms), std::invalid_argument);
+  auto invalid = restart;
+  invalid.sequence_number = 2;
+  invalid.sources.front().source_generation = 3;
+  EXPECT_THROW(lifecycle.observe(invalid, t + 40ms), std::invalid_argument);
+  EXPECT_TRUE(lifecycle.isLive("new", 1));
+  auto fresh = restart;
+  fresh.sequence_number = 2;
+  EXPECT_NO_THROW(lifecycle.observe(fresh, t + 50ms));
 }

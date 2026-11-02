@@ -1,6 +1,7 @@
 #include "audition_perception/spatial_perception_node.hpp"
 #include "audition_perception/odas_ingress.hpp"
 #include "audition_perception/capture_session_gate.hpp"
+#include "audition_perception/spatial_session_id.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -138,6 +139,14 @@ public:
 #endif
   }
 
+  void publishSnapshot(
+      const rclcpp::Publisher<audition_msgs::msg::AcousticSourceArray>::SharedPtr & pub,
+      audition_msgs::msg::AcousticSourceArray & snapshot) {
+    snapshot.spatial_session_id = spatial_session_id_;
+    snapshot.sequence_number = ++spatial_sequence_;
+    pub->publish(snapshot);
+  }
+
   void process(const audition_msgs::msg::AudioFrame & msg,
       const rclcpp::Publisher<audition_msgs::msg::AcousticSourceArray>::SharedPtr & source_pub,
       const rclcpp::Publisher<audition_msgs::msg::SourceAudioFrame>::SharedPtr & audio_pub) {
@@ -151,7 +160,7 @@ public:
       if (session == CaptureSessionGate::Decision::Changed) ++generation_;
       capture_sessions_.commit(msg.capture_session_id);
       snapshot.generation = generation_;
-      source_pub->publish(std::move(snapshot));
+      publishSnapshot(source_pub, snapshot);
       return;
     }
 #ifdef AUDITION_ROS2_WITH_ODAS
@@ -162,7 +171,7 @@ public:
       // cancels stale events and ASR cannot reattach old worker results.
       odas_->reset();
       tracks_.clear();
-      source_pub->publish(snapshot);
+      publishSnapshot(source_pub, snapshot);
     }
     for (auto & hop : batch.hops) {
       const auto hop_stamp = hop.capture_ns;
@@ -181,7 +190,7 @@ public:
           snapshot.sources.clear();
           snapshot.generation = ingress_->generation();
           snapshot.header.stamp = asStamp(hop_stamp);
-          source_pub->publish(snapshot);
+          publishSnapshot(source_pub, snapshot);
           odas_->reset();
           throw;
         }
@@ -228,7 +237,7 @@ public:
         if (!seen.count(it->first)) it = tracks_.erase(it);
         else ++it;
       }
-      source_pub->publish(snapshot);
+      publishSnapshot(source_pub, snapshot);
       for (const auto & frame : result.separated_frames) {
         const auto it = tracks_.find(frame.track_id.value());
         if (it == tracks_.end()) continue;
@@ -239,6 +248,7 @@ public:
         out.header.stamp = asStamp(frame.audio.captureTime().nanoseconds());
         out.source_id = it->second;
         out.source_generation = batch.generation;
+        out.spatial_session_id = spatial_session_id_;
         out.sequence_number = frame.audio.sequenceNumber();
         out.sample_rate_hz = frame.audio.format().sample_rate_hz;
         out.frame_count = static_cast<std::uint32_t>(frame.audio.frameCount());
@@ -282,6 +292,8 @@ private:
     std::chrono::steady_clock::now().time_since_epoch().count())};
 #endif
   CaptureSessionGate capture_sessions_;
+  std::string spatial_session_id_{makeSpatialSessionId()};
+  std::uint64_t spatial_sequence_{0};
   std::string backend_, frame_id_;
   std::uint64_t generation_{1};
 };

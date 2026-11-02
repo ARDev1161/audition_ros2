@@ -1,4 +1,5 @@
 #include "audition_perception/mono_router.hpp"
+#include "audition_perception/spatial_session_id.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -36,9 +37,8 @@ std::int64_t stampNs(const builtin_interfaces::msg::Time & time) {
 }  // namespace
 
 MonoRouter::MonoRouter()
-: source_id_("mono-capture-" + std::to_string(
-    static_cast<std::uint64_t>(
-      std::chrono::steady_clock::now().time_since_epoch().count()))) {}
+: spatial_session_id_(makeSpatialSessionId()),
+  source_id_("mono-capture-" + spatial_session_id_) {}
 
 MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & frame) {
   // Reject malformed frames before touching the source epoch or publishing
@@ -68,6 +68,8 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
   Output result;
   result.sources.header = frame.header;
   result.sources.generation = generation_;
+  result.sources.spatial_session_id = spatial_session_id_;
+  result.sources.sequence_number = ++snapshot_sequence_;
   audition_msgs::msg::AcousticSource source;
   source.header = frame.header;
   source.source_id = source_id_;
@@ -82,6 +84,7 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
   result.audio.header = frame.header;
   result.audio.source_id = source_id_;
   result.audio.source_generation = generation_;
+  result.audio.spatial_session_id = spatial_session_id_;
   result.audio.sequence_number = frame.sequence_number;
   result.audio.sample_rate_hz = kSampleRate;
   result.audio.frame_count = frame.frame_count;

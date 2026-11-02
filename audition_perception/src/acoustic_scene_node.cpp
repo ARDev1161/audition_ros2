@@ -100,13 +100,22 @@ void AcousticSceneNode::onSources(
   const audition_msgs::msg::AcousticSourceArray & msg)
 {
   try {
-    if (have_stream_ && msg.generation < stream_generation_) {
-      RCLCPP_WARN(get_logger(), "Ignoring stale spatial stream generation");
-      return;
-    }
+    const auto previous_spatial_session = lifecycle_->spatialSessionId();
     // Validate/mutate source state FIRST. Malformed snapshots must not cancel
     // existing events or alter stream generation/frame identity.
     auto update = lifecycle_->observe(msg, SourceLifecycle::Clock::now());
+    if (!previous_spatial_session.empty() &&
+        previous_spatial_session != lifecycle_->spatialSessionId()) {
+      for (const auto & active : event_ledger_->active()) {
+        auto cancelled = active;
+        cancelled.transition = audition_msgs::msg::AcousticEvent::CANCELLED;
+        cancelled.termination_reason = "spatial_process_restart";
+        cancelled.header.stamp = msg.header.stamp;
+        event_pub_->publish(cancelled);
+      }
+      event_ledger_->clear();
+      scene_session_id_ = makeSceneSessionId();
+    }
     stream_generation_ = msg.generation;
     have_stream_ = true;
     frame_id_ = msg.header.frame_id;

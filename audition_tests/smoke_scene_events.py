@@ -23,6 +23,8 @@ class Probe(Node):
         self.classified = False
         self.source_present = False
         self.heartbeat = False
+        self.spatial_sequence = 0
+        self.spatial_session_id = "ffffffffffffffffffffffffffffffff"
         self.retire_started = False
         self.retire_cancelled = False
         self.late_seen = False
@@ -49,6 +51,9 @@ class Probe(Node):
         frame.header.frame_id = self.frame_id
         frame.header.stamp = self.get_clock().now().to_msg()
         frame.generation = self.scene_generation
+        self.spatial_sequence += 1
+        frame.sequence_number = self.spatial_sequence
+        frame.spatial_session_id = self.spatial_session_id
         src = AcousticSource()
         src.header = frame.header
         src.source_id = "ci-source"
@@ -236,6 +241,9 @@ def main():
         new_stream.header.frame_id = probe.frame_id
         new_stream.header.stamp = probe.get_clock().now().to_msg()
         new_stream.generation = probe.scene_generation + 1
+        probe.spatial_sequence += 1
+        new_stream.sequence_number = probe.spatial_sequence
+        new_stream.spatial_session_id = probe.spatial_session_id
         probe.spatial_pub.publish(new_stream)
         if not wait(probe, lambda: probe.cancelled and not probe.reset_active, deadline):
             print("FAIL: stream reset did not cancel active event", file=sys.stderr)

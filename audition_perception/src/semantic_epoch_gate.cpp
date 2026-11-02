@@ -37,7 +37,13 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
       return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
     });
   const bool new_session = have_stream_ && session != scene_session_id_;
-  if (!valid_session || (new_session && seen_scene_sessions_.count(session) != 0) ||
+  const auto & spatial_id = snapshot.spatial_session_id;
+  const bool valid_spatial = spatial_id.size() == 32U &&
+    std::all_of(spatial_id.begin(), spatial_id.end(), [](char c) {
+      return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    });
+  if (!valid_session || !valid_spatial ||
+      (have_stream_ && !new_session && spatial_id != spatial_session_id_) || (new_session && seen_scene_sessions_.count(session) != 0) ||
       (new_session && seen_scene_sessions_.size() >= 64U) ||
       snapshot.generation == 0 || snapshot.sequence_number == 0 ||
       (have_stream_ && !new_session &&
@@ -93,6 +99,7 @@ SemanticEpochGate::SnapshotResult SemanticEpochGate::observe(
   generation_ = snapshot.generation;
   last_snapshot_sequence_ = snapshot.sequence_number;
   scene_session_id_ = session;
+  spatial_session_id_ = spatial_id;
   seen_scene_sessions_.insert(session);
   frame_id_ = snapshot.header.frame_id;
   if (reset) {
@@ -129,6 +136,7 @@ bool SemanticEpochGate::accept(
     !(reload_audio_fence_ && audio.source_generation == reload_fence_generation_ &&
       stampNs(audio.header.stamp) <= reload_cutoff_ns_) &&
     audio.source_generation == generation_ &&
+    audio.spatial_session_id == spatial_session_id_ &&
     audio.header.frame_id == frame_id_ &&
     admitted_.count(audio.source_id) != 0;
   if (!ok) {

@@ -2,6 +2,7 @@
 
 #include <audition_msgs/msg/acoustic_scene.hpp>
 #include <audition_msgs/msg/acoustic_source_array.hpp>
+#include "audition_perception/capture_session_gate.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -42,6 +43,7 @@ public:
 
   // Only admitted spatial sources may own new semantic observations/events.
   bool isLive(const std::string & id, std::uint64_t generation) const;
+  const std::string & spatialSessionId() const noexcept { return spatial_sessions_.current(); }
 
   // ASR may finish after physical retirement. Permit a bounded final-result
   // grace for a known retired source but never across spatial stream resets.
@@ -68,6 +70,8 @@ private:
   std::size_t max_sources_;
   std::map<Key, Entry> tracked_;
   std::map<Key, TimePoint> recently_ended_;
+  CaptureSessionGate spatial_sessions_;
+  std::uint64_t last_spatial_sequence_{0};
   std::string frame_id_;
   void pruneEnded(TimePoint now);
   std::uint64_t stream_generation_{0};

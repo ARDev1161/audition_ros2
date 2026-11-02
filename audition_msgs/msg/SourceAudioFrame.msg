@@ -4,6 +4,8 @@
 std_msgs/Header header
 string source_id
 uint64 source_generation
+# Spatial producer incarnation, checked against canonical admission.
+string spatial_session_id
 uint64 sequence_number
 uint32 sample_rate_hz
 uint32 frame_count
