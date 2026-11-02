@@ -1,0 +1,16 @@
+# Read-only startup capability snapshot from the semantic_perception process.
+# No claim of runtime accuracy, calibrated model scores or healthy upstream ODAS.
+---
+string profile_name
+string spatial_backend
+string classifier_backend
+bool classifier_active
+bool speech_active
+bool odas_compiled
+bool yamnet_compiled
+bool speech_compiled
+string[] compiled_classifiers
+string[] compiled_speech_backends
+string[] loaded_models
+bool runtime_reconfiguration_supported
+string note

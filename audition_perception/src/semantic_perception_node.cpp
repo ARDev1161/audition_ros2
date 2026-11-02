@@ -20,6 +20,7 @@
 #endif
 #endif
 
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
 namespace audition_perception {

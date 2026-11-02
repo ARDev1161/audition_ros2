@@ -15,6 +15,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("wav_path", description="Absolute PCM16 or float32 RIFF WAV path"),
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
+        DeclareLaunchArgument("frames_per_message", default_value="160"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled",
                               description="disabled, mono (strict 16kHz single channel; no direction), or odas"),
         DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([
@@ -32,7 +33,7 @@ def generate_launch_description():
             parameters=[{
                 "wav_path": wav_path,
                 "frame_id": LaunchConfiguration("frame_id"),
-                "frames_per_message": 160,
+                "frames_per_message": LaunchConfiguration("frames_per_message"),
                 "loop": False,
             }],
             output="screen",

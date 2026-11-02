@@ -161,3 +161,14 @@ native targets and real model files. The route has deterministic unit tests
 for PCM, generations, invalid frames and non-spatial evidence, plus a ROS 2
 graph smoke. This is not evidence of model accuracy, multi-speaker separation,
 microphone calibration or hardware latency.
+
+
+## M2c startup profile entry point
+
+For an opt-in validated mono/ODAS startup profile use
+m2_profile.launch.py with profile:=mono_speech or profile:=replay_ci,
+plus wav_path:=/absolute/path/to/mono-16k.wav. The original M1/M2 launches
+remain supported. Profile validation, model paths, immutable semantic
+parameters and the typed capability service are documented in
+[M2c configuration](M2_PROFILE_CONFIGURATION.md). Physical ReSpeaker
+calibration and model accuracy are still unverified.

@@ -1,0 +1,15 @@
+# Deterministic transport/configuration CI; no ML accuracy claims.
+schema_version: 1
+name: replay_ci
+capture:
+  kind: wav
+  wav_path: "" # supply wav_path:=...
+  frame_id: microphone_array
+  channels: 1
+  sample_rate_hz: 16000
+  frames_per_message: 160
+spatial:
+  backend: mono
+semantic:
+  classifier_backend: disabled
+  speech_enabled: false

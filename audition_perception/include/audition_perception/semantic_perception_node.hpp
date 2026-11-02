@@ -7,6 +7,7 @@
 #include <audition_msgs/msg/transcript.hpp>
 #include "audition_perception/speech_bridge.hpp"
 #include <memory>
+#include <string>
 
 namespace audition_perception {
 class SemanticPerceptionNode final : public rclcpp::Node {

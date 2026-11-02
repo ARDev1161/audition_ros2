@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 interfaces, M1 WAV/ALSA capture and opt-in ODAS, and M2 YAMNet, Sherpa VAD + whisper.cpp adapters and a strict no-ODAS mono route are implemented. CI checks deterministic transport and native integration, **not model accuracy or physical ReSpeaker calibration**. Attention, fusion and navigation are future work.
+**Status:** M0 interfaces, M1 WAV/ALSA capture and opt-in ODAS, and M2 YAMNet, Sherpa VAD + whisper.cpp adapters a strict no-ODAS mono route and opt-in validated M2c startup profiles are implemented. CI checks deterministic transport and native integration, **not model accuracy or physical ReSpeaker calibration**. Attention, fusion and navigation are future work.
 
 ## Interaction overview
 
@@ -113,3 +113,22 @@ downmixing. Real hardware and Russian recognition accuracy remain untested.
 The presence of an acoustic event or an estimated direction does not establish a physical obstacle or a metric source position. See both design documents before implementing navigation integration.
 
 Target baseline for initial design: ROS 2 Humble and Nav2, with cross-distribution compatibility considered where practical. Hardware-specific accuracy, latency, and reliability are **not yet validated**.
+
+
+## M2c validated startup profiles (opt-in)
+
+For model-free mono replay:
+
+~~~bash
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/absolute/path/to/mono-16k.wav
+ros2 service call /audition/semantic_perception/get_capabilities \
+  audition_msgs/srv/GetCapabilities "{}"
+~~~
+
+Built-in profiles: mono_speech, replay_ci, spatial_events and robot_full.
+The ODAS profiles deliberately fail until real microphone geometry is
+provided; no model is automatically downloaded or enabled. The typed
+capability service reports compiled/active semantic stages. Semantic ROS
+parameters are startup-only and rejected on hot update to avoid stale native
+workers. See [M2c configuration, validation and limitations](docs/M2_PROFILE_CONFIGURATION.md).

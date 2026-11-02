@@ -3,6 +3,8 @@
 import pytest
 from rclpy.serialization import deserialize_message, serialize_message
 
+from audition_msgs.srv import GetCapabilities
+
 from audition_msgs.msg import (
     AcousticEvent,
     AcousticScene,
@@ -115,3 +117,17 @@ def test_localized_source_is_separate_from_bearing():
     back = deserialize_message(serialize_message(frame), LocalizedSourceArray)
     assert back.sources[0].localization_method == "test_fixture"
     assert back.sources[0].header.frame_id == "map"
+
+
+def test_capabilities_service_contract():
+    response = GetCapabilities.Response()
+    response.profile_name = "replay_ci"
+    response.spatial_backend = "mono"
+    response.classifier_backend = "disabled"
+    response.compiled_classifiers = ["disabled"]
+    response.runtime_reconfiguration_supported = False
+    restored = deserialize_message(serialize_message(response), GetCapabilities.Response)
+    assert restored.profile_name == "replay_ci"
+    assert restored.spatial_backend == "mono"
+    assert list(restored.compiled_classifiers) == ["disabled"]
+    assert not restored.runtime_reconfiguration_supported

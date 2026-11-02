@@ -18,6 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LocalizedSource.msg"
   "msg/LocalizedSourceArray.msg"
   "msg/Transcript.msg"
+  "srv/GetCapabilities.srv"
   DEPENDENCIES std_msgs geometry_msgs builtin_interfaces
 )
 ament_export_dependencies(rosidl_default_runtime)
