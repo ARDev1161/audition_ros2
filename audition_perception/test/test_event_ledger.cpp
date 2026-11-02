@@ -36,3 +36,12 @@ TEST(EventLedger, EnforcesBoundAndGeneration) {
   ledger.clear();
   EXPECT_TRUE(ledger.active().empty());
 }
+
+TEST(EventLedger, CancelEndsOnlyActiveEvent) {
+  EventLedger ledger(2);
+  EXPECT_TRUE(ledger.apply(event("a", AcousticEvent::STARTED)));
+  EXPECT_TRUE(ledger.apply(event("a", AcousticEvent::UPDATED)));
+  EXPECT_TRUE(ledger.apply(event("a", AcousticEvent::CANCELLED)));
+  EXPECT_TRUE(ledger.active().empty());
+  EXPECT_FALSE(ledger.apply(event("a", AcousticEvent::UPDATED)));
+}

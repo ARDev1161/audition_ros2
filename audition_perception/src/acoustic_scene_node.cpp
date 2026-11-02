@@ -60,6 +60,15 @@ void AcousticSceneNode::onSources(
       return;
     }
     if (have_stream_ && msg.generation != stream_generation_) {
+      // Native semantic completions from an old generation are discarded.
+      // Public consumers still need a terminal transition for active events.
+      for (const auto & previous : event_ledger_->active()) {
+        auto cancelled = previous;
+        cancelled.transition = audition_msgs::msg::AcousticEvent::CANCELLED;
+        cancelled.header.stamp = msg.header.stamp;
+        cancelled.termination_reason = "spatial_stream_reset";
+        event_pub_->publish(std::move(cancelled));
+      }
       event_ledger_->clear();
     }
     stream_generation_ = msg.generation;
@@ -87,7 +96,7 @@ void AcousticSceneNode::onEvent(const audition_msgs::msg::AcousticEvent & msg) {
   // Reconstruct the current scene after event transition. Publishing this
   // snapshot must not update source observation freshness/TTL.
   std_msgs::msg::Header header;
-  header.stamp = msg.header.stamp;
+  header.stamp = now(); // scene snapshot time; event keeps audio observation stamp
   header.frame_id = frame_id_;
   auto snapshot = lifecycle_->tick(SourceLifecycle::Clock::now(), header);
   snapshot.changed = true;

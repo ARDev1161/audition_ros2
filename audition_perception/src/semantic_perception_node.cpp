@@ -1,6 +1,8 @@
 #include "audition_perception/semantic_perception_node.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <set>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -203,11 +205,26 @@ public:
         out.score = static_cast<float>(cls.probability.value());
         class_pub->publish(std::move(out));
       }
+      std::set<std::uint64_t> newly_started;
       for (const auto & event : detector_->observe(
               audition::AcousticSourceId{completed.source_id}, observed,
               completed.result)) {
+        if (event.kind == audition::TemporalAcousticEventKind::Started) {
+          newly_started.insert(event.occurrence_id);
+        }
         event_pub->publish(toRosEvent(event, name->second, source,
           "classification_hysteresis"));
+      }
+      // A new supporting observation for an already active occurrence
+      // updates the canonical event without fabricating a new onset.
+      for (const auto & event : detector_->activeEvents()) {
+        if (event.source_id.value() != completed.source_id ||
+            event.last_supported_time.nanoseconds() != end_ns ||
+            newly_started.count(event.occurrence_id) != 0) continue;
+        auto update = toRosEvent(event, name->second, source, "");
+        update.transition = audition_msgs::msg::AcousticEvent::UPDATED;
+        update.header.stamp = stampFromNs(end_ns);
+        event_pub->publish(std::move(update));
       }
     }
 #else
