@@ -4,7 +4,7 @@ import sys
 import time
 import rclpy
 from rclpy.node import Node
-from audition_msgs.msg import AcousticEvent, AcousticScene, AcousticSourceArray, SoundClassification
+from audition_msgs.msg import AcousticEvent, AcousticScene, AcousticSourceArray, SoundClassification, Transcript
 
 
 class Probe(Node):
@@ -17,9 +17,13 @@ class Probe(Node):
         self.updated = False
         self.cancelled = False
         self.reset_active = False
+        self.transcript_seen = 0
+        self.stale_seen = False
         self.started = False
         self.classified = False
         self.pub = self.create_publisher(AcousticEvent, "/audition/internal/events", 20)
+        self.tpub = self.create_publisher(Transcript, "/audition/internal/transcripts", 20)
+        self.create_subscription(Transcript, "/audition/transcripts", self.on_transcript, 20)
         self.spatial_pub = self.create_publisher(
             AcousticSourceArray, "/audition/internal/spatial_sources", 10)
         self.cpub = self.create_publisher(
@@ -44,6 +48,12 @@ class Probe(Node):
             self.updated = True
         if msg.event_id == "ci-reset" and msg.transition == AcousticEvent.CANCELLED:
             self.cancelled = msg.termination_reason == "spatial_stream_reset"
+
+    def on_transcript(self, msg):
+        if msg.text == "Привет":
+            self.transcript_seen += 1
+        if msg.text == "stale":
+            self.stale_seen = True
 
     def on_class(self, msg):
         if msg.source_id == "ci-source" and msg.class_label == "Speech":
@@ -101,6 +111,33 @@ def main():
             probe.cpub.get_subscription_count() > 0, deadline
         ):
             print("FAIL: scene does not subscribe to internal events", file=sys.stderr)
+            return 1
+        if not wait(probe, lambda: probe.tpub.get_subscription_count() > 0, deadline):
+            print("FAIL: scene does not subscribe to transcripts", file=sys.stderr)
+            return 1
+        spoken = Transcript()
+        spoken.header.frame_id = probe.frame_id
+        spoken.header.stamp = probe.get_clock().now().to_msg()
+        spoken.source_id = "ci-source"
+        spoken.source_generation = probe.scene_generation
+        spoken.language = "ru"
+        spoken.text = "Привет"
+        spoken.model_id = "integration-test"
+        spoken.is_final = True
+        spoken.observed_start = spoken.header.stamp
+        spoken.observed_end = spoken.header.stamp
+        probe.tpub.publish(spoken)
+        if not wait(probe, lambda: probe.transcript_seen == 1, deadline):
+            print("FAIL: valid transcript was not forwarded", file=sys.stderr)
+            return 1
+        spoken.text = "stale"
+        spoken.source_generation += 99
+        probe.tpub.publish(spoken)
+        # A spin window allows stale messages to be delivered and rejected.
+        for _ in range(10):
+            rclpy.spin_once(probe, timeout_sec=0.02)
+        if probe.stale_seen:
+            print("FAIL: stale transcript crossed generation fence", file=sys.stderr)
             return 1
         probe.cpub.publish(probe.classification())
         probe.pub.publish(probe.event(AcousticEvent.STARTED))
