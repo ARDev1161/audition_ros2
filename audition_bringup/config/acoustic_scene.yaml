@@ -1,0 +1,10 @@
+# Canonical acoustic scene. Applies to both live capture and WAV replay.
+# Source retirement is driven by monotonic local arrival time, never inferred
+# solely from missing semantic inference results or a ROS clock jump.
+"/**/acoustic_scene":
+  ros__parameters:
+    source_lost_after_ms: 300
+    source_end_after_ms: 1500
+    late_transcript_grace_ms: 5000
+    max_sources: 16
+    max_active_events: 128
