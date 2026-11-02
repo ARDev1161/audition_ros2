@@ -1,6 +1,7 @@
 #pragma once
 
 #include <audition_msgs/msg/audio_frame.hpp>
+#include "audition_perception/capture_session_gate.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -46,6 +47,7 @@ public:
 private:
   void reset() noexcept;
   void validate(const audition_msgs::msg::AudioFrame & frame) const;
+  CaptureSessionGate capture_sessions_;
   std::uint32_t rate_, hop_, min_channels_, max_pending_hops_;
   std::string frame_id_;
   std::vector<float> pending_;
