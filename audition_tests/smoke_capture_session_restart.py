@@ -76,8 +76,20 @@ def main():
         probe.send(b, 2, 0.6, 20000000)
         assert probe.wait(lambda: (2, 0.6) in probe.audio), (
             "valid new-session PCM not admitted after rejected replay")
+        # A duplicate or delayed frame from the *current* capture session
+        # must not create a false generation reset or publish PCM.
+        before = len(probe.audio)
+        probe.send(b, 2, 0.7, 20000000)
+        probe.wait(lambda: len(probe.audio) > before, seconds=0.5)
+        assert len(probe.audio) == before, "same-session duplicate PCM was accepted"
+        probe.send(b, 1, 0.8, 30000000)
+        probe.wait(lambda: len(probe.audio) > before, seconds=0.5)
+        assert len(probe.audio) == before, "reordered same-session PCM was accepted"
+        probe.send(b, 3, 0.4, 30000000)
+        assert probe.wait(lambda: (2, 0.4) in probe.audio), (
+            "valid capture PCM not recovered after duplicate/reorder rejection")
         assert max(probe.generations) == 2, probe.generations
-        print("PASS: ROS graph capture restart, old-session replay fence and recovery")
+        print("PASS: capture restart, old/current-session replay fence and recovery")
         return 0
     finally:
         probe.destroy_node()

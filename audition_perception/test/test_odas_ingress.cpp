@@ -162,3 +162,58 @@ TEST(OdasIngress, CaptureProcessRestartFlushesPendingHopsEvenWithoutSequenceGap)
   EXPECT_FALSE(ingress.push(malformed).reset);
   EXPECT_EQ(ingress.stats().discontinuity_resets, 1U);
 }
+
+TEST(OdasIngress, SameSessionReplayDoesNotFlushPendingPCMOrAdvanceGeneration) {
+  OdasIngress ingress(16000, 128, "microphone_array", 5);
+  ingress.push(frame(0, 0));
+  EXPECT_EQ(ingress.bufferedFrames(), 32U);
+  auto duplicate = frame(0, 0);
+  duplicate.pcm.assign(160 * 6, 0.9f);
+  EXPECT_THROW(ingress.push(duplicate), std::invalid_argument);
+  EXPECT_EQ(ingress.bufferedFrames(), 32U);
+  EXPECT_EQ(ingress.generation(), 1U);
+
+  auto gap = ingress.push(frame(3, 30000000));
+  EXPECT_TRUE(gap.reset);
+  EXPECT_EQ(gap.generation, 2U);
+  const auto pending = ingress.bufferedFrames();
+  EXPECT_THROW(ingress.push(frame(2, 40000000)), std::invalid_argument);
+  EXPECT_THROW(ingress.push(frame(3, 30000000)), std::invalid_argument);
+  EXPECT_EQ(ingress.bufferedFrames(), pending);
+  EXPECT_EQ(ingress.generation(), 2U);
+  EXPECT_EQ(ingress.stats().discontinuity_resets, 1U);
+  EXPECT_EQ(ingress.stats().replayed_frames, 3U);
+  EXPECT_EQ(ingress.stats().rejected_frames, 3U);
+  EXPECT_FALSE(ingress.push(frame(4, 40000000)).reset);
+  EXPECT_EQ(ingress.generation(), 2U);
+}
+
+TEST(OdasIngress, OverflowAndBackendFailurePreserveSequenceHighWaterMark) {
+  OdasIngress ingress(16000, 128, "microphone_array", 5, 2);
+  ingress.push(frame(0, 0, 64));
+  EXPECT_TRUE(ingress.push(frame(1, 4000000, 512)).reset);
+  EXPECT_THROW(ingress.push(frame(1, 4000000, 512)), std::invalid_argument);
+  EXPECT_EQ(ingress.generation(), 2U);
+  EXPECT_FALSE(ingress.push(frame(2, 36000000, 128)).reset);
+  ingress.backendFailure();
+  EXPECT_EQ(ingress.generation(), 3U);
+  EXPECT_THROW(ingress.push(frame(2, 36000000, 128)), std::invalid_argument);
+  EXPECT_EQ(ingress.generation(), 3U);
+  EXPECT_FALSE(ingress.push(frame(3, 44000000, 128)).reset);
+  EXPECT_EQ(ingress.stats().replayed_frames, 2U);
+}
+
+TEST(OdasIngress, FreshCaptureSessionMayRestartSequenceAndRejectOldReplay) {
+  OdasIngress ingress(16000, 128, "microphone_array", 5);
+  ingress.push(frame(10, 0));
+  auto replacement = frame(0, 10000000);
+  replacement.capture_session_id = std::string(32, 'b');
+  EXPECT_TRUE(ingress.push(replacement).reset);
+  EXPECT_EQ(ingress.generation(), 2U);
+  EXPECT_THROW(ingress.push(replacement), std::invalid_argument);
+  EXPECT_THROW(ingress.push(frame(11, 20000000)), std::invalid_argument);
+  replacement.sequence_number = 1;
+  replacement.header.stamp.nanosec = 20000000;
+  EXPECT_FALSE(ingress.push(replacement).reset);
+  EXPECT_EQ(ingress.generation(), 2U);
+}

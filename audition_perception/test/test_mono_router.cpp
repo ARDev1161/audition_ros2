@@ -141,3 +141,34 @@ TEST(MonoRouter, CaptureSessionHistoryFailsClosedAfterBound) {
   EXPECT_THROW(router.process(input), std::invalid_argument);
   EXPECT_EQ(router.generation(), 65U);
 }
+
+TEST(MonoRouter, DuplicateAndReorderedCaptureCannotResetEpochOrPublishPCM) {
+  MonoRouter router;
+  router.process(frame(0));
+  EXPECT_THROW(router.process(frame(0)), std::invalid_argument);
+  EXPECT_EQ(router.generation(), 1U);
+
+  const auto gap = router.process(frame(3, 30000000));
+  EXPECT_EQ(gap.sources.generation, 2U);
+  auto delayed = frame(2, 40000000);
+  delayed.pcm.assign(160, 0.9f);
+  EXPECT_THROW(router.process(delayed), std::invalid_argument);
+  EXPECT_THROW(router.process(frame(3, 30000000)), std::invalid_argument);
+  EXPECT_EQ(router.generation(), 2U);
+  const auto next = router.process(frame(4, 40000000));
+  EXPECT_EQ(next.sources.generation, 2U);
+  EXPECT_EQ(next.audio.sequence_number, 4U);
+}
+
+TEST(MonoRouter, FreshCaptureSessionMayRestartSequenceButCannotReplayIt) {
+  MonoRouter router;
+  router.process(frame(10));
+  auto replacement = frame(0, 10000000);
+  replacement.capture_session_id = std::string(32, 'b');
+  EXPECT_EQ(router.process(replacement).sources.generation, 2U);
+  EXPECT_THROW(router.process(replacement), std::invalid_argument);
+  EXPECT_THROW(router.process(frame(11, 20000000)), std::invalid_argument);
+  replacement.sequence_number = 1;
+  replacement.header.stamp.nanosec = 20000000;
+  EXPECT_EQ(router.process(replacement).sources.generation, 2U);
+}

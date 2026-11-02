@@ -422,3 +422,21 @@ lowercase hexadecimal spatial ID; legacy empty/zero fields fail closed.
 
 These IDs are ordering discriminators, **not DDS authentication**. This is
 not a multi-node transactional `ReloadPipeline` or ReSpeaker calibration.
+
+
+## M2n: capture sequence replay fencing (2026-11-02)
+
+Mono and ODAS ingress now reject same-capture-session duplicate or
+out-of-order raw `AudioFrame.sequence_number` **before** applying gap/clock
+resets or modifying buffered PCM. Genuine forward gaps still reset source
+generations. ODAS retains its capture high-water mark across buffer overflow
+and backend reset, and counts such drops in
+`GetIngressStatus.replayed_frames` (subset of `rejected_frames`). A new
+capture incarnation may start its sequence again at zero; retired sessions
+remain rejected. The disabled spatial route applies the same replay check.
+
+Humble C++ tests and the capture-session ROS graph regression cover replay,
+reordering, overflow, restart and recovery. See
+[M2n capture sequence ordering](M2_CAPTURE_SEQUENCE_ORDERING.md).
+This does not implement cross-node `ReloadPipeline`, DDS authentication or
+physical ReSpeaker acceptance.

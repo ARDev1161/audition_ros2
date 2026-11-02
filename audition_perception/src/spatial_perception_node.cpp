@@ -2,6 +2,7 @@
 #include "audition_perception/odas_ingress.hpp"
 #include "audition_perception/capture_session_gate.hpp"
 #include "audition_perception/spatial_session_id.hpp"
+#include "audition_perception/capture_sequence_gate.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -157,8 +158,12 @@ public:
     if (backend_ == "disabled") {
       if (!validFrame(msg)) throw std::invalid_argument("Invalid AudioFrame payload/layout");
       const auto session = capture_sessions_.inspect(msg.capture_session_id);
+      if (capture_sequences_.isReplay(msg.sequence_number, session)) {
+        throw std::invalid_argument("Duplicate or out-of-order capture sequence");
+      }
       if (session == CaptureSessionGate::Decision::Changed) ++generation_;
       capture_sessions_.commit(msg.capture_session_id);
+      capture_sequences_.commit(msg.sequence_number);
       snapshot.generation = generation_;
       publishSnapshot(source_pub, snapshot);
       return;
@@ -268,6 +273,7 @@ public:
       const auto & stats = ingress_->stats();
       response.accepted_frames = stats.accepted_frames;
       response.rejected_frames = stats.rejected_frames;
+      response.replayed_frames = stats.replayed_frames;
       response.overflow_drops = stats.overflow_drops;
       response.discontinuity_resets = stats.discontinuity_resets;
       response.backend_resets = stats.backend_resets;
@@ -290,6 +296,7 @@ private:
   std::uint64_t source_counter_{0};
 #endif
   CaptureSessionGate capture_sessions_;
+  CaptureSequenceGate capture_sequences_;
   std::string spatial_session_id_{makeSpatialSessionId()};
   std::uint64_t spatial_sequence_{0};
   std::string backend_, frame_id_;

@@ -45,6 +45,9 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
   // anything. No resampling or implicit channel mixing is performed.
   validate(frame);
   const auto session = capture_sessions_.inspect(frame.capture_session_id);
+  if (capture_sequences_.isReplay(frame.sequence_number, session)) {
+    throw std::invalid_argument("Duplicate or out-of-order capture sequence");
+  }
   const auto stamp = stampNs(frame.header.stamp);
   if (session == CaptureSessionGate::Decision::Changed || (started_ &&
       (frame.header.frame_id != frame_id_ ||
@@ -60,6 +63,7 @@ MonoRouter::Output MonoRouter::process(const audition_msgs::msg::AudioFrame & fr
     started_ = true;
   }
   capture_sessions_.commit(frame.capture_session_id);
+  capture_sequences_.commit(frame.sequence_number);
   last_sequence_ = frame.sequence_number;
   last_stamp_ns_ = stamp;
   expected_next_ns_ = stamp +

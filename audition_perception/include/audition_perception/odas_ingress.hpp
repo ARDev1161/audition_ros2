@@ -2,6 +2,7 @@
 
 #include <audition_msgs/msg/audio_frame.hpp>
 #include "audition_perception/capture_session_gate.hpp"
+#include "audition_perception/capture_sequence_gate.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -27,6 +28,7 @@ public:
   struct Stats {
     std::uint64_t accepted_frames{0};
     std::uint64_t rejected_frames{0};
+    std::uint64_t replayed_frames{0};
     std::uint64_t overflow_drops{0};
     std::uint64_t discontinuity_resets{0};
     std::uint64_t backend_resets{0};
@@ -48,6 +50,7 @@ private:
   void reset() noexcept;
   void validate(const audition_msgs::msg::AudioFrame & frame) const;
   CaptureSessionGate capture_sessions_;
+  CaptureSequenceGate capture_sequences_;
   std::uint32_t rate_, hop_, min_channels_, max_pending_hops_;
   std::string frame_id_;
   std::vector<float> pending_;

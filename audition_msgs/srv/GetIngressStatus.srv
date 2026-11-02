@@ -5,6 +5,8 @@ string backend
 uint64 generation
 uint64 accepted_frames
 uint64 rejected_frames
+# Subset of rejected_frames: same-session duplicate/reordered capture sequences.
+uint64 replayed_frames
 uint64 overflow_drops
 uint64 discontinuity_resets
 uint64 backend_resets

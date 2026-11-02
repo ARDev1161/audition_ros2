@@ -253,3 +253,12 @@ sequence-gap fencing remains. A capture-free Humble ROS graph regression
 checks session handoff and old-session rejection.
 See [M2l capture session handshake](docs/M2_CAPTURE_SESSION_HANDSHAKE.md).
 This is not full cross-node transactional reload or DDS authentication.
+
+### M2n capture sequence ordering
+
+Raw capture frames are now rejected on duplicate or decreasing sequence
+numbers **within the same capture incarnation**, before they can spuriously
+reset mono/ODAS source generations. Real forward gaps still reset the
+pipeline; ODAS overflow and backend failures retain the capture high-water
+mark. Inspect `GetIngressStatus.replayed_frames` for ODAS replay drops.
+See [M2n ordering contract](docs/M2_CAPTURE_SEQUENCE_ORDERING.md).

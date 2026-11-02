@@ -4,6 +4,7 @@
 #include <audition_msgs/msg/audio_frame.hpp>
 #include <audition_msgs/msg/source_audio_frame.hpp>
 #include "audition_perception/capture_session_gate.hpp"
+#include "audition_perception/capture_sequence_gate.hpp"
 
 #include <cstdint>
 #include <string>
@@ -25,6 +26,7 @@ public:
 
 private:
   CaptureSessionGate capture_sessions_;
+  CaptureSequenceGate capture_sequences_;
   std::string spatial_session_id_;
   std::string source_id_;
   std::uint64_t snapshot_sequence_{0};

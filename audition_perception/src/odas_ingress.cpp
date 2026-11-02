@@ -79,6 +79,13 @@ OdasIngress::Batch OdasIngress::push(
     ++stats_.rejected_frames;
     throw;
   }
+  // Replays must not be interpreted as sequence gaps: doing so would flush
+  // valid pending PCM and spuriously retire live source generations.
+  if (capture_sequences_.isReplay(msg.sequence_number, session)) {
+    ++stats_.rejected_frames;
+    ++stats_.replayed_frames;
+    throw std::invalid_argument("Duplicate or out-of-order capture sequence");
+  }
   const auto stamp = stampNs(msg.header.stamp);
   Batch batch;
   const bool discontinuity = session == CaptureSessionGate::Decision::Changed ||
@@ -95,6 +102,7 @@ OdasIngress::Batch OdasIngress::push(
   // Commit only after payload and session validation. Even an oversized
   // dropped chunk establishes the new incarnation and fences old replay.
   capture_sessions_.commit(msg.capture_session_id);
+  capture_sequences_.commit(msg.sequence_number);
   const auto maximum = static_cast<std::size_t>(hop_) *
     max_pending_hops_ * msg.channel_count;
   if (pending_.size() + msg.pcm.size() > maximum) {
