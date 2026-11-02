@@ -3,6 +3,7 @@
 #include <audition_msgs/msg/acoustic_scene.hpp>
 #include <audition_msgs/msg/acoustic_event.hpp>
 #include <audition_msgs/msg/sound_classification.hpp>
+#include <audition_msgs/msg/transcript.hpp>
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -21,6 +22,7 @@ private:
   void onTimer();
   void onEvent(const audition_msgs::msg::AcousticEvent & msg);
   void onClassification(const audition_msgs::msg::SoundClassification & msg);
+  void onTranscript(const audition_msgs::msg::Transcript & msg);
   void publish(SourceLifecycle::Update update);
 
   std::unique_ptr<SourceLifecycle> lifecycle_;
@@ -35,6 +37,8 @@ private:
   rclcpp::Subscription<audition_msgs::msg::SoundClassification>::SharedPtr class_sub_;
   rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr event_pub_;
   rclcpp::Publisher<audition_msgs::msg::SoundClassification>::SharedPtr class_pub_;
+  rclcpp::Subscription<audition_msgs::msg::Transcript>::SharedPtr transcript_sub_;
+  rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
   std::string frame_id_;
 };
 }  // namespace audition_perception
