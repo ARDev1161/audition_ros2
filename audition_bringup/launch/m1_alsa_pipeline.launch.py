@@ -1,8 +1,9 @@
 """Live ALSA capture + spatial perception + canonical scene (experimental M1)."""
 
 from launch import LaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
@@ -42,6 +43,9 @@ def generate_launch_description():
             }],
         ),
         ComposableNodeContainer(
+            condition=UnlessCondition(PythonExpression([
+                "'", LaunchConfiguration("spatial_backend"), "' == 'mono'"
+            ])),
             name="audition_spatial_container",
             namespace="audition",
             package="rclcpp_components",
@@ -57,6 +61,25 @@ def generate_launch_description():
                         LaunchConfiguration("spatial_config"),
                         {"backend": LaunchConfiguration("spatial_backend")},
                     ],
+                ),
+            ],
+        ),
+        # Dedicated mono semantic route, not a spatial localization backend.
+        ComposableNodeContainer(
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration("spatial_backend"), "' == 'mono'"
+            ])),
+            name="audition_mono_container",
+            namespace="audition",
+            package="rclcpp_components",
+            executable="component_container",
+            output="screen",
+            composable_node_descriptions=[
+                ComposableNode(
+                    package="audition_perception",
+                    plugin="audition_perception::MonoSourceNode",
+                    name="mono_source",
+                    namespace="/audition",
                 ),
             ],
         ),

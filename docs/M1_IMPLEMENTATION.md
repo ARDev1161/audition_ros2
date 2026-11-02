@@ -127,3 +127,37 @@ inside a fatal error path.
    boundaries after spatial ownership contracts are stable.
 
 See [ROS 2 node architecture](ROS2_ARCHITECTURE.md) and [engineering roadmap](ROADMAP.md).
+
+
+## Mono capture to semantic route (M2 no-ODAS increment, 2026-11-02)
+
+\`spatial_backend:=mono\` in M1/M2 WAV or ALSA launch selects a **separate**
+\`MonoSourceNode\` component instead of \`SpatialPerceptionNode\`. It accepts
+only one-channel normalized PCM at exactly 16 kHz (max 4096 frames per
+message). It forwards the *actual* capture PCM to
+\`/audition/internal/source_audio\` and publishes a single capture-stream
+source via \`/audition/internal/spatial_sources\`, admitted by the same
+canonical scene lifecycle as ODAS. It never fabricates direction, track ID,
+speaker ID, distance, position or calibrated activity.
+
+The source is a capture stream, **not** a detected speaker. The epoch
+increments after a capture sequence gap, timestamp regression, timestamp
+discontinuity greater than 250 ms, or \`frame_id\` change. A malformed frame
+is rejected without changing the epoch. On capture silence/stall, the
+canonical scene's existing LOST/ENDED TTL applies; there is no invented
+voice activity. DDS topic ordering is not guaranteed, but each valid frame
+refreshes source admission before emitting mono PCM.
+
+\`\`\`bash
+ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+  wav_path:=/absolute/path/to/mono-16k.wav spatial_backend:=mono \
+  semantic_config:=/absolute/path/to/semantic_m2.yaml
+# ALSA: channel_count:=1 sample_rate_hz:=16000 spatial_backend:=mono
+\`\`\`
+
+\`classifier_backend: disabled\` and \`speech_enabled: false\` remain safe
+defaults. Enabling YAMNet or Sherpa/Whisper requires the separately installed
+native targets and real model files. The route has deterministic unit tests
+for PCM, generations, invalid frames and non-spatial evidence, plus a ROS 2
+graph smoke. This is not evidence of model accuracy, multi-speaker separation,
+microphone calibration or hardware latency.

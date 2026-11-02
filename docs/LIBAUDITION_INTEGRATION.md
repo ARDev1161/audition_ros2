@@ -226,3 +226,22 @@ an explicit synthetic source, source expiry, late final ASR, stale rejection
 and stream reset. The regression uses **injected messages**, not a claim of
 real classifier accuracy.
 
+
+
+## 10. Implemented mono/no-ODAS routing (2026-11-02)
+
+The M2 launch parameter \`spatial_backend:=mono\` now chooses a dedicated
+\`MonoSourceNode\`, not a disabled spatial engine. One real 16 kHz mono
+capture stream becomes one source-local PCM stream for the existing semantic
+runtime. The canonical source has \`has_direction=false\`,
+\`has_range=false\`, \`has_position=false\`, empty spatial/speaker IDs and
+an explicit generation fence. This is **not** speaker diarization or a
+localization estimate. Sequence gaps, capture-clock regressions and long
+timestamp gaps reset the generation; invalid PCM never advances it.
+See [M1 implementation](M1_IMPLEMENTATION.md) for launch commands, limits
+and test coverage.
+
+The earlier proposed \`mono_speech\` preset is **not yet** a validated
+profile selector: the executable route exists, but M2c profile schema,
+capabilities discovery and transactional reload still remain. Do not
+interpret the future-YAML example in section 3 as runnable configuration.

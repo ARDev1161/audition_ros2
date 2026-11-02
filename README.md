@@ -2,7 +2,7 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** M0 interfaces, M1 WAV replay and opt-in live ALSA/ODAS, and M2 YAMNet event and optional Sherpa VAD + whisper.cpp speech adapters are implemented. CI validates native builds and synthetic pipeline contracts, **not model accuracy or physical ReSpeaker calibration**. VAD/ASR, attention, fusion and navigation integration remain to be implemented.
+**Status:** M0 interfaces, M1 WAV/ALSA capture and opt-in ODAS, and M2 YAMNet, Sherpa VAD + whisper.cpp adapters and a strict no-ODAS mono route are implemented. CI checks deterministic transport and native integration, **not model accuracy or physical ReSpeaker calibration**. Attention, fusion and navigation are future work.
 
 ## Interaction overview
 
@@ -68,7 +68,7 @@ ros2 launch audition_bringup m2_wav_pipeline.launch.py \
   semantic_config:=/path/to/semantic_yamnet.yaml
 ```
 
-When spatial separation is available, ROS 2 exposes `/audition/classifications`, `/audition/events` and `/audition/scene`. The inference worker is provided by libaudition and receives per-source mono 16 kHz PCM. Threshold hysteresis and event transitions are also provided by libaudition, not reimplemented here. The default YAML disables inference; no model weights are bundled. A mono/no-ODAS semantic bypass is not yet implemented.
+When spatial separation is available, ROS 2 exposes `/audition/classifications`, `/audition/events` and `/audition/scene`. The inference worker is provided by libaudition and receives per-source mono 16 kHz PCM. Threshold hysteresis and event transitions are also provided by libaudition, not reimplemented here. The default YAML disables inference; no model weights are bundled. The independent mono route is available with `spatial_backend:=mono` for one-channel 16 kHz capture and never fabricates direction.
 
 See the [M2 implementation guide](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/M2_IMPLEMENTATION.md).
 
@@ -90,8 +90,19 @@ results to `/audition/transcripts`. No models are distributed, no transcripts
 are fabricated when disabled, and a source ID is **not** a speaker identity.
 
 See the [Sphinx speech setup and limitations](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/SPEECH_ASR.md).
-This path still requires ODAS-separated mono 16 kHz audio; real hardware and
-Russian recognition accuracy are not yet acceptance-tested.
+For one-microphone speech without ODAS, use:
+```bash
+ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+  wav_path:=/absolute/path/to/mono-16k.wav spatial_backend:=mono \
+  semantic_config:=/absolute/path/to/speech.yaml
+# Or live ALSA: m2_alsa_pipeline.launch.py device:=hw:1,0 \
+#   channel_count:=1 sample_rate_hz:=16000 spatial_backend:=mono
+```
+The mono router publishes one capture-stream source (not a speaker), with no
+direction, range or position. Its source generation advances on capture
+sequence loss, clock regression, excessive timestamp gaps or device-frame
+change. Invalid formats fail closed; there is no implicit resampling or
+downmixing. Real hardware and Russian recognition accuracy remain untested.
 
 ## Intended boundaries
 

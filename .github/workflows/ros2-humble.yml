@@ -106,3 +106,20 @@ jobs:
             cat /tmp/audition_m2_launch.log
             exit 1
           fi
+
+      - name: Smoke no-ODAS mono semantic route over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=104
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav spatial_backend:=mono \
+            > /tmp/audition_mono_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_mono_pipeline.py; then
+            cat /tmp/audition_mono_launch.log
+            exit 1
+          fi

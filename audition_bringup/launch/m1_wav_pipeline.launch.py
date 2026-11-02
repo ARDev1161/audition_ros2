@@ -1,7 +1,8 @@
 """M1 replay: real WAV input, optional native libaudition ODAS spatial processing."""
 from launch import LaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
@@ -15,7 +16,7 @@ def generate_launch_description():
         DeclareLaunchArgument("wav_path", description="Absolute PCM16 or float32 RIFF WAV path"),
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled",
-                              description="disabled (safe default) or odas (requires calibrated geometry)"),
+                              description="disabled, mono (strict 16kHz single channel; no direction), or odas"),
         DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([
             FindPackageShare("audition_bringup"), "config", "acoustic_scene.yaml"])),
         DeclareLaunchArgument(
@@ -37,6 +38,9 @@ def generate_launch_description():
             output="screen",
         ),
         ComposableNodeContainer(
+            condition=UnlessCondition(PythonExpression([
+                "'", LaunchConfiguration("spatial_backend"), "' == 'mono'"
+            ])),
             name="audition_spatial_container",
             namespace="audition",
             package="rclcpp_components",
@@ -49,6 +53,25 @@ def generate_launch_description():
                     name="spatial_perception",
                     namespace="/audition",
                     parameters=[spatial_config, {"backend": spatial_backend}],
+                ),
+            ],
+        ),
+        # Dedicated mono semantic route, not a spatial localization backend.
+        ComposableNodeContainer(
+            condition=IfCondition(PythonExpression([
+                "'", LaunchConfiguration("spatial_backend"), "' == 'mono'"
+            ])),
+            name="audition_mono_container",
+            namespace="audition",
+            package="rclcpp_components",
+            executable="component_container",
+            output="screen",
+            composable_node_descriptions=[
+                ComposableNode(
+                    package="audition_perception",
+                    plugin="audition_perception::MonoSourceNode",
+                    name="mono_source",
+                    namespace="/audition",
                 ),
             ],
         ),

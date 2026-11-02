@@ -28,6 +28,8 @@ endif()
 
 add_library(audition_perception_components SHARED
   src/spatial_perception_node.cpp
+  src/mono_router.cpp
+  src/mono_source_node.cpp
   src/source_lifecycle.cpp
   src/event_ledger.cpp
   src/acoustic_scene_node.cpp
@@ -73,6 +75,7 @@ if(AUDITION_ROS2_WITH_SPEECH)
 endif()
 rclcpp_components_register_nodes(audition_perception_components
   "audition_perception::SpatialPerceptionNode"
+  "audition_perception::MonoSourceNode"
   "audition_perception::AcousticSceneNode"
   "audition_perception::SemanticPerceptionNode")
 
@@ -91,6 +94,11 @@ if(BUILD_TESTING)
     target_compile_features(semantic_runtime_test PUBLIC cxx_std_17)
     target_link_libraries(semantic_runtime_test audition::pipeline)
   endif()
+  ament_add_gtest(mono_router_test test/test_mono_router.cpp)
+  target_compile_features(mono_router_test PUBLIC cxx_std_17)
+  target_include_directories(mono_router_test PRIVATE include)
+  target_link_libraries(mono_router_test audition_perception_components)
+  ament_target_dependencies(mono_router_test audition_msgs)
   ament_add_gtest(event_ledger_test test/test_event_ledger.cpp)
   target_compile_features(event_ledger_test PUBLIC cxx_std_17)
   target_include_directories(event_ledger_test PRIVATE include)
