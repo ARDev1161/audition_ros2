@@ -48,6 +48,11 @@ class SupervisorStatus:
     source_miss_count: int
     accepted_source_frames: int
     last_source_age_ms: int
+    semantic_watchdog_enabled: bool
+    semantic_healthy: bool
+    semantic_miss_count: int
+    accepted_semantic_frames: int
+    last_semantic_age_ms: int
 
 
 class PipelineSupervisor:
@@ -55,9 +60,11 @@ class PipelineSupervisor:
     def __init__(self, validate, spawn, probe, timeout=30,
                  graph_failure_threshold=5, health_check_interval=1.0, clock=None,
                  audio_flow=None, audio_failure_threshold=5,
-                 source_flow=None, source_failure_threshold=5):
+                 source_flow=None, source_failure_threshold=5,
+                 semantic_flow=None, semantic_failure_threshold=5):
         if (timeout <= 0 or graph_failure_threshold < 1 or
                 audio_failure_threshold < 1 or source_failure_threshold < 1 or
+                semantic_failure_threshold < 1 or
                 health_check_interval <= 0):
             raise ValueError("timeouts and graph failure threshold must be positive")
         self.validate, self.spawn, self.probe = validate, spawn, probe
@@ -74,6 +81,9 @@ class PipelineSupervisor:
         self.source_flow = source_flow
         self.source_failure_threshold = source_failure_threshold
         self._source_misses = 0
+        self.semantic_flow = semantic_flow
+        self.semantic_failure_threshold = semantic_failure_threshold
+        self._semantic_misses = 0
         self.process = None
         self.active = None
         self.last_good = None
@@ -88,6 +98,7 @@ class PipelineSupervisor:
     def _status(self):
         audio = self.audio_flow.snapshot() if self.audio_flow is not None else None
         source = self.source_flow.snapshot() if self.source_flow is not None else None
+        semantic = self.semantic_flow.snapshot() if self.semantic_flow is not None else None
         return SupervisorStatus(self.active is not None and self.process is not None
                                 and self.process.poll() is None,
                                 self.process is not None,
@@ -104,7 +115,12 @@ class PipelineSupervisor:
                                 source.healthy if source else False,
                                 self._source_misses,
                                 source.accepted_frames if source else 0,
-                                source.age_ms if source else 0)
+                                source.age_ms if source else 0,
+                                semantic.enabled if semantic else False,
+                                semantic.healthy if semantic else False,
+                                self._semantic_misses,
+                                semantic.accepted_frames if semantic else 0,
+                                semantic.age_ms if semantic else 0)
 
     def status(self):
         with self._lock:
@@ -123,6 +139,9 @@ class PipelineSupervisor:
                     self.audio_flow.reset(None)
                 if self.source_flow is not None:
                     self.source_flow.reset(None)
+                if self.semantic_flow is not None:
+                    self.semantic_flow.reset(None)
+                self._semantic_misses = 0
                 self._audio_misses = 0
                 self._source_misses = 0
                 raise
@@ -132,10 +151,13 @@ class PipelineSupervisor:
         self._graph_misses = 0
         self._audio_misses = 0
         self._source_misses = 0
+        self._semantic_misses = 0
         if self.audio_flow is not None:
             self.audio_flow.reset(None)
         if self.source_flow is not None:
             self.source_flow.reset(None)
+        if self.semantic_flow is not None:
+            self.semantic_flow.reset(None)
         self._last_health_check = None
 
     def _launch(self, spec):
@@ -148,6 +170,8 @@ class PipelineSupervisor:
                 self.audio_flow.reset(spec)
             if self.source_flow is not None:
                 self.source_flow.reset(spec)
+            if self.semantic_flow is not None:
+                self.semantic_flow.reset(spec)
         except Exception:
             self._stop()
             raise
@@ -157,6 +181,7 @@ class PipelineSupervisor:
         self._graph_misses = 0
         self._audio_misses = 0
         self._source_misses = 0
+        self._semantic_misses = 0
         self._last_health_check = self.clock()
         self.fault = ""
 
@@ -218,6 +243,7 @@ class PipelineSupervisor:
                     if audio is not None and audio.timed_out:
                         self._audio_misses += 1
                         self._source_misses = 0
+                        self._semantic_misses = 0
                         if self._audio_misses < self.audio_failure_threshold:
                             return
                         cause = ("capture PCM stalled for " + str(self._audio_misses) +
@@ -225,22 +251,39 @@ class PipelineSupervisor:
                     else:
                         self._audio_misses = 0
                         source = self.source_flow.snapshot() if self.source_flow else None
-                        # Only blame spatial processing when upstream PCM is fresh.
-                        if (source is None or not source.timed_out or
-                                (audio is not None and not audio.healthy)):
+                        # Attribute a failure to the earliest unhealthy stage.
+                        # Do not blame semantic workers if spatial or capture
+                        # has stopped delivering valid PCM.
+                        if (source is not None and source.timed_out and
+                                (audio is None or audio.healthy)):
+                            self._source_misses += 1
+                            self._semantic_misses = 0
+                            if self._source_misses < self.source_failure_threshold:
+                                return
+                            cause = ("source PCM stalled for " + str(self._source_misses) +
+                                     " consecutive checks while capture is healthy: " +
+                                     source.detail)
+                        else:
                             self._source_misses = 0
-                            return
-                        self._source_misses += 1
-                        if self._source_misses < self.source_failure_threshold:
-                            return
-                        cause = ("source PCM stalled for " + str(self._source_misses) +
-                                 " consecutive checks while capture is healthy: " +
-                                 source.detail)
+                            semantic = (self.semantic_flow.snapshot()
+                                        if self.semantic_flow else None)
+                            if (semantic is None or not semantic.timed_out or
+                                    (audio is not None and not audio.healthy) or
+                                    (source is not None and not source.healthy)):
+                                self._semantic_misses = 0
+                                return
+                            self._semantic_misses += 1
+                            if self._semantic_misses < self.semantic_failure_threshold:
+                                return
+                            cause = ("semantic PCM stalled for " + str(self._semantic_misses) +
+                                     " consecutive checks while source PCM is healthy: " +
+                                     semantic.detail)
                 else:
                     self._graph_healthy = False
                     self._graph_misses += 1
                     self._audio_misses = 0
                     self._source_misses = 0
+                    self._semantic_misses = 0
                     if self._graph_misses < self.graph_failure_threshold:
                         return
                     cause = ("ROS graph unhealthy for " + str(self._graph_misses) +

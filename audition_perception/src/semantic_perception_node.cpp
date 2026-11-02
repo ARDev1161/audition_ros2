@@ -333,6 +333,8 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
   speech_ = std::make_unique<SpeechBridge>(*this);
   transcript_pub_ = create_publisher<audition_msgs::msg::Transcript>(
     "internal/transcripts", rclcpp::QoS(20).reliable());
+  progress_pub_ = create_publisher<audition_msgs::msg::SemanticProgress>(
+    "internal/semantic_progress", rclcpp::QoS(20).reliable());
   class_pub_ = create_publisher<audition_msgs::msg::SoundClassification>(
     "internal/classifications", rclcpp::QoS(20).reliable());
   event_pub_ = create_publisher<audition_msgs::msg::AcousticEvent>(
@@ -458,6 +460,15 @@ void SemanticPerceptionNode::onSourceAudio(
   try {
     impl_->onAudio(msg, event_pub_);
     speech_->onAudio(msg);
+    // Ack only after canonical admission AND successful worker submission.
+    // This does not imply that asynchronous YAMNet/ASR inference completed.
+    audition_msgs::msg::SemanticProgress progress;
+    progress.spatial_session_id = msg.spatial_session_id;
+    progress.source_id = msg.source_id;
+    progress.source_generation = msg.source_generation;
+    progress.sequence_number = msg.sequence_number;
+    progress.frame_count = msg.frame_count;
+    progress_pub_->publish(std::move(progress));
   } catch (const std::exception & error) {
     RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
       "Semantic source rejected: %s", error.what());

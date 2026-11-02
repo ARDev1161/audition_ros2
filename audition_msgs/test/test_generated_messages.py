@@ -15,6 +15,7 @@ from audition_msgs.msg import (
     LocalizedSourceArray,
     SoundClassification,
     SourceAudioFrame,
+    SemanticProgress,
     Transcript,
 )
 
@@ -107,6 +108,21 @@ def test_semantic_message_generation_and_score_types():
     assert transcript_back.text == "hello"
 
 
+def test_semantic_progress_round_trip():
+    progress = SemanticProgress()
+    progress.spatial_session_id = "a" * 32
+    progress.source_id = "mono"
+    progress.source_generation = 3
+    progress.sequence_number = 41
+    progress.frame_count = 160
+    restored = deserialize_message(serialize_message(progress), SemanticProgress)
+    assert restored.spatial_session_id == progress.spatial_session_id
+    assert restored.source_id == "mono"
+    assert restored.source_generation == 3
+    assert restored.sequence_number == 41
+    assert restored.frame_count == 160
+
+
 def test_localized_source_is_separate_from_bearing():
     result = LocalizedSource()
     result.source_id = "sensor-A/session-4/007"
@@ -192,6 +208,11 @@ def test_pipeline_status_graph_watchdog_round_trip():
     response.source_miss_count = 3
     response.accepted_source_frames = 15
     response.last_source_age_ms = 9000
+    response.semantic_watchdog_enabled = True
+    response.semantic_healthy = False
+    response.semantic_miss_count = 4
+    response.accepted_semantic_frames = 10
+    response.last_semantic_age_ms = 11000
     back = deserialize_message(serialize_message(response), GetPipelineStatus.Response)
     assert back.running and not back.graph_healthy
     assert back.graph_miss_count == 3
@@ -204,3 +225,7 @@ def test_pipeline_status_graph_watchdog_round_trip():
     assert back.source_miss_count == 3
     assert back.accepted_source_frames == 15
     assert back.last_source_age_ms == 9000
+    assert back.semantic_watchdog_enabled and not back.semantic_healthy
+    assert back.semantic_miss_count == 4
+    assert back.accepted_semantic_frames == 10
+    assert back.last_semantic_age_ms == 11000

@@ -179,3 +179,33 @@ recovery, profile switching, and service serialization. The virtual ALSA
 ROS graph smoke requires both raw and mono source PCM progress. This does
 not measure semantic inference latency, DOA accuracy, physical ReSpeaker
 behavior or zero-downtime switching.
+
+
+## M2t: semantic ingress acknowledgement and supervised downstream stall (2026-11-02)
+
+The semantic node publishes `internal/semantic_progress` as
+`audition_msgs/msg/SemanticProgress` **only after** canonical source admission
+and successful submission to both configured semantic workers. Each small
+acknowledgement carries the spatial session, source ID, generation, PCM
+sequence and frame count. It does not copy PCM and does not report completed
+YAMNet classification, VAD or ASR inference.
+
+The optional supervisor checks these acknowledgements with per-source
+monotonic cursors, retired spatial-session fencing and bounded memory. It
+exposes `semantic_watchdog_enabled`, `semantic_healthy`,
+`semantic_miss_count`, `accepted_semantic_frames` and
+`last_semantic_age_ms` in `GetPipelineStatus`. For live ALSA+mono only,
+after 10 seconds without an initial acknowledgement or 5 seconds of silence
+in the acknowledgement stream, five consecutive 1-second samples trigger
+owned-process containment **only if both raw and spatial source PCM are
+healthy**. An upstream failure is attributed to the earlier stage; finite
+WAV and ODAS remain diagnostic-only because their source activity may stop
+legitimately. Manual recovery and session retirement follow M2p/M2s.
+
+The acknowledgement is a **semantic ingress/worker-submission** heartbeat,
+not proof of asynchronous inference completion or model accuracy. Disabled
+model backends still acknowledge valid admitted PCM, so this watchdog cannot
+measure classifier or ASR throughput. It also does not authenticate DDS
+publishers. CI tests invalid/replayed acknowledgements, spatial-session
+restarts, debounce, upstream fault attribution, profile switching, typed
+serialization and a live virtual ALSA ROS graph.

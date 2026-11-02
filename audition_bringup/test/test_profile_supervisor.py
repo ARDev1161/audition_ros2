@@ -22,6 +22,12 @@ source_module = importlib.util.module_from_spec(source_spec)
 sys.modules[source_spec.name] = source_module
 source_spec.loader.exec_module(source_module)
 SourceFlowMonitor = source_module.SourceFlowMonitor
+semantic_spec = importlib.util.spec_from_file_location(
+    "profile_semantic_flow", PATH.with_name("profile_semantic_flow.py"))
+semantic_module = importlib.util.module_from_spec(semantic_spec)
+sys.modules[semantic_spec.name] = semantic_module
+semantic_spec.loader.exec_module(semantic_module)
+SemanticFlowMonitor = semantic_module.SemanticFlowMonitor
 
 
 class FakeClock:
@@ -468,6 +474,131 @@ class SourceFlowTests(unittest.TestCase):
         self.assertTrue(monitor.observe("a" * 32, "mono", 1, 0, 16000, 1, 1))
         self.assertTrue(monitor.observe("b" * 32, "mono", 1, 0, 16000, 1, 1))
         self.assertFalse(monitor.observe("c" * 32, "mono", 1, 0, 16000, 1, 1))
+        self.assertTrue(monitor.snapshot().timed_out)
+
+
+
+class SemanticFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.events = []
+        self.probe = FakeProbe(self.events)
+        self.raw = AudioFlowMonitor(lambda spec: "alsa", clock=self.clock,
+                                    start_grace_s=2, stall_timeout_s=2)
+        self.source = SourceFlowMonitor(
+            lambda spec: ("alsa", "mono"), clock=self.clock,
+            start_grace_s=2, stall_timeout_s=2)
+        self.semantic = SemanticFlowMonitor(
+            lambda spec: ("alsa", "mono"), clock=self.clock,
+            start_grace_s=2, stall_timeout_s=2)
+        self.supervisor = PipelineSupervisor(
+            lambda spec: None,
+            lambda spec: FakeProcess(spec.profile, self.events),
+            self.probe, timeout=1, clock=self.clock,
+            audio_flow=self.raw, source_flow=self.source,
+            semantic_flow=self.semantic, semantic_failure_threshold=3,
+            source_failure_threshold=3, audio_failure_threshold=3)
+        self.supervisor.start(ProfileSpec("old"))
+        self.capture_session = "a" * 32
+        self.spatial_session = "b" * 32
+
+    def tearDown(self):
+        self.supervisor.shutdown()
+
+    def tick(self, seq, source=True, semantic=False):
+        assert self.raw.observe(self.capture_session, seq, 160, 1, 160)
+        if source:
+            assert self.source.observe(self.spatial_session, "mono", 1,
+                                       seq, 16000, 160, 160)
+        if semantic:
+            assert self.semantic.observe(self.spatial_session, "mono", 1,
+                                         seq, 160)
+        self.clock.advance()
+        self.supervisor.monitor()
+
+    def test_missing_semantic_ack_contained_when_upstream_healthy(self):
+        for seq in range(5):
+            self.tick(seq)
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertIn("semantic PCM stalled", state.fault)
+        self.assertNotIn("source PCM stalled", state.fault)
+        self.assertEqual(self.events.count("stop:old"), 1)
+
+    def test_continuous_admitted_semantic_pcm_keeps_pipeline_alive(self):
+        for seq in range(12):
+            self.tick(seq, semantic=True)
+        state = self.supervisor.status()
+        self.assertTrue(state.running and state.semantic_healthy)
+        self.assertTrue(state.semantic_watchdog_enabled)
+        self.assertEqual(state.accepted_semantic_frames, 12)
+        self.assertEqual(state.semantic_miss_count, 0)
+
+    def test_semantic_replay_malformed_and_retired_sessions_rejected(self):
+        self.assertFalse(self.semantic.observe("bad", "mono", 1, 0, 160))
+        self.assertFalse(self.semantic.observe(self.spatial_session, "", 1, 0, 160))
+        self.assertFalse(self.semantic.observe(self.spatial_session, "mono", 0, 0, 160))
+        self.assertTrue(self.semantic.observe(self.spatial_session, "mono", 1, 0, 160))
+        self.assertFalse(self.semantic.observe(self.spatial_session, "mono", 1, 0, 160))
+        self.assertFalse(self.semantic.observe(self.spatial_session, "mono", 1, 1, 0))
+        self.assertTrue(self.semantic.observe("c" * 32, "mono", 1, 0, 160))
+        self.assertFalse(self.semantic.observe(self.spatial_session, "mono", 1, 999, 160))
+        self.assertEqual(self.semantic.snapshot().accepted_frames, 2)
+
+    def test_source_stall_is_not_misdiagnosed_as_semantic_failure(self):
+        for seq in range(5):
+            self.tick(seq, source=False)
+        state = self.supervisor.status()
+        self.assertFalse(state.running)
+        self.assertIn("source PCM stalled", state.fault)
+        self.assertNotIn("semantic PCM stalled", state.fault)
+
+    def test_capture_stall_is_attributed_to_capture(self):
+        self.tick(0, semantic=True)
+        for _ in range(8):
+            self.clock.advance()
+            self.supervisor.monitor()
+        state = self.supervisor.status()
+        self.assertIn("capture PCM stalled", state.fault)
+        self.assertNotIn("semantic PCM stalled", state.fault)
+
+    def test_transient_semantic_delay_recovers(self):
+        self.tick(0, semantic=True)
+        self.clock.advance(2.1)
+        assert self.raw.observe(self.capture_session, 1, 160, 1, 160)
+        assert self.source.observe(self.spatial_session, "mono", 1, 1, 16000, 160, 160)
+        self.supervisor.monitor()
+        self.assertEqual(self.supervisor.status().semantic_miss_count, 1)
+        self.tick(2, semantic=True)
+        self.assertTrue(self.supervisor.status().running)
+        self.assertEqual(self.supervisor.status().semantic_miss_count, 0)
+
+    def test_switch_retires_semantic_session_and_resets_status(self):
+        self.tick(0, semantic=True)
+        self.assertTrue(self.supervisor.switch(ProfileSpec("new")).success)
+        self.assertFalse(self.semantic.observe(self.spatial_session, "mono", 1, 1, 160))
+        self.assertTrue(self.semantic.observe("c" * 32, "mono", 1, 0, 160))
+        state = self.supervisor.status()
+        self.assertEqual(state.accepted_semantic_frames, 1)
+        self.assertEqual(state.reload_epoch, 1)
+
+    def test_wav_and_odas_are_observation_only(self):
+        for mode in (("wav", "mono"), ("alsa", "odas")):
+            monitor = SemanticFlowMonitor(lambda spec, m=mode: m,
+                                          clock=self.clock, start_grace_s=1,
+                                          stall_timeout_s=1)
+            monitor.reset(ProfileSpec("test"))
+            self.clock.advance(20)
+            self.assertFalse(monitor.snapshot().enabled)
+            self.assertFalse(monitor.snapshot().timed_out)
+
+    def test_session_history_exhaustion_fails_closed(self):
+        monitor = SemanticFlowMonitor(lambda spec: ("alsa", "mono"),
+                                      clock=self.clock, max_sessions=1)
+        monitor.reset(ProfileSpec("test"))
+        self.assertTrue(monitor.observe("a" * 32, "mono", 1, 0, 160))
+        self.assertTrue(monitor.observe("b" * 32, "mono", 1, 0, 160))
+        self.assertFalse(monitor.observe("c" * 32, "mono", 1, 0, 160))
         self.assertTrue(monitor.snapshot().timed_out)
 
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <audition_msgs/msg/source_audio_frame.hpp>
+#include <audition_msgs/msg/semantic_progress.hpp>
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <audition_msgs/msg/sound_classification.hpp>
 #include <audition_msgs/msg/acoustic_event.hpp>
@@ -32,6 +33,7 @@ private:
   rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr event_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
+  rclcpp::Publisher<audition_msgs::msg::SemanticProgress>::SharedPtr progress_pub_;
   rclcpp::Service<audition_msgs::srv::GetCapabilities>::SharedPtr capabilities_srv_;
   rclcpp::Service<audition_msgs::srv::GetSemanticStatus>::SharedPtr semantic_status_srv_;
   rclcpp::Service<audition_msgs::srv::ReloadSemanticWorkers>::SharedPtr reload_srv_;

@@ -25,3 +25,11 @@ uint32 source_miss_count
 uint64 accepted_source_frames
 # 0 before the first accepted source PCM.
 uint64 last_source_age_ms
+# Semantic ingress acknowledgement: emitted only after admission and
+# successful worker submission, NOT proof of completed classification/ASR.
+# Enforcement only for live mono ALSA with fresh upstream source/raw PCM.
+bool semantic_watchdog_enabled
+bool semantic_healthy
+uint32 semantic_miss_count
+uint64 accepted_semantic_frames
+uint64 last_semantic_age_ms
