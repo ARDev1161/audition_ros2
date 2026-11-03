@@ -1,5 +1,6 @@
 #include "audition_perception/semantic_perception_node.hpp"
 #include "audition_perception/classifier_state_deadline_tracker.hpp"
+#include "audition_perception/classifier_observation_config.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -69,6 +70,13 @@ builtin_interfaces::msg::Time stampFromNs(std::int64_t ns) {
 class SemanticPerceptionNode::Impl {
 public:
   Impl(SemanticPerceptionNode & node) {
+    observation_config_.sample_period_ms =
+      readOrDeclare<std::int64_t>(node, "classifier_workload_sample_period_ms", 1000);
+    observation_config_.queued_threshold_ms =
+      readOrDeclare<std::int64_t>(node, "classifier_queued_threshold_ms", 10000);
+    observation_config_.inference_threshold_ms =
+      readOrDeclare<std::int64_t>(node, "classifier_inference_threshold_ms", 30000);
+    observation_config_.validate();
     backend_ = readOrDeclare<std::string>(node, "classifier_backend", "disabled");
     if (backend_ == "disabled") return;
     if (backend_ != "yamnet") {
@@ -121,6 +129,7 @@ public:
   }
 
   bool enabled() const noexcept { return backend_ == "yamnet"; }
+  const ClassifierObservationConfig & observationConfig() const { return observation_config_; }
   ClassifierWorkloadSnapshot workload() const {
     ClassifierWorkloadAccumulator accumulator;
 #ifdef AUDITION_ROS2_WITH_YAMNET
@@ -184,7 +193,9 @@ public:
     sample_valid_ = false;
   }
   ClassifierDeadlineSnapshot deadlines() const {
-    return deadline_tracker_.snapshot(queue_deadline_ms_, inference_deadline_ms_);
+    return deadline_tracker_.snapshot(
+      static_cast<std::uint64_t>(observation_config_.queued_threshold_ms),
+      static_cast<std::uint64_t>(observation_config_.inference_threshold_ms));
   }
 
   void resetStream() {
@@ -407,8 +418,7 @@ private:
   std::uint64_t sample_count_{0}, sample_failures_{0};
   bool sample_valid_{false};
   std::chrono::steady_clock::time_point last_sample_{};
-  const std::uint64_t queue_deadline_ms_{10000};
-  const std::uint64_t inference_deadline_ms_{30000};
+  ClassifierObservationConfig observation_config_{};
   std::string backend_;
 };
 
@@ -508,6 +518,12 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       const auto classifier_work = impl_->cachedWorkload();
       response->classifier_has_workload_sample = impl_->hasSample();
       response->classifier_workload_sample_valid = impl_->sampleValid();
+      response->classifier_workload_sample_period_ms =
+        static_cast<std::uint64_t>(impl_->observationConfig().sample_period_ms);
+      response->classifier_queued_threshold_ms =
+        static_cast<std::uint64_t>(impl_->observationConfig().queued_threshold_ms);
+      response->classifier_inference_threshold_ms =
+        static_cast<std::uint64_t>(impl_->observationConfig().inference_threshold_ms);
       response->classifier_workload_samples = impl_->sampleCount();
       response->classifier_workload_sample_failures = impl_->sampleFailures();
       response->classifier_last_workload_sample_age_ms = impl_->sampleAgeMs();
@@ -572,7 +588,8 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->reload_epoch = reload_epoch_;
     });
   timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
-  workload_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
+  workload_timer_ = create_wall_timer(
+    std::chrono::milliseconds(impl_->observationConfig().sample_period_ms), [this]() {
     try { impl_->sampleWorkload(); }
     catch (const std::exception & error) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,

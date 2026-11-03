@@ -76,3 +76,8 @@ uint64 classifier_last_workload_sample_age_ms
 # M2y: last sampled workload is valid for the current worker/source incarnation.
 # False before first sample, after native status errors, source retirement/reset or reload.
 bool classifier_workload_sample_valid
+
+# M2z: startup-only observer settings, in milliseconds.
+uint64 classifier_workload_sample_period_ms
+uint64 classifier_queued_threshold_ms
+uint64 classifier_inference_threshold_ms

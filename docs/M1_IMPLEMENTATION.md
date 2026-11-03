@@ -585,3 +585,15 @@ On invalid samples, overdue counters are suppressed until the next successful
 sample. This avoids false watchdog diagnostics during backend errors or source
 turnover, but remains observation-only, not native per-job timing. See
 [M2y sample fencing](M2_SAMPLE_FENCING.md).
+
+## M2z: configurable, validated YAMNet diagnostic sampling (2026-11-03)
+
+The classifier observer now accepts startup-only ROS parameters
+`classifier_workload_sample_period_ms` (default 1000; range 200–10000),
+`classifier_queued_threshold_ms` (default 10000; range 1000–600000) and
+`classifier_inference_threshold_ms` (default 30000; range 1000–600000).
+Each threshold must be at least the sample period. Invalid profiles fail
+startup before workers are created; live parameter changes remain rejected.
+The effective values are returned by `GetSemanticStatus`, including with a
+disabled classifier. The diagnostics are source-state observations, not native
+job timeouts or automatic worker restarts. See [M2z](M2_OBSERVER_CONFIGURATION.md).
