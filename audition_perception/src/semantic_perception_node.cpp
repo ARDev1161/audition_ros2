@@ -143,7 +143,7 @@ public:
           case audition::SourceClassificationState::Error:
             state = ClassifierWorkState::Error; break;
         }
-        deadline_tracker_.observe(item.first, state);
+        deadline_tracker_.observe(std::to_string(item.second.id), state);
         accumulator.observe(state, status.dropped_windows,
                             status.last_inference_ms, status.last_queue_wait_ms);
       }
@@ -164,17 +164,31 @@ public:
   }
   void sampleWorkload() {
     try {
-      cached_workload_ = workload();
+      const auto sampled = workload();
+      cached_workload_ = sampled;
       last_sample_ = std::chrono::steady_clock::now();
       ++sample_count_;
-    } catch (...) { ++sample_failures_; throw; }
+      sample_valid_ = true;
+    } catch (...) {
+      ++sample_failures_;
+      sample_valid_ = false;
+      deadline_tracker_.reset();
+      cached_workload_ = {};
+      throw;
+    }
+  }
+  bool sampleValid() const { return sample_valid_; }
+  void invalidateSample() {
+    deadline_tracker_.reset();
+    cached_workload_ = {};
+    sample_valid_ = false;
   }
   ClassifierDeadlineSnapshot deadlines() const {
     return deadline_tracker_.snapshot(queue_deadline_ms_, inference_deadline_ms_);
   }
 
   void resetStream() {
-    deadline_tracker_.reset();
+    invalidateSample();
 #ifdef AUDITION_ROS2_WITH_YAMNET
     if (!enabled()) return;
     // Forget workers before a new epoch is admitted. A late completed job
@@ -379,6 +393,7 @@ private:
     runtime_->forget(it->second.id);
     id_to_name_.erase(it->second.id);
     sources_.erase(it);
+    invalidateSample();
   }
   std::uint64_t next_id_{1};
   int max_sources_{16};
@@ -390,6 +405,7 @@ private:
   mutable ClassifierStateDeadlineTracker deadline_tracker_;
   ClassifierWorkloadSnapshot cached_workload_{};
   std::uint64_t sample_count_{0}, sample_failures_{0};
+  bool sample_valid_{false};
   std::chrono::steady_clock::time_point last_sample_{};
   const std::uint64_t queue_deadline_ms_{10000};
   const std::uint64_t inference_deadline_ms_{30000};
@@ -491,6 +507,7 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->inference_poll_failures = inference.inference_poll_failures;
       const auto classifier_work = impl_->cachedWorkload();
       response->classifier_has_workload_sample = impl_->hasSample();
+      response->classifier_workload_sample_valid = impl_->sampleValid();
       response->classifier_workload_samples = impl_->sampleCount();
       response->classifier_workload_sample_failures = impl_->sampleFailures();
       response->classifier_last_workload_sample_age_ms = impl_->sampleAgeMs();
@@ -506,7 +523,8 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->classifier_max_last_inference_ms = classifier_work.max_last_inference_ms;
       response->classifier_has_queue_wait_timing = classifier_work.have_queue_wait_timing;
       response->classifier_max_last_queue_wait_ms = classifier_work.max_last_queue_wait_ms;
-      const auto deadlines = impl_->deadlines();
+      const auto deadlines = impl_->sampleValid() ? impl_->deadlines() :
+        ClassifierDeadlineSnapshot{};
       response->classifier_overdue_queued_sources = deadlines.overdue_queued_sources;
       response->classifier_overdue_inferencing_sources = deadlines.overdue_inferencing_sources;
       response->classifier_max_queued_state_age_ms = deadlines.max_queued_age_ms;

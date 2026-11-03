@@ -571,3 +571,17 @@ running-job age, so no ASR deadline or automatic restart is claimed. See
 ## M2x: autonomous workload sampling (2026-11-03)
 
 A 1 Hz timer samples native YAMNet source states independently of status-service callers. The status service returns cached workload and exposes sample freshness, success and failure counters. Reload resets these values. No automatic restart or individual inference-job deadline is claimed. See [M2x](M2_WORKLOAD_SAMPLING.md).
+
+## M2y: source-incarnation and failed-sample fencing (2026-11-03)
+
+M2x sampling now keys state residency by the native worker's unique source ID,
+not the externally reusable source name. A retired/re-created source therefore
+cannot inherit the prior generation's queued/inferencing age. Retirement,
+stream reset and native sampling exceptions invalidate cached workload and
+reset state-residency clocks. `classifier_workload_sample_valid` distinguishes
+valid current-incarnation samples from stale last-success history; the existing
+`classifier_has_workload_sample` still means at least one historical success.
+On invalid samples, overdue counters are suppressed until the next successful
+sample. This avoids false watchdog diagnostics during backend errors or source
+turnover, but remains observation-only, not native per-job timing. See
+[M2y sample fencing](M2_SAMPLE_FENCING.md).

@@ -74,3 +74,23 @@ TEST(ClassifierDeadlines, RetirementIsPrunedAtNextSample) {
   tracker.finishSample();
   EXPECT_EQ(tracker.snapshot(1,1,t0+std::chrono::seconds(5)).overdue_inferencing_sources,0U);
 }
+
+TEST(ClassifierDeadlines, DistinctNativeIdsDoNotInheritOldSourceAge) {
+  ClassifierStateDeadlineTracker t;
+  const auto t0=Clock::time_point{};
+  t.observe("native-id-1",ClassifierWorkState::Inferencing,t0);
+  t.finishSample();
+  t.observe("native-id-2",ClassifierWorkState::Inferencing,t0+std::chrono::seconds(5));
+  t.finishSample();
+  EXPECT_EQ(t.snapshot(1000,1000,t0+std::chrono::seconds(5)).overdue_inferencing_sources,0U);
+}
+TEST(ClassifierDeadlines, InvalidatedSamplesMustResetStateHistory) {
+  ClassifierStateDeadlineTracker t;
+  const auto t0=Clock::time_point{};
+  t.observe("id",ClassifierWorkState::Queued,t0);
+  t.finishSample();
+  t.reset();
+  t.observe("id",ClassifierWorkState::Queued,t0+std::chrono::seconds(20));
+  t.finishSample();
+  EXPECT_EQ(t.snapshot(1000,1000,t0+std::chrono::seconds(20)).overdue_queued_sources,0U);
+}
