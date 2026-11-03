@@ -677,3 +677,15 @@ failure, not evidence of an ASR loss-counter regression. The namespace smoke
 now waits up to 35 seconds and reports graph topics, service readiness,
 process status and both launch logs on failure. It still requires two valid
 isolated PCM streams, scenes and capability services; no assertion was removed.
+
+## M3f: independent DDS graph convergence after supervised reload (2026-11-03)
+
+The M3e follow-up PR Humble run passed 183 tests but failed in the supervisor
+reload smoke immediately after successful service and PCM readiness: the test
+node temporarily could not discover `mono_source`, while the supervisor
+reported a healthy graph. The test now waits up to 20 seconds for its **own**
+DDS discovery cache to converge after the reload. It still requires exactly
+one of each four expected namespaced nodes; failure includes the supervisor's
+running/graph-health/miss/fault state and the test node's discovered graph.
+This is a bounded test-only readiness barrier, not a weakened production
+watchdog, changed reload contract or proof of hardware accuracy.

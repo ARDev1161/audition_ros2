@@ -23,6 +23,25 @@ def wait_audio(node, client, timeout=12):
     raise AssertionError("no observed capture PCM after supervised launch")
 
 
+def wait_graph(node, status_client, timeout=20):
+    """A supervisor's DDS graph cache and this test node may converge separately."""
+    expected = {("audio_capture", "/audition"), ("mono_source", "/audition"),
+                ("acoustic_scene", "/audition"), ("semantic_perception", "/audition")}
+    deadline = time.monotonic() + timeout
+    last_nodes = []
+    while time.monotonic() < deadline:
+        last_nodes = node.get_node_names_and_namespaces()
+        if all(last_nodes.count(item) == 1 for item in expected):
+            return
+        time.sleep(0.2)
+    status = call(node, status_client, GetPipelineStatus.Request())
+    raise AssertionError(
+        f"supervised graph not visible from test node: expected={sorted(expected)} "
+        f"observed={last_nodes} running={status.running} "
+        f"graph_healthy={status.graph_healthy} graph_misses={status.graph_miss_count} "
+        f"fault={status.fault!r}")
+
+
 def main():
     rclpy.init()
     node = rclpy.create_node("pipeline_reload_ci")
@@ -59,9 +78,7 @@ def main():
         assert healthy.source_miss_count == 0
         assert wait_audio(node, status_client).accepted_audio_frames > 0
         assert call(node, capabilities, GetCapabilities.Request()).profile_name == "replay_ci"
-        nodes = node.get_node_names_and_namespaces()
-        for name in ("audio_capture", "mono_source", "acoustic_scene", "semantic_perception"):
-            assert nodes.count((name, "/audition")) == 1, (name, nodes)
+        wait_graph(node, status_client)
         print("Pipeline reload PASS: preflight, dry-run, owned restart, graph watchdog status")
     finally:
         node.destroy_node()
