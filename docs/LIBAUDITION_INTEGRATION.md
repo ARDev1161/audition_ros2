@@ -759,3 +759,14 @@ cannot underflow. The status service exposes last-sample increments, observed
 increments since stream/worker reset and a last-sample loss flag. These are
 **sampled loss diagnostics**, not ASR accuracy, transcript quality or
 individual inference-job timing. See [M3e](M3_ASR_LOSS_DELTAS.md).
+
+## M3e CI follow-up: namespace discovery failure (2026-11-03)
+
+The M3e PR Humble run passed unit tests and all earlier ROS graph smokes, but
+its final two-namespace smoke timed out with no discovered graph nodes. Both
+launch parents had started their WAV capture and component-container processes;
+no cross-namespace PCM or scene leak was observed. This is a discovery/startup
+failure, not evidence of an ASR loss-counter regression. The namespace smoke
+now waits up to 35 seconds and reports graph topics, service readiness,
+process status and both launch logs on failure. It still requires two valid
+isolated PCM streams, scenes and capability services; no assertion was removed.

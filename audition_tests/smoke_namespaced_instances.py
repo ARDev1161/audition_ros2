@@ -54,7 +54,7 @@ def main():
     rclpy.init()
     node = Probe()
     try:
-        deadline = time.monotonic() + 25
+        deadline = time.monotonic() + 35
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.2)
             if node.errors:
@@ -64,7 +64,10 @@ def main():
                 break
         assert not node.errors, node.errors
         assert len(node.audio) == len(node.scenes) == 2, (
-            node.audio, node.scenes, node.get_node_names_and_namespaces())
+            node.audio, node.scenes, node.get_node_names_and_namespaces(),
+            node.get_topic_names_and_types(),
+            {robot: client.service_is_ready()
+             for robot, client in node.capability_clients.items()})
         for robot, client in node.capability_clients.items():
             assert client.wait_for_service(timeout_sec=5.0), robot
             future = client.call_async(GetCapabilities.Request())

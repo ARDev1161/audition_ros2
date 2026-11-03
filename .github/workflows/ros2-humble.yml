@@ -264,6 +264,8 @@ jobs:
           b_pid=$!
           trap 'kill "$a_pid" "$b_pid" 2>/dev/null || true' EXIT
           if ! python3 audition_tests/smoke_namespaced_instances.py; then
+            echo "Namespace smoke failed: process status and launch logs"
+            ps -eo pid,ppid,stat,comm,args | grep -E 'ros2|component_container|wav_capture' || true
             cat /tmp/audition_robot_a.log /tmp/audition_robot_b.log
             exit 1
           fi
