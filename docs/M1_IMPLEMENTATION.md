@@ -702,3 +702,15 @@ status service reports the effective values. The independent M3d continuity
 gap remains capped at three seconds; consequently slow sampling cannot claim
 continuous backlog, even with relaxed freshness. No automatic restart or
 per-job ASR deadline is introduced. See [M3g](M3_ASR_OBSERVATION_CONFIGURATION.md).
+
+## M3g CI follow-up: capture-session fixture discovery (2026-11-04)
+
+The M3g push Humble run passed compilation and prior graph checks but its
+capture-session restart fixture timed out after eight seconds before the
+mono source subscriber appeared. The fixture launch had started its component
+container; no assertion about session replay was reached. The smoke now waits
+up to 35 seconds for both composable nodes and the PCM subscriber to be
+visible in the test node's own DDS graph, with node/subscription diagnostics
+on failure. Session-generation, old-session replay, malformed ID, duplicate,
+reorder and recovery assertions are unchanged. This is a bounded test
+readiness fix, not a change to production session fencing.

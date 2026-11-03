@@ -57,8 +57,19 @@ def main():
     rclpy.init()
     probe = Probe()
     try:
-        assert probe.wait(lambda: probe.publisher.get_subscription_count() > 0), (
-            "mono source subscription unavailable")
+        # Wait for composable-node loading and the test node's DDS discovery.
+        def graph_nodes():
+            return {"/" + ns.strip("/") + "/" + name
+                    for name, ns in probe.get_node_names_and_namespaces()}
+
+        ready = probe.wait(
+            lambda: probe.publisher.get_subscription_count() > 0
+            and {"/audition/mono_source", "/audition/acoustic_scene"} <= graph_nodes(),
+            seconds=35)
+        assert ready, (
+            "capture fixture did not converge: "
+            f"subscriptions={probe.publisher.get_subscription_count()}, "
+            f"nodes={sorted(graph_nodes())}")
         a, b = "a" * 32, "b" * 32
         probe.send(a, 0, 0.1, 0)
         assert probe.wait(lambda: (1, 0.1) in probe.audio and 1 in probe.generations), (
