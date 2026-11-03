@@ -11,6 +11,12 @@ class SpeechWorkloadObserver {
 public:
   using Clock = std::chrono::steady_clock;
   void sample(const SpeechWorkloadSnapshot & value, Clock::time_point now = Clock::now()) {
+    if (!valid_ || value.queued_segments == 0) {
+      queue_nonempty_since_ = value.queued_segments > 0 ? now : Clock::time_point{};
+    }
+    if (!valid_ || value.buffered_results == 0) {
+      mailbox_nonempty_since_ = value.buffered_results > 0 ? now : Clock::time_point{};
+    }
     cached_ = value;
     peak_queued_ = std::max(peak_queued_, value.queued_segments);
     peak_buffered_ = std::max(peak_buffered_, value.buffered_results);
@@ -22,6 +28,8 @@ public:
     ++failures_;
     valid_ = false;
     cached_ = {};
+    queue_nonempty_since_ = {};
+    mailbox_nonempty_since_ = {};
   }
   void reset() {
     cached_ = {};
@@ -31,6 +39,20 @@ public:
     samples_ = 0;
     failures_ = 0;
     last_sample_ = {};
+    queue_nonempty_since_ = {};
+    mailbox_nonempty_since_ = {};
+  }
+  std::uint64_t queueNonemptyAgeMs(Clock::time_point now = Clock::now()) const {
+    return nonemptyAgeMs(queue_nonempty_since_, cached_.queued_segments, now);
+  }
+  std::uint64_t mailboxNonemptyAgeMs(Clock::time_point now = Clock::now()) const {
+    return nonemptyAgeMs(mailbox_nonempty_since_, cached_.buffered_results, now);
+  }
+  bool queuePressure(std::uint64_t minimum_segments, std::uint64_t minimum_age_ms,
+                     Clock::time_point now = Clock::now()) const {
+    return valid_ && minimum_segments > 0 && minimum_age_ms > 0 &&
+      cached_.queued_segments >= minimum_segments &&
+      queueNonemptyAgeMs(now) >= minimum_age_ms;
   }
   SpeechWorkloadSnapshot current() const { return valid_ ? cached_ : SpeechWorkloadSnapshot{}; }
   bool valid() const { return valid_; }
@@ -45,6 +67,13 @@ public:
       std::chrono::duration_cast<std::chrono::milliseconds>(now - last_sample_).count());
   }
 private:
+  std::uint64_t nonemptyAgeMs(Clock::time_point since, std::uint64_t count,
+                              Clock::time_point now) const {
+    if (!valid_ || count == 0 || now < since) return 0;
+    return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - since).count());
+  }
+  Clock::time_point queue_nonempty_since_{}, mailbox_nonempty_since_{};
   SpeechWorkloadSnapshot cached_{};
   Clock::time_point last_sample_{};
   std::uint64_t samples_{0}, failures_{0}, peak_queued_{0}, peak_buffered_{0};

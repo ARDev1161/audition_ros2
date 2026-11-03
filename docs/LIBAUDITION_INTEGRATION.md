@@ -704,3 +704,15 @@ YAMNet and ASR sampling are isolated so an exception in one does not suppress
 the other's sample. A queue high-water mark is **not** evidence of a hung ASR
 job; silent input and VAD gating remain legitimate. See
 [M3a ASR backlog telemetry](M3_ASR_BACKLOG_TELEMETRY.md).
+
+## M3b: sustained ASR queue and mailbox occupancy (2026-11-03)
+
+The independent ASR observer now tracks how long the pending queue and result
+mailbox have remained continuously nonempty across valid samples. It reports
+`asr_queue_nonempty_age_ms`, `asr_mailbox_nonempty_age_ms`, and a diagnostic
+`asr_sustained_queue_pressure` flag when at least four queued segments are
+currently present and the queue has stayed nonempty for at least ten seconds.
+A drained queue resets only its own age; a failed sample, worker reload or
+stream reset invalidates both clocks. No speech, zero pending work and
+sampling failures never produce a pressure alert. This is not an inference
+job deadline or automatic recovery. See [M3b](M3_ASR_QUEUE_PRESSURE.md).

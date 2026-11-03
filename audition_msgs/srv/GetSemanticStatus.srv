@@ -90,3 +90,10 @@ uint64 asr_workload_sample_failures
 uint64 asr_last_workload_sample_age_ms
 uint64 asr_peak_queued_segments
 uint64 asr_peak_buffered_results
+
+# M3b: sampled uninterrupted nonempty ASR backlog, not individual job latency.
+# Pressure: >=4 pending segments continuously nonempty for >=10 seconds.
+# No auto-restart; false when sample invalid or no pending segments.
+uint64 asr_queue_nonempty_age_ms
+uint64 asr_mailbox_nonempty_age_ms
+bool asr_sustained_queue_pressure
