@@ -69,13 +69,16 @@ TEST(SpeechObserver, DrainedQueueResetsAgeButNotMailbox) {
   const auto t=Clock::time_point{};
   SpeechWorkloadSnapshot s; s.queued_segments=3; s.buffered_results=1;
   o.sample(s,t);
+  // Keep every observation within M3d's three-second continuity window.
+  // The queue drains, but the mailbox remains continuously occupied.
   s.queued_segments=0;
-  o.sample(s,t+std::chrono::seconds(5));
-  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::seconds(6)),0U);
-  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::seconds(6)),6000U);
+  o.sample(s,t+std::chrono::seconds(2));
+  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::seconds(3)),0U);
+  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::seconds(3)),3000U);
   s.queued_segments=2;
-  o.sample(s,t+std::chrono::seconds(7));
-  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::seconds(8)),1000U);
+  o.sample(s,t+std::chrono::seconds(4));
+  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::seconds(5)),1000U);
+  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::seconds(5)),5000U);
 }
 TEST(SpeechObserver, FailedSampleAndResetFencePressure) {
   SpeechWorkloadObserver o;

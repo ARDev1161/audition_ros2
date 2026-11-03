@@ -18,3 +18,11 @@ drain between samples may still be invisible to this polling-based observer.
 
 Four unit tests cover long gaps, backwards time, boundary behavior and
 repeated gaps. The threshold matches the M3c 3000-ms freshness bound.
+
+## CI regression correction
+
+The pre-existing mailbox-versus-queue drain test now samples at 0, 2 and 4
+seconds, within the three-second maximum observation gap. Its earlier five-
+second gap was incompatible with M3d continuity fencing and correctly reset
+both clocks. The revised test independently verifies that draining the queue
+does not reset a continuously observed nonempty mailbox.
