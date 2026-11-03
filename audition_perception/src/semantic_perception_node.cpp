@@ -120,6 +120,35 @@ public:
   }
 
   bool enabled() const noexcept { return backend_ == "yamnet"; }
+  ClassifierWorkloadSnapshot workload() const {
+    ClassifierWorkloadAccumulator accumulator;
+#ifdef AUDITION_ROS2_WITH_YAMNET
+    if (enabled()) {
+      // Query native status for each live worker; source counts are not job counts.
+      for (const auto & item : sources_) {
+        const auto status = runtime_->status(item.second.id);
+        ClassifierWorkState state = ClassifierWorkState::Waiting;
+        switch (status.state) {
+          case audition::SourceClassificationState::WaitingForAudio:
+            state = ClassifierWorkState::Waiting; break;
+          case audition::SourceClassificationState::Collecting:
+            state = ClassifierWorkState::Collecting; break;
+          case audition::SourceClassificationState::Queued:
+            state = ClassifierWorkState::Queued; break;
+          case audition::SourceClassificationState::Inferencing:
+            state = ClassifierWorkState::Inferencing; break;
+          case audition::SourceClassificationState::Classified:
+            state = ClassifierWorkState::Classified; break;
+          case audition::SourceClassificationState::Error:
+            state = ClassifierWorkState::Error; break;
+        }
+        accumulator.observe(state, status.dropped_windows,
+                            status.last_inference_ms, status.last_queue_wait_ms);
+      }
+    }
+#endif
+    return accumulator.snapshot();
+  }
 
   void resetStream() {
 #ifdef AUDITION_ROS2_WITH_YAMNET
@@ -430,6 +459,27 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->asr_discarded_results = inference.asr_discarded_results;
       response->asr_last_completion_age_ms = inference.asr_last_completion_age_ms;
       response->inference_poll_failures = inference.inference_poll_failures;
+      const auto classifier_work = impl_->workload();
+      response->classifier_active_sources = classifier_work.active_sources;
+      response->classifier_waiting_sources = classifier_work.waiting_sources;
+      response->classifier_collecting_sources = classifier_work.collecting_sources;
+      response->classifier_queued_sources = classifier_work.queued_sources;
+      response->classifier_inferencing_sources = classifier_work.inferencing_sources;
+      response->classifier_classified_sources = classifier_work.classified_sources;
+      response->classifier_error_sources = classifier_work.error_sources;
+      response->classifier_dropped_windows_active = classifier_work.dropped_windows_active;
+      response->classifier_has_inference_timing = classifier_work.have_inference_timing;
+      response->classifier_max_last_inference_ms = classifier_work.max_last_inference_ms;
+      response->classifier_has_queue_wait_timing = classifier_work.have_queue_wait_timing;
+      response->classifier_max_last_queue_wait_ms = classifier_work.max_last_queue_wait_ms;
+      const auto speech_work = speech_->workload();
+      response->asr_queued_segments = speech_work.queued_segments;
+      response->asr_buffered_results = speech_work.buffered_results;
+      response->asr_retired_generations = speech_work.retired_generations;
+      response->asr_completed_segments_native = speech_work.completed_segments_native;
+      response->asr_dropped_segments_native = speech_work.dropped_segments_native;
+      response->asr_evicted_results_native = speech_work.evicted_results_native;
+      response->asr_worker_error = speech_work.worker_error;
     });
   reload_srv_ = create_service<audition_msgs::srv::ReloadSemanticWorkers>(
     "semantic_perception/reload_workers",

@@ -3,6 +3,7 @@
 #include <audition_msgs/msg/acoustic_source_array.hpp>
 #include <audition_msgs/msg/transcript.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include "audition_perception/inference_workload_stats.hpp"
 #include <memory>
 #include <cstdint>
 #include <vector>
@@ -23,6 +24,7 @@ public:
   void onSources(const audition_msgs::msg::AcousticSourceArray & snapshot);
   void resetStream();
   SpeechDrainResult drain();
+  SpeechWorkloadSnapshot workload() const;
 private:
   class Impl;
   std::unique_ptr<Impl> impl_;

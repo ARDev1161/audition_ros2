@@ -48,6 +48,18 @@ def main():
         assert value.classifier_last_completion_age_ms == 0, value
         assert value.asr_last_completion_age_ms == 0, value
         assert value.inference_poll_failures == 0, value
+        assert value.classifier_active_sources == 0, value
+        assert value.classifier_queued_sources == 0, value
+        assert value.classifier_inferencing_sources == 0, value
+        assert value.classifier_dropped_windows_active == 0, value
+        assert not value.classifier_has_inference_timing, value
+        assert not value.classifier_has_queue_wait_timing, value
+        assert value.asr_queued_segments == 0, value
+        assert value.asr_buffered_results == 0, value
+        assert value.asr_retired_generations == 0, value
+        assert value.asr_completed_segments_native == 0, value
+        assert value.asr_dropped_segments_native == 0, value
+        assert not value.asr_worker_error, value
         initial_rejected = value.rejected_source_snapshots
         # Simulate a second publisher replaying a zero-order canonical snapshot.
         stale_pub = node.create_publisher(

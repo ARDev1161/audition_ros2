@@ -177,6 +177,21 @@ public:
     (void)msg;
 #endif
   }
+  SpeechWorkloadSnapshot workload() const {
+    SpeechWorkloadSnapshot out;
+#ifdef AUDITION_ROS2_WITH_SPEECH
+    if (!enabled_) return out;
+    const auto stats = runtime_->statistics();
+    out.queued_segments = stats.pending_segments;
+    out.buffered_results = stats.buffered_results;
+    out.retired_generations = stats.retired_generations;
+    out.completed_segments_native = stats.completed_segments;
+    out.dropped_segments_native = stats.dropped_segments;
+    out.evicted_results_native = stats.evicted_results;
+    out.worker_error = stats.last_error.has_value();
+#endif
+    return out;
+  }
   SpeechDrainResult drain() {
     SpeechDrainResult out;
 #ifdef AUDITION_ROS2_WITH_SPEECH
@@ -240,5 +255,8 @@ void SpeechBridge::onSources(const audition_msgs::msg::AcousticSourceArray & s) 
 }
 SpeechDrainResult SpeechBridge::drain() {
   return impl_->drain();
+}
+SpeechWorkloadSnapshot SpeechBridge::workload() const {
+  return impl_->workload();
 }
 }  // namespace audition_perception

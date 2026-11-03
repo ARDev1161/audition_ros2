@@ -545,3 +545,12 @@ bound is claimed. Native CI compiles both optional adapter paths; model-
 independent tests validate counter/age semantics and the Humble ROS graph
 verifies disabled workers never claim completed inference.
 See [M2u completion telemetry](M2_INFERENCE_COMPLETION_TELEMETRY.md).
+
+## M2v: native semantic workload snapshots (2026-11-03)
+
+`GetSemanticStatus` exposes YAMNet per-source worker states and last
+successful inference/queue-wait timing, plus native ASR queued jobs,
+buffered results, retirement, drops and evictions. These are diagnostic
+snapshots, not job deadlines or evidence of model accuracy. Disabled
+workers return zero/false. See
+[M2v workload telemetry](M2_INFERENCE_WORKLOAD_TELEMETRY.md).

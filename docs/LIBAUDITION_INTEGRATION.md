@@ -639,3 +639,11 @@ bound is claimed. Native CI compiles both optional adapter paths; model-
 independent tests validate counter/age semantics and the Humble ROS graph
 verifies disabled workers never claim completed inference.
 See [M2u completion telemetry](M2_INFERENCE_COMPLETION_TELEMETRY.md).
+
+## M2v: native worker workload snapshots (2026-11-03)
+
+The semantic status service now samples libaudition's per-source YAMNet
+worker states/timing and native Sherpa/Whisper ASR queue/mailbox/drop
+statistics. Classifier states count sources, not queued jobs; ASR queue
+excludes the running job. Silence does not trigger a watchdog.
+See [M2v workload telemetry](M2_INFERENCE_WORKLOAD_TELEMETRY.md).

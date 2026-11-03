@@ -36,3 +36,26 @@ uint64 asr_empty_segments
 uint64 asr_discarded_results
 uint64 asr_last_completion_age_ms
 uint64 inference_poll_failures
+
+# M2v: sampled native worker workload; not per-job deadlines or watchdog health.
+# Classifier states count currently active sources, NOT individual queued jobs.
+uint32 classifier_active_sources
+uint32 classifier_waiting_sources
+uint32 classifier_collecting_sources
+uint32 classifier_queued_sources
+uint32 classifier_inferencing_sources
+uint32 classifier_classified_sources
+uint32 classifier_error_sources
+uint64 classifier_dropped_windows_active
+bool classifier_has_inference_timing
+float64 classifier_max_last_inference_ms
+bool classifier_has_queue_wait_timing
+float64 classifier_max_last_queue_wait_ms
+# ASR queue excludes the currently running job; result mailbox is separate.
+uint64 asr_queued_segments
+uint64 asr_buffered_results
+uint64 asr_retired_generations
+uint64 asr_completed_segments_native
+uint64 asr_dropped_segments_native
+uint64 asr_evicted_results_native
+bool asr_worker_error

@@ -12,6 +12,7 @@
 #include "audition_perception/semantic_epoch_gate.hpp"
 #include "audition_perception/speech_bridge.hpp"
 #include "audition_perception/inference_completion_stats.hpp"
+#include "audition_perception/inference_workload_stats.hpp"
 #include <memory>
 #include <string>
 

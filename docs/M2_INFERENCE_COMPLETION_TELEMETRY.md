@@ -33,3 +33,11 @@ false positives.
 Tests: C++ deterministic completion/age tests, ROS message serialization,
 disabled-worker Humble graph smoke, native YAMNet and Sherpa/Whisper CI builds.
 Physical ReSpeaker calibration and real model latency remain unverified.
+
+## M2v extension: native worker workload
+
+The service now also exposes sampled native classifier source states,
+last successful inference and queue-wait timings, and ASR queued
+segments, buffered results and drop/eviction counters. See
+[M2v workload semantics](M2_INFERENCE_WORKLOAD_TELEMETRY.md).
+These do not constitute per-job deadlines or watchdog health.

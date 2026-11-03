@@ -175,6 +175,21 @@ def test_semantic_status_service_round_trip():
     response.asr_discarded_results = 2
     response.asr_last_completion_age_ms = 4321
     response.inference_poll_failures = 1
+    response.classifier_active_sources = 3
+    response.classifier_queued_sources = 1
+    response.classifier_inferencing_sources = 1
+    response.classifier_dropped_windows_active = 7
+    response.classifier_has_inference_timing = True
+    response.classifier_max_last_inference_ms = 34.5
+    response.classifier_has_queue_wait_timing = True
+    response.classifier_max_last_queue_wait_ms = 12.25
+    response.asr_queued_segments = 2
+    response.asr_buffered_results = 1
+    response.asr_retired_generations = 3
+    response.asr_completed_segments_native = 8
+    response.asr_dropped_segments_native = 4
+    response.asr_evicted_results_native = 2
+    response.asr_worker_error = True
     back = deserialize_message(serialize_message(response), GetSemanticStatus.Response)
     assert back.have_stream and back.source_generation == 7
     assert back.frame_id == "robot_a_mic"
@@ -193,6 +208,21 @@ def test_semantic_status_service_round_trip():
     assert back.asr_discarded_results == 2
     assert back.asr_last_completion_age_ms == 4321
     assert back.inference_poll_failures == 1
+    assert back.classifier_active_sources == 3
+    assert back.classifier_queued_sources == 1
+    assert back.classifier_inferencing_sources == 1
+    assert back.classifier_dropped_windows_active == 7
+    assert back.classifier_has_inference_timing
+    assert back.classifier_max_last_inference_ms == pytest.approx(34.5)
+    assert back.classifier_has_queue_wait_timing
+    assert back.classifier_max_last_queue_wait_ms == pytest.approx(12.25)
+    assert back.asr_queued_segments == 2
+    assert back.asr_buffered_results == 1
+    assert back.asr_retired_generations == 3
+    assert back.asr_completed_segments_native == 8
+    assert back.asr_dropped_segments_native == 4
+    assert back.asr_evicted_results_native == 2
+    assert back.asr_worker_error
 
 
 def test_capture_status_service_round_trip():
