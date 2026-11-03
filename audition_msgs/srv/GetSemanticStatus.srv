@@ -97,3 +97,8 @@ uint64 asr_peak_buffered_results
 uint64 asr_queue_nonempty_age_ms
 uint64 asr_mailbox_nonempty_age_ms
 bool asr_sustained_queue_pressure
+
+# M3c: freshness-gated pressure evidence. A stalled sampler cannot create pressure.
+# Fresh means last success within 3000 ms; pressure also needs >=2 contiguous samples.
+bool asr_workload_sample_fresh
+uint64 asr_contiguous_queue_samples

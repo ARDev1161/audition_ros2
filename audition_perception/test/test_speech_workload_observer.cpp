@@ -119,3 +119,47 @@ TEST(SpeechObserver, RepeatedEmptySamplesDoNotCreateAge) {
   EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::hours(1)),0U);
   EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::hours(1)),0U);
 }
+
+TEST(SpeechObserver, StaleSingleSampleCannotBecomePressureByElapsedTime) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=8;
+  o.sample(s,t);
+  EXPECT_FALSE(o.queuePressure(4,10000,t+std::chrono::seconds(20)));
+  EXPECT_FALSE(o.fresh(3000,t+std::chrono::seconds(20)));
+  EXPECT_EQ(o.contiguousQueueSamples(),1U);
+}
+TEST(SpeechObserver, MultipleFreshSamplesProducePressure) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=5;
+  for (int i=0;i<=10;++i) o.sample(s,t+std::chrono::seconds(i));
+  EXPECT_TRUE(o.queuePressure(4,10000,t+std::chrono::seconds(10)));
+  EXPECT_FALSE(o.queuePressure(4,10000,t+std::chrono::seconds(14)));
+  EXPECT_EQ(o.contiguousQueueSamples(),11U);
+}
+TEST(SpeechObserver, DrainFailureAndResetClearEvidence) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=5;
+  o.sample(s,t);
+  o.sample(s,t+std::chrono::seconds(1));
+  s.queued_segments=0;
+  o.sample(s,t+std::chrono::seconds(2));
+  EXPECT_EQ(o.contiguousQueueSamples(),0U);
+  s.queued_segments=5;
+  o.sample(s,t+std::chrono::seconds(3));
+  EXPECT_EQ(o.contiguousQueueSamples(),1U);
+  o.failed();
+  EXPECT_EQ(o.contiguousQueueSamples(),0U);
+  o.sample(s,t+std::chrono::seconds(4));
+  o.reset();
+  EXPECT_EQ(o.contiguousQueueSamples(),0U);
+}
+TEST(SpeechObserver, ClockRegressionCannotClaimFreshness) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{}+std::chrono::seconds(10);
+  SpeechWorkloadSnapshot s; s.queued_segments=5;
+  o.sample(s,t);
+  EXPECT_FALSE(o.fresh(3000,t-std::chrono::seconds(1)));
+}

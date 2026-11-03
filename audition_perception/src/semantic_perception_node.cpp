@@ -556,6 +556,8 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->asr_queue_nonempty_age_ms = speech_observer_.queueNonemptyAgeMs();
       response->asr_mailbox_nonempty_age_ms = speech_observer_.mailboxNonemptyAgeMs();
       response->asr_sustained_queue_pressure = speech_observer_.queuePressure(4, 10000);
+      response->asr_workload_sample_fresh = speech_observer_.fresh(3000);
+      response->asr_contiguous_queue_samples = speech_observer_.contiguousQueueSamples();
       response->asr_queued_segments = speech_work.queued_segments;
       response->asr_buffered_results = speech_work.buffered_results;
       response->asr_retired_generations = speech_work.retired_generations;

@@ -630,3 +630,15 @@ The queue/mailbox residency tracker now explicitly starts a new clock on an
 empty-to-nonempty transition, not only on first sample or when becoming empty.
 This fixes the CI regression where a drained queue inherited its previous
 residency. Tests cover both queue and mailbox drain/reappearance.
+
+## M3c: freshness-fenced ASR pressure evidence (2026-11-03)
+
+A single ASR workload observation no longer becomes a pressure alarm merely
+because wall time passes. The M3b pressure flag now requires at least two
+consecutive nonempty samples and a fresh native observation (last sample
+within three seconds), in addition to the existing >=4 pending segments and
+>=10 seconds of observed nonempty queue. The status service exposes
+`asr_workload_sample_fresh` and `asr_contiguous_queue_samples`.
+Drain, sampling failure and worker/stream reset clear consecutive evidence;
+a stopped timer cannot manufacture a new pressure alarm. See
+[M3c freshness fencing](M3_ASR_FRESHNESS_FENCING.md).
