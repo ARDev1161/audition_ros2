@@ -256,3 +256,42 @@ TEST(SpeechObserver, UnchangedNativeCountersAreNotLoss) {
   o.sample(s,t+std::chrono::seconds(1));
   EXPECT_FALSE(o.lossOnLastSample());
 }
+
+#include "audition_perception/asr_observation_config.hpp"
+TEST(AsrObservationConfig, DefaultsMatchExistingPressurePolicy) {
+  AsrObservationConfig c;
+  EXPECT_NO_THROW(c.validate(1000));
+  EXPECT_EQ(c.minimum_segments,4);
+  EXPECT_EQ(c.minimum_age_ms,10000);
+  EXPECT_EQ(c.max_sample_age_ms,3000);
+}
+TEST(AsrObservationConfig, RejectsUnobservableSamplingCadence) {
+  AsrObservationConfig c;
+  EXPECT_THROW(c.validate(5000),std::invalid_argument);
+  c.max_sample_age_ms=10000;
+  EXPECT_THROW(c.validate(10000),std::invalid_argument);
+  c.minimum_age_ms=20000;
+  EXPECT_NO_THROW(c.validate(10000));
+}
+TEST(AsrObservationConfig, RejectsInvalidThresholds) {
+  AsrObservationConfig c;
+  c.minimum_segments=0;
+  EXPECT_THROW(c.validate(1000),std::invalid_argument);
+  c.minimum_segments=1000001;
+  EXPECT_THROW(c.validate(1000),std::invalid_argument);
+  c.minimum_segments=4; c.minimum_age_ms=0;
+  EXPECT_THROW(c.validate(1000),std::invalid_argument);
+  c.minimum_age_ms=10000; c.max_sample_age_ms=0;
+  EXPECT_THROW(c.validate(1000),std::invalid_argument);
+}
+TEST(AsrObservationConfig, ConfiguredPressureUsesFreshnessFence) {
+  AsrObservationConfig c;
+  c.minimum_segments=2; c.minimum_age_ms=4000; c.max_sample_age_ms=2000;
+  c.validate(1000);
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=2;
+  for (int i=0;i<=4;++i) o.sample(s,t+std::chrono::seconds(i));
+  EXPECT_TRUE(o.queuePressure(c.minimum_segments,c.minimum_age_ms,t+std::chrono::seconds(4),c.max_sample_age_ms));
+  EXPECT_FALSE(o.queuePressure(c.minimum_segments,c.minimum_age_ms,t+std::chrono::seconds(7),c.max_sample_age_ms));
+}

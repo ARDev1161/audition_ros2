@@ -427,6 +427,10 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
 {
   impl_ = std::make_unique<Impl>(*this);
   speech_ = std::make_unique<SpeechBridge>(*this);
+  asr_observation_config_.minimum_segments = declare_parameter<std::int64_t>("asr_pressure_minimum_segments", 4);
+  asr_observation_config_.minimum_age_ms = declare_parameter<std::int64_t>("asr_pressure_minimum_age_ms", 10000);
+  asr_observation_config_.max_sample_age_ms = declare_parameter<std::int64_t>("asr_observation_max_sample_age_ms", 3000);
+  asr_observation_config_.validate(impl_->observationConfig().sample_period_ms);
   transcript_pub_ = create_publisher<audition_msgs::msg::Transcript>(
     "internal/transcripts", rclcpp::QoS(20).reliable());
   progress_pub_ = create_publisher<audition_msgs::msg::SemanticProgress>(
@@ -555,14 +559,22 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->asr_peak_buffered_results = speech_observer_.peakBuffered();
       response->asr_queue_nonempty_age_ms = speech_observer_.queueNonemptyAgeMs();
       response->asr_mailbox_nonempty_age_ms = speech_observer_.mailboxNonemptyAgeMs();
-      response->asr_sustained_queue_pressure = speech_observer_.queuePressure(4, 10000);
-      response->asr_workload_sample_fresh = speech_observer_.fresh(3000);
+      response->asr_sustained_queue_pressure = speech_observer_.queuePressure(
+        static_cast<std::uint64_t>(asr_observation_config_.minimum_segments),
+        static_cast<std::uint64_t>(asr_observation_config_.minimum_age_ms),
+        SpeechWorkloadObserver::Clock::now(),
+        static_cast<std::uint64_t>(asr_observation_config_.max_sample_age_ms));
+      response->asr_workload_sample_fresh = speech_observer_.fresh(
+        static_cast<std::uint64_t>(asr_observation_config_.max_sample_age_ms));
       response->asr_contiguous_queue_samples = speech_observer_.contiguousQueueSamples();
       response->asr_last_dropped_delta = speech_observer_.lastDroppedDelta();
       response->asr_last_evicted_delta = speech_observer_.lastEvictedDelta();
       response->asr_observed_dropped_delta_total = speech_observer_.observedDroppedDeltaTotal();
       response->asr_observed_evicted_delta_total = speech_observer_.observedEvictedDeltaTotal();
       response->asr_loss_on_last_sample = speech_observer_.lossOnLastSample();
+      response->asr_pressure_minimum_segments = static_cast<std::uint64_t>(asr_observation_config_.minimum_segments);
+      response->asr_pressure_minimum_age_ms = static_cast<std::uint64_t>(asr_observation_config_.minimum_age_ms);
+      response->asr_observation_max_sample_age_ms = static_cast<std::uint64_t>(asr_observation_config_.max_sample_age_ms);
       response->asr_queued_segments = speech_work.queued_segments;
       response->asr_buffered_results = speech_work.buffered_results;
       response->asr_retired_generations = speech_work.retired_generations;

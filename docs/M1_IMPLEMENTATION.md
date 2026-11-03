@@ -689,3 +689,16 @@ one of each four expected namespaced nodes; failure includes the supervisor's
 running/graph-health/miss/fault state and the test node's discovered graph.
 This is a bounded test-only readiness barrier, not a weakened production
 watchdog, changed reload contract or proof of hardware accuracy.
+
+## M3g: configurable ASR pressure policy (2026-11-03)
+
+The ASR pressure threshold is now a validated startup-only policy rather than
+hardcoded service constants. Parameters are `asr_pressure_minimum_segments`
+(default 4), `asr_pressure_minimum_age_ms` (default 10000), and
+`asr_observation_max_sample_age_ms` (default 3000). The minimum age must be
+at least twice the configured classifier/ASR sample period; freshness must be
+at least that period. Invalid combinations fail node construction, and the
+status service reports the effective values. The independent M3d continuity
+gap remains capped at three seconds; consequently slow sampling cannot claim
+continuous backlog, even with relaxed freshness. No automatic restart or
+per-job ASR deadline is introduced. See [M3g](M3_ASR_OBSERVATION_CONFIGURATION.md).
