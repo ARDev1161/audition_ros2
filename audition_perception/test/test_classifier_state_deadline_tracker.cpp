@@ -53,3 +53,24 @@ TEST(ClassifierDeadlines, SameStateDoesNotRefreshHeartbeat) {
   t.finishSample();
   EXPECT_EQ(t.snapshot(0,1000,now + std::chrono::seconds(6)).max_inferencing_age_ms,6000U);
 }
+
+TEST(ClassifierDeadlines, RepeatedIndependentSamplesPreserveAge) {
+  ClassifierStateDeadlineTracker tracker;
+  const auto t0 = Clock::time_point{};
+  for (int second=0; second<4; ++second) {
+    tracker.observe("source", ClassifierWorkState::Queued, t0+std::chrono::seconds(second));
+    tracker.finishSample();
+  }
+  const auto s=tracker.snapshot(2000,30000,t0+std::chrono::seconds(3));
+  EXPECT_EQ(s.overdue_queued_sources,1U);
+  EXPECT_EQ(s.max_queued_age_ms,3000U);
+}
+TEST(ClassifierDeadlines, RetirementIsPrunedAtNextSample) {
+  ClassifierStateDeadlineTracker tracker;
+  const auto t0=Clock::time_point{};
+  tracker.observe("old",ClassifierWorkState::Inferencing,t0);
+  tracker.finishSample();
+  tracker.observe("new",ClassifierWorkState::Collecting,t0+std::chrono::seconds(1));
+  tracker.finishSample();
+  EXPECT_EQ(tracker.snapshot(1,1,t0+std::chrono::seconds(5)).overdue_inferencing_sources,0U);
+}

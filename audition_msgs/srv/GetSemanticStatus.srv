@@ -66,3 +66,9 @@ uint32 classifier_overdue_queued_sources
 uint32 classifier_overdue_inferencing_sources
 uint64 classifier_max_queued_state_age_ms
 uint64 classifier_max_inferencing_state_age_ms
+
+# M2x: autonomous native workload sampling independent of status requests.
+bool classifier_has_workload_sample
+uint64 classifier_workload_samples
+uint64 classifier_workload_sample_failures
+uint64 classifier_last_workload_sample_age_ms

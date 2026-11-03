@@ -153,6 +153,22 @@ public:
     return accumulator.snapshot();
   }
 
+  ClassifierWorkloadSnapshot cachedWorkload() const { return cached_workload_; }
+  bool hasSample() const { return sample_count_ > 0; }
+  std::uint64_t sampleCount() const { return sample_count_; }
+  std::uint64_t sampleFailures() const { return sample_failures_; }
+  std::uint64_t sampleAgeMs() const {
+    if (!hasSample()) return 0;
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - last_sample_).count());
+  }
+  void sampleWorkload() {
+    try {
+      cached_workload_ = workload();
+      last_sample_ = std::chrono::steady_clock::now();
+      ++sample_count_;
+    } catch (...) { ++sample_failures_; throw; }
+  }
   ClassifierDeadlineSnapshot deadlines() const {
     return deadline_tracker_.snapshot(queue_deadline_ms_, inference_deadline_ms_);
   }
@@ -372,6 +388,9 @@ private:
   std::unique_ptr<audition::TemporalAcousticEventDetector> detector_;
 #endif
   mutable ClassifierStateDeadlineTracker deadline_tracker_;
+  ClassifierWorkloadSnapshot cached_workload_{};
+  std::uint64_t sample_count_{0}, sample_failures_{0};
+  std::chrono::steady_clock::time_point last_sample_{};
   const std::uint64_t queue_deadline_ms_{10000};
   const std::uint64_t inference_deadline_ms_{30000};
   std::string backend_;
@@ -470,7 +489,11 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->asr_discarded_results = inference.asr_discarded_results;
       response->asr_last_completion_age_ms = inference.asr_last_completion_age_ms;
       response->inference_poll_failures = inference.inference_poll_failures;
-      const auto classifier_work = impl_->workload();
+      const auto classifier_work = impl_->cachedWorkload();
+      response->classifier_has_workload_sample = impl_->hasSample();
+      response->classifier_workload_samples = impl_->sampleCount();
+      response->classifier_workload_sample_failures = impl_->sampleFailures();
+      response->classifier_last_workload_sample_age_ms = impl_->sampleAgeMs();
       response->classifier_active_sources = classifier_work.active_sources;
       response->classifier_waiting_sources = classifier_work.waiting_sources;
       response->classifier_collecting_sources = classifier_work.collecting_sources;
@@ -531,6 +554,13 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->reload_epoch = reload_epoch_;
     });
   timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { pollCompleted(); });
+  workload_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
+    try { impl_->sampleWorkload(); }
+    catch (const std::exception & error) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+        "Semantic workload sample failed: %s", error.what());
+    }
+  });
   RCLCPP_INFO(get_logger(), "Semantic backend: %s",
     impl_->enabled() ? "yamnet" : "disabled");
 }

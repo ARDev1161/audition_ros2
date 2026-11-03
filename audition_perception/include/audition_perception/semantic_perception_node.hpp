@@ -35,6 +35,7 @@ private:
   rclcpp::Publisher<audition_msgs::msg::SoundClassification>::SharedPtr class_pub_;
   rclcpp::Publisher<audition_msgs::msg::AcousticEvent>::SharedPtr event_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr workload_timer_;
   rclcpp::Publisher<audition_msgs::msg::Transcript>::SharedPtr transcript_pub_;
   rclcpp::Publisher<audition_msgs::msg::SemanticProgress>::SharedPtr progress_pub_;
   rclcpp::Service<audition_msgs::srv::GetCapabilities>::SharedPtr capabilities_srv_;

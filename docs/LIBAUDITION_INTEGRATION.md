@@ -660,3 +660,7 @@ an individual job identifier or native running-job start timestamp. A state
 may cover multiple jobs. ASR currently exposes queued segment counts but no
 running-job age, so no ASR deadline or automatic restart is claimed. See
 [M2w state-residency diagnostics](M2_CLASSIFIER_STATE_DEADLINES.md).
+
+## M2x: autonomous workload sampling (2026-11-03)
+
+A 1 Hz timer samples native YAMNet source states independently of status-service callers. The status service returns cached workload and exposes sample freshness, success and failure counters. Reload resets these values. No automatic restart or individual inference-job deadline is claimed. See [M2x](M2_WORKLOAD_SAMPLING.md).
