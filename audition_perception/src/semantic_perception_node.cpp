@@ -1,4 +1,5 @@
 #include "audition_perception/semantic_perception_node.hpp"
+#include "audition_perception/classifier_state_deadline_tracker.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -142,15 +143,22 @@ public:
           case audition::SourceClassificationState::Error:
             state = ClassifierWorkState::Error; break;
         }
+        deadline_tracker_.observe(item.first, state);
         accumulator.observe(state, status.dropped_windows,
                             status.last_inference_ms, status.last_queue_wait_ms);
       }
     }
 #endif
+    deadline_tracker_.finishSample();
     return accumulator.snapshot();
   }
 
+  ClassifierDeadlineSnapshot deadlines() const {
+    return deadline_tracker_.snapshot(queue_deadline_ms_, inference_deadline_ms_);
+  }
+
   void resetStream() {
+    deadline_tracker_.reset();
 #ifdef AUDITION_ROS2_WITH_YAMNET
     if (!enabled()) return;
     // Forget workers before a new epoch is admitted. A late completed job
@@ -363,6 +371,9 @@ private:
   std::unique_ptr<audition::SourceClassificationRuntime> runtime_;
   std::unique_ptr<audition::TemporalAcousticEventDetector> detector_;
 #endif
+  mutable ClassifierStateDeadlineTracker deadline_tracker_;
+  const std::uint64_t queue_deadline_ms_{10000};
+  const std::uint64_t inference_deadline_ms_{30000};
   std::string backend_;
 };
 
@@ -472,6 +483,11 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->classifier_max_last_inference_ms = classifier_work.max_last_inference_ms;
       response->classifier_has_queue_wait_timing = classifier_work.have_queue_wait_timing;
       response->classifier_max_last_queue_wait_ms = classifier_work.max_last_queue_wait_ms;
+      const auto deadlines = impl_->deadlines();
+      response->classifier_overdue_queued_sources = deadlines.overdue_queued_sources;
+      response->classifier_overdue_inferencing_sources = deadlines.overdue_inferencing_sources;
+      response->classifier_max_queued_state_age_ms = deadlines.max_queued_age_ms;
+      response->classifier_max_inferencing_state_age_ms = deadlines.max_inferencing_age_ms;
       const auto speech_work = speech_->workload();
       response->asr_queued_segments = speech_work.queued_segments;
       response->asr_buffered_results = speech_work.buffered_results;

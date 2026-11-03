@@ -554,3 +554,16 @@ buffered results, retirement, drops and evictions. These are diagnostic
 snapshots, not job deadlines or evidence of model accuracy. Disabled
 workers return zero/false. See
 [M2v workload telemetry](M2_INFERENCE_WORKLOAD_TELEMETRY.md).
+
+## M2w: sampled classifier state residency (2026-11-03)
+
+The semantic status service now reports the longest observed residence in native
+YAMNet `Queued` and `Inferencing` states and counts sources exceeding 10s and
+30s respectively. State changes reset their individual clocks; repeated
+observations do not. Retired sources, worker reload and generation resets
+clear the observations. Waiting/collecting/silence are never treated as stalls.
+This is **diagnostic only**: the libaudition API reports a source state, not
+an individual job identifier or native running-job start timestamp. A state
+may cover multiple jobs. ASR currently exposes queued segment counts but no
+running-job age, so no ASR deadline or automatic restart is claimed. See
+[M2w state-residency diagnostics](M2_CLASSIFIER_STATE_DEADLINES.md).

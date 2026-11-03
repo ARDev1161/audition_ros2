@@ -59,3 +59,10 @@ uint64 asr_completed_segments_native
 uint64 asr_dropped_segments_native
 uint64 asr_evicted_results_native
 bool asr_worker_error
+
+# M2w: YAMNet state residency observed at status polls (10s queued / 30s inferencing).
+# Not individual native job deadlines; no automatic restart. Zero when disabled.
+uint32 classifier_overdue_queued_sources
+uint32 classifier_overdue_inferencing_sources
+uint64 classifier_max_queued_state_age_ms
+uint64 classifier_max_inferencing_state_age_ms
