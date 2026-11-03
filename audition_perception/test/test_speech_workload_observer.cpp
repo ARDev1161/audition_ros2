@@ -99,3 +99,23 @@ TEST(SpeechObserver, ZeroThresholdsAndSilenceDoNotSignalPressure) {
   EXPECT_FALSE(o.queuePressure(0,1000,t+std::chrono::hours(1)));
   EXPECT_FALSE(o.queuePressure(1,0,t+std::chrono::hours(1)));
 }
+
+TEST(SpeechObserver, MailboxReappearanceStartsNewResidencyClock) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.buffered_results=3;
+  o.sample(s,t);
+  s.buffered_results=0;
+  o.sample(s,t+std::chrono::seconds(2));
+  s.buffered_results=1;
+  o.sample(s,t+std::chrono::seconds(4));
+  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::seconds(5)),1000U);
+}
+TEST(SpeechObserver, RepeatedEmptySamplesDoNotCreateAge) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  o.sample({},t);
+  o.sample({},t+std::chrono::seconds(10));
+  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::hours(1)),0U);
+  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::hours(1)),0U);
+}

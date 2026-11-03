@@ -19,3 +19,10 @@ both clocks; an empty queue or silent input never generates an alert.
 The observer tests cover varying queue depths, independent drain behavior,
 sampling errors, resets, silence and disabled thresholds. These are
 model-independent; device/model throughput must be measured separately.
+
+### M3b CI correction (2026-11-03)
+
+The queue/mailbox residency tracker now explicitly starts a new clock on an
+empty-to-nonempty transition, not only on first sample or when becoming empty.
+This fixes the CI regression where a drained queue inherited its previous
+residency. Tests cover both queue and mailbox drain/reappearance.

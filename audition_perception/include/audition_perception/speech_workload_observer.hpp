@@ -11,10 +11,10 @@ class SpeechWorkloadObserver {
 public:
   using Clock = std::chrono::steady_clock;
   void sample(const SpeechWorkloadSnapshot & value, Clock::time_point now = Clock::now()) {
-    if (!valid_ || value.queued_segments == 0) {
+    if (!valid_ || cached_.queued_segments == 0 || value.queued_segments == 0) {
       queue_nonempty_since_ = value.queued_segments > 0 ? now : Clock::time_point{};
     }
-    if (!valid_ || value.buffered_results == 0) {
+    if (!valid_ || cached_.buffered_results == 0 || value.buffered_results == 0) {
       mailbox_nonempty_since_ = value.buffered_results > 0 ? now : Clock::time_point{};
     }
     cached_ = value;

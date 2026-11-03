@@ -623,3 +623,10 @@ A drained queue resets only its own age; a failed sample, worker reload or
 stream reset invalidates both clocks. No speech, zero pending work and
 sampling failures never produce a pressure alert. This is not an inference
 job deadline or automatic recovery. See [M3b](M3_ASR_QUEUE_PRESSURE.md).
+
+### M3b CI correction (2026-11-03)
+
+The queue/mailbox residency tracker now explicitly starts a new clock on an
+empty-to-nonempty transition, not only on first sample or when becoming empty.
+This fixes the CI regression where a drained queue inherited its previous
+residency. Tests cover both queue and mailbox drain/reappearance.
