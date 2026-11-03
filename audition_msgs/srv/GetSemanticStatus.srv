@@ -81,3 +81,12 @@ bool classifier_workload_sample_valid
 uint64 classifier_workload_sample_period_ms
 uint64 classifier_queued_threshold_ms
 uint64 classifier_inference_threshold_ms
+
+# M3a: independent ASR backlog sampling, not active-job runtime or speech watchdog.
+bool asr_has_workload_sample
+bool asr_workload_sample_valid
+uint64 asr_workload_samples
+uint64 asr_workload_sample_failures
+uint64 asr_last_workload_sample_age_ms
+uint64 asr_peak_queued_segments
+uint64 asr_peak_buffered_results

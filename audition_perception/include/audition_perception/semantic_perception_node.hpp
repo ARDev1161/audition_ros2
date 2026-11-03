@@ -13,6 +13,7 @@
 #include "audition_perception/speech_bridge.hpp"
 #include "audition_perception/inference_completion_stats.hpp"
 #include "audition_perception/inference_workload_stats.hpp"
+#include "audition_perception/speech_workload_observer.hpp"
 #include <memory>
 #include <string>
 
@@ -28,6 +29,7 @@ private:
   void pollCompleted();
   SemanticEpochGate gate_;
   InferenceCompletionStats inference_stats_;
+  SpeechWorkloadObserver speech_observer_;
   std::unique_ptr<Impl> impl_;
   std::unique_ptr<SpeechBridge> speech_;
   rclcpp::Subscription<audition_msgs::msg::SourceAudioFrame>::SharedPtr sub_;

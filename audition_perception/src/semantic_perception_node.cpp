@@ -545,7 +545,14 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->classifier_overdue_inferencing_sources = deadlines.overdue_inferencing_sources;
       response->classifier_max_queued_state_age_ms = deadlines.max_queued_age_ms;
       response->classifier_max_inferencing_state_age_ms = deadlines.max_inferencing_age_ms;
-      const auto speech_work = speech_->workload();
+      const auto speech_work = speech_observer_.current();
+      response->asr_has_workload_sample = speech_observer_.everSampled();
+      response->asr_workload_sample_valid = speech_observer_.valid();
+      response->asr_workload_samples = speech_observer_.samples();
+      response->asr_workload_sample_failures = speech_observer_.failures();
+      response->asr_last_workload_sample_age_ms = speech_observer_.ageMs();
+      response->asr_peak_queued_segments = speech_observer_.peakQueued();
+      response->asr_peak_buffered_results = speech_observer_.peakBuffered();
       response->asr_queued_segments = speech_work.queued_segments;
       response->asr_buffered_results = speech_work.buffered_results;
       response->asr_retired_generations = speech_work.retired_generations;
@@ -570,6 +577,7 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
           // guarantee on validation/model load errors.
           impl_.swap(next_classifier);
           speech_.swap(next_speech);
+          speech_observer_.reset();
           gate_.beginReload();
           ++reload_epoch_;
           ++reload_successes_;
@@ -594,6 +602,12 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
     catch (const std::exception & error) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
         "Semantic workload sample failed: %s", error.what());
+    }
+    try { speech_observer_.sample(speech_->workload()); }
+    catch (const std::exception & error) {
+      speech_observer_.failed();
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+        "ASR workload sample failed: %s", error.what());
     }
   });
   RCLCPP_INFO(get_logger(), "Semantic backend: %s",
@@ -641,6 +655,7 @@ void SemanticPerceptionNode::onSources(
     if (decision == SemanticEpochGate::SnapshotResult::NewGeneration) {
       impl_->resetStream();
       speech_->resetStream();
+      speech_observer_.reset();
     }
     impl_->onSources(msg, event_pub_);
     speech_->onSources(msg);

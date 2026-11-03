@@ -597,3 +597,17 @@ startup before workers are created; live parameter changes remain rejected.
 The effective values are returned by `GetSemanticStatus`, including with a
 disabled classifier. The diagnostics are source-state observations, not native
 job timeouts or automatic worker restarts. See [M2z](M2_OBSERVER_CONFIGURATION.md).
+
+## M3a: independently sampled ASR backlog telemetry (2026-11-03)
+
+The semantic node now samples the native speech runtime's queued segments,
+result mailbox and worker-error flag on its existing workload timer, rather
+than synchronously calling the native ASR statistics API from every status
+service request. The status response includes sample validity, historical
+sample/failure counts, last-success age and high-water marks for queued
+segments and buffered results. Sampling failures invalidate the current
+snapshot; worker reload and stream generation reset clear observer history.
+YAMNet and ASR sampling are isolated so an exception in one does not suppress
+the other's sample. A queue high-water mark is **not** evidence of a hung ASR
+job; silent input and VAD gating remain legitimate. See
+[M3a ASR backlog telemetry](M3_ASR_BACKLOG_TELEMETRY.md).
