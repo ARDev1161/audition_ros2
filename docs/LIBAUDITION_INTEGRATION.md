@@ -735,3 +735,16 @@ within three seconds), in addition to the existing >=4 pending segments and
 Drain, sampling failure and worker/stream reset clear consecutive evidence;
 a stopped timer cannot manufacture a new pressure alarm. See
 [M3c freshness fencing](M3_ASR_FRESHNESS_FENCING.md).
+
+## M3d: ASR sampling-gap continuity fence (2026-11-03)
+
+The M3c freshness check now also fences **gaps between observations**. When
+successive ASR workload samples are separated by more than three seconds, or
+the monotonic observation clock moves backwards, the observer starts fresh
+queue/mailbox occupancy clocks and consecutive-sample evidence. A resumed
+sampling timer cannot treat the unobserved interval as continuous backlog,
+even if its most recent sample is fresh. Normal observations at or below the
+three-second boundary preserve continuity. Four model-independent regression
+tests cover stalled polling, backwards time, the boundary and repeated gaps.
+No ASR per-job deadline or automatic restart is implied. See
+[M3d observation-gap fencing](M3_ASR_OBSERVATION_GAPS.md).

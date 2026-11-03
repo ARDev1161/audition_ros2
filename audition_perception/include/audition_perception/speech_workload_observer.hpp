@@ -11,6 +11,13 @@ class SpeechWorkloadObserver {
 public:
   using Clock = std::chrono::steady_clock;
   void sample(const SpeechWorkloadSnapshot & value, Clock::time_point now = Clock::now()) {
+    // An observation gap cannot establish continuous occupancy: reset both
+    // residency clocks rather than extrapolating over a stalled timer.
+    if (valid_ && (now < last_sample_ ||
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_sample_).count() >
+          static_cast<std::int64_t>(max_observation_gap_ms_))) {
+      valid_ = false;
+    }
     if (!valid_ || cached_.queued_segments == 0 || value.queued_segments == 0) {
       queue_nonempty_since_ = value.queued_segments > 0 ? now : Clock::time_point{};
       queue_contiguous_samples_ = 0;
@@ -86,6 +93,7 @@ private:
     return static_cast<std::uint64_t>(
       std::chrono::duration_cast<std::chrono::milliseconds>(now - since).count());
   }
+  static constexpr std::uint64_t max_observation_gap_ms_{3000};
   Clock::time_point queue_nonempty_since_{}, mailbox_nonempty_since_{};
   SpeechWorkloadSnapshot cached_{};
   Clock::time_point last_sample_{};

@@ -163,3 +163,42 @@ TEST(SpeechObserver, ClockRegressionCannotClaimFreshness) {
   o.sample(s,t);
   EXPECT_FALSE(o.fresh(3000,t-std::chrono::seconds(1)));
 }
+
+TEST(SpeechObserver, LongSamplingGapStartsNewQueueAndMailboxEvidence) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=8; s.buffered_results=2;
+  o.sample(s,t);
+  o.sample(s,t+std::chrono::seconds(1));
+  o.sample(s,t+std::chrono::seconds(20));
+  EXPECT_EQ(o.contiguousQueueSamples(),1U);
+  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::seconds(20)),0U);
+  EXPECT_EQ(o.mailboxNonemptyAgeMs(t+std::chrono::seconds(20)),0U);
+  EXPECT_FALSE(o.queuePressure(4,10000,t+std::chrono::seconds(20)));
+}
+TEST(SpeechObserver, BackwardSamplingClockFencesContinuity) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{}+std::chrono::seconds(10);
+  SpeechWorkloadSnapshot s; s.queued_segments=8;
+  o.sample(s,t);
+  o.sample(s,t-std::chrono::seconds(1));
+  EXPECT_EQ(o.contiguousQueueSamples(),1U);
+  EXPECT_EQ(o.queueNonemptyAgeMs(t-std::chrono::seconds(1)),0U);
+}
+TEST(SpeechObserver, SamplingAtGapBoundaryKeepsEvidence) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=4;
+  o.sample(s,t);
+  o.sample(s,t+std::chrono::milliseconds(3000));
+  EXPECT_EQ(o.contiguousQueueSamples(),2U);
+  EXPECT_EQ(o.queueNonemptyAgeMs(t+std::chrono::milliseconds(3000)),3000U);
+}
+TEST(SpeechObserver, RepeatedGapsNeverAccumulatePressure) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.queued_segments=8;
+  for (int i=0;i<5;++i) o.sample(s,t+std::chrono::seconds(10*i));
+  EXPECT_EQ(o.contiguousQueueSamples(),1U);
+  EXPECT_FALSE(o.queuePressure(4,10000,t+std::chrono::seconds(40)));
+}
