@@ -558,6 +558,11 @@ SemanticPerceptionNode::SemanticPerceptionNode(const rclcpp::NodeOptions & optio
       response->asr_sustained_queue_pressure = speech_observer_.queuePressure(4, 10000);
       response->asr_workload_sample_fresh = speech_observer_.fresh(3000);
       response->asr_contiguous_queue_samples = speech_observer_.contiguousQueueSamples();
+      response->asr_last_dropped_delta = speech_observer_.lastDroppedDelta();
+      response->asr_last_evicted_delta = speech_observer_.lastEvictedDelta();
+      response->asr_observed_dropped_delta_total = speech_observer_.observedDroppedDeltaTotal();
+      response->asr_observed_evicted_delta_total = speech_observer_.observedEvictedDeltaTotal();
+      response->asr_loss_on_last_sample = speech_observer_.lossOnLastSample();
       response->asr_queued_segments = speech_work.queued_segments;
       response->asr_buffered_results = speech_work.buffered_results;
       response->asr_retired_generations = speech_work.retired_generations;

@@ -748,3 +748,14 @@ three-second boundary preserve continuity. Four model-independent regression
 tests cover stalled polling, backwards time, the boundary and repeated gaps.
 No ASR per-job deadline or automatic restart is implied. See
 [M3d observation-gap fencing](M3_ASR_OBSERVATION_GAPS.md).
+
+## M3e: native ASR loss-counter deltas (2026-11-03)
+
+The periodic ASR observer now compares consecutive native cumulative dropped
+segment and evicted result counters. The first successful sample establishes
+a baseline, so historical native counts are not reported as newly observed
+losses. A failed sample starts a new baseline; a native counter regression
+cannot underflow. The status service exposes last-sample increments, observed
+increments since stream/worker reset and a last-sample loss flag. These are
+**sampled loss diagnostics**, not ASR accuracy, transcript quality or
+individual inference-job timing. See [M3e](M3_ASR_LOSS_DELTAS.md).

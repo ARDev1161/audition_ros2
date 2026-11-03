@@ -205,3 +205,54 @@ TEST(SpeechObserver, RepeatedGapsNeverAccumulatePressure) {
   EXPECT_EQ(o.contiguousQueueSamples(),1U);
   EXPECT_FALSE(o.queuePressure(4,10000,t+std::chrono::seconds(40)));
 }
+
+TEST(SpeechObserver, NativeLossDeltasExcludeInitialCounterBaseline) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.dropped_segments_native=100; s.evicted_results_native=7;
+  o.sample(s,t);
+  EXPECT_FALSE(o.lossOnLastSample());
+  s.dropped_segments_native=103; s.evicted_results_native=9;
+  o.sample(s,t+std::chrono::seconds(1));
+  EXPECT_EQ(o.lastDroppedDelta(),3U);
+  EXPECT_EQ(o.lastEvictedDelta(),2U);
+  EXPECT_EQ(o.observedDroppedDeltaTotal(),3U);
+  EXPECT_EQ(o.observedEvictedDeltaTotal(),2U);
+  EXPECT_TRUE(o.lossOnLastSample());
+}
+TEST(SpeechObserver, NativeCounterRegressionDoesNotUnderflow) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.dropped_segments_native=100;
+  o.sample(s,t);
+  s.dropped_segments_native=2;
+  o.sample(s,t+std::chrono::seconds(1));
+  EXPECT_EQ(o.lastDroppedDelta(),0U);
+  s.dropped_segments_native=4;
+  o.sample(s,t+std::chrono::seconds(2));
+  EXPECT_EQ(o.lastDroppedDelta(),2U);
+  EXPECT_EQ(o.observedDroppedDeltaTotal(),2U);
+}
+TEST(SpeechObserver, SamplingFailureRestartsNativeCounterBaseline) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.evicted_results_native=10;
+  o.sample(s,t);
+  o.failed();
+  s.evicted_results_native=1000;
+  o.sample(s,t+std::chrono::seconds(1));
+  EXPECT_EQ(o.lastEvictedDelta(),0U);
+  s.evicted_results_native=1001;
+  o.sample(s,t+std::chrono::seconds(2));
+  EXPECT_EQ(o.lastEvictedDelta(),1U);
+  o.reset();
+  EXPECT_EQ(o.observedEvictedDeltaTotal(),0U);
+}
+TEST(SpeechObserver, UnchangedNativeCountersAreNotLoss) {
+  SpeechWorkloadObserver o;
+  const auto t=Clock::time_point{};
+  SpeechWorkloadSnapshot s; s.dropped_segments_native=3; s.evicted_results_native=4;
+  o.sample(s,t);
+  o.sample(s,t+std::chrono::seconds(1));
+  EXPECT_FALSE(o.lossOnLastSample());
+}
