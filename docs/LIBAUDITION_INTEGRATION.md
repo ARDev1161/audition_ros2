@@ -837,3 +837,11 @@ challenger from immediately replacing an eligible incumbent. Interrupted,
 expired, stale or generation/frame-changed challengers cannot inherit prior
 confirmation. Initial acquisition remains immediate. See
 [M3j confirmation](M3_ATTENTION_CONFIRMATION.md). This is advisory only.
+
+## M3k: opt-in angular uncertainty gate (2026-11-04)
+
+The attention manager can reject bearings without bounded DOA uncertainty
+using startup-only `maximum_angular_variance_rad2` (default 0, disabled).
+When enabled, missing, nonfinite, negative or excessive variance excludes a
+source before hysteresis and confirmation. See
+[M3k uncertainty gate](M3_ATTENTION_UNCERTAINTY.md). No motion control is added.

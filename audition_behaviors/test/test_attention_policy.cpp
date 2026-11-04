@@ -186,3 +186,50 @@ TEST(AttentionPolicy, ConfirmationConfigValidation) {
   c.switch_confirmation_window = 0ms;
   EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
 }
+
+TEST(AttentionPolicy, AngularUncertaintyGateRejectsMissingAndUncertainBearings) {
+  AttentionPolicy::Config config;
+  config.maximum_angular_variance_rad2 = 0.05;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  auto a = source("a", 0.9f);
+  auto b = source("b", 0.6f);
+  b.has_angular_variance = true;
+  b.angular_variance_rad2 = 0.02;
+  s.sources = {a, b};
+  EXPECT_EQ(p.observe(s, now).source_id, "b");
+  s.sources[0].has_angular_variance = true;
+  s.sources[0].angular_variance_rad2 = 0.06;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[0].angular_variance_rad2 = 0.01;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}
+TEST(AttentionPolicy, AngularUncertaintyGateRejectsMalformedVariance) {
+  AttentionPolicy::Config config;
+  config.maximum_angular_variance_rad2 = 0.05;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto a = source("a", 0.9f);
+  a.has_angular_variance = true;
+  a.angular_variance_rad2 = -1.0;
+  s.sources = {a};
+  EXPECT_FALSE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+  s.sources[0].angular_variance_rad2 = std::numeric_limits<double>::infinity();
+  EXPECT_FALSE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+  s.sources[0].angular_variance_rad2 = 0.05;
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}
+TEST(AttentionPolicy, DisabledAngularGateAcceptsMissingVariance) {
+  AttentionPolicy p({});
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}
+TEST(AttentionPolicy, AngularGateConfigValidation) {
+  AttentionPolicy::Config c;
+  c.maximum_angular_variance_rad2 = -0.01;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.maximum_angular_variance_rad2 = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+}

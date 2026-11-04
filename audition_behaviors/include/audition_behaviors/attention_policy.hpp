@@ -25,6 +25,8 @@ public:
     // Require repeated accepted snapshots before changing to a new source.
     std::uint32_t switch_confirmations = 1;
     std::chrono::milliseconds switch_confirmation_window{1000};
+    // Zero disables the optional DOA uncertainty gate.
+    double maximum_angular_variance_rad2 = 0.0;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -35,7 +37,9 @@ public:
         config_.scene_timeout.count() <= 0 ||
         config_.switch_confirmations == 0 ||
         config_.switch_confirmations > 100 ||
-        config_.switch_confirmation_window.count() <= 0)
+        config_.switch_confirmation_window.count() <= 0 ||
+        !std::isfinite(config_.maximum_angular_variance_rad2) ||
+        config_.maximum_angular_variance_rad2 < 0)
       throw std::invalid_argument("invalid attention policy configuration");
   }
 
@@ -173,6 +177,11 @@ private:
         !std::isfinite(source.activity_score) ||
         source.activity_score < config_.minimum_activity ||
         source.activity_score > 1.0f) return false;
+    if (config_.maximum_angular_variance_rad2 > 0.0 &&
+        (!source.has_angular_variance ||
+         !std::isfinite(source.angular_variance_rad2) ||
+         source.angular_variance_rad2 < 0.0 ||
+         source.angular_variance_rad2 > config_.maximum_angular_variance_rad2)) return false;
     const auto & d = source.direction_unit;
     if (!std::isfinite(d.x) || !std::isfinite(d.y) || !std::isfinite(d.z)) return false;
     const double norm = d.x * d.x + d.y * d.y + d.z * d.z;
