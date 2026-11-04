@@ -127,3 +127,62 @@ TEST(AttentionPolicy, SameGenerationFrameChangeResetsIncumbent) {
   s.sources[1].activity_score = 0.7f;
   EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
 }
+
+
+TEST(AttentionPolicy, ConfirmChallengerBeforeSwitching) {
+  AttentionPolicy::Config config;
+  config.switch_confirmations = 3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.7f), source("b", 0.5f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "b");
+}
+TEST(AttentionPolicy, InterruptedChallengerMustReconfirm) {
+  AttentionPolicy::Config config;
+  config.switch_confirmations = 2;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.7f), source("b", 0.5f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  s.sources[1].activity_score = 0.6f;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "b");
+}
+TEST(AttentionPolicy, ConfirmationWindowAndRegressedScene) {
+  AttentionPolicy::Config config;
+  config.switch_confirmations = 2;
+  config.switch_confirmation_window = 200ms;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.7f), source("b", 0.5f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  s.header.stamp.sec = 9;
+  EXPECT_EQ(p.observe(s, now + 150ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 11;
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 450ms).source_id, "b");
+}
+TEST(AttentionPolicy, ConfirmationConfigValidation) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 0;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.switch_confirmations = 101;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.switch_confirmations = 2;
+  c.switch_confirmation_window = 0ms;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+}

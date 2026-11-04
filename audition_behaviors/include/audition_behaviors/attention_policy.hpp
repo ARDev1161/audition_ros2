@@ -22,6 +22,9 @@ public:
     double minimum_activity = 0.3;
     double switch_margin = 0.15;
     std::chrono::milliseconds scene_timeout{1500};
+    // Require repeated accepted snapshots before changing to a new source.
+    std::uint32_t switch_confirmations = 1;
+    std::chrono::milliseconds switch_confirmation_window{1000};
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -29,7 +32,10 @@ public:
         config_.minimum_activity < 0 || config_.minimum_activity > 1 ||
         !std::isfinite(config_.switch_margin) ||
         config_.switch_margin < 0 || config_.switch_margin > 1 ||
-        config_.scene_timeout.count() <= 0)
+        config_.scene_timeout.count() <= 0 ||
+        config_.switch_confirmations == 0 ||
+        config_.switch_confirmations > 100 ||
+        config_.switch_confirmation_window.count() <= 0)
       throw std::invalid_argument("invalid attention policy configuration");
   }
 
@@ -56,6 +62,7 @@ public:
         scene.header.frame_id != frame_id_)) {
       selected_id_.clear();
       selected_generation_ = 0;
+      clear_pending();
     }
     have_scene_ = true;
     generation_ = scene.generation;
@@ -80,11 +87,35 @@ public:
     }
     if (!best) {
       selected_id_.clear();
+      selected_generation_ = 0;
+      clear_pending();
       return invalid(scene, "no_eligible_bearing");
     }
-    const auto * chosen = incumbent &&
-      best->activity_score < incumbent->activity_score + config_.switch_margin
-      ? incumbent : best;
+    const bool challenger = incumbent && best != incumbent &&
+      best->activity_score >= incumbent->activity_score + config_.switch_margin;
+    const auto * chosen = incumbent ? incumbent : best;
+    if (challenger) {
+      // A candidate must win consecutive accepted scenes within a bounded window.
+      // Regressed scenes return before reaching this state machine.
+      if (pending_id_ != best->source_id ||
+          pending_generation_ != best->source_generation ||
+          now < pending_since_ ||
+          now - pending_since_ > config_.switch_confirmation_window) {
+        pending_id_ = best->source_id;
+        pending_generation_ = best->source_generation;
+        pending_since_ = now;
+        pending_count_ = 1;
+      } else if (pending_count_ < config_.switch_confirmations) {
+        ++pending_count_;
+      }
+      if (pending_count_ >= config_.switch_confirmations) {
+        chosen = best;
+        clear_pending();
+      }
+    } else {
+      clear_pending();
+      if (!incumbent) chosen = best;
+    }
     selected_id_ = chosen->source_id;
     selected_generation_ = chosen->source_generation;
     audition_msgs::msg::AttentionTarget out;
@@ -117,6 +148,7 @@ public:
     have_scene_ = false;
     selected_id_.clear();
     selected_generation_ = 0;
+    clear_pending();
     generation_ = 0;
     frame_id_.clear();
     last_target_ = {};
@@ -124,6 +156,13 @@ public:
   }
 
 private:
+  void clear_pending() {
+    pending_id_.clear();
+    pending_generation_ = 0;
+    pending_count_ = 0;
+    pending_since_ = {};
+  }
+
   bool eligible(const audition_msgs::msg::AcousticSource & source,
                 const audition_msgs::msg::AcousticScene & scene) const {
     if (source.source_id.empty() ||
@@ -156,6 +195,10 @@ private:
   std::uint64_t selected_generation_ = 0;
   std::string frame_id_;
   std::string selected_id_;
+  std::string pending_id_;
+  std::uint64_t pending_generation_ = 0;
+  std::uint32_t pending_count_ = 0;
+  Clock::time_point pending_since_{};
   Clock::time_point last_observation_{};
   builtin_interfaces::msg::Time last_stamp_{};
   audition_msgs::msg::AttentionTarget last_target_{};

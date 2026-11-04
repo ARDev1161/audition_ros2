@@ -1,6 +1,7 @@
 #include "audition_behaviors/attention_policy.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 
@@ -37,6 +38,13 @@ private:
     config.switch_margin = declare_parameter<double>("switch_margin", 0.15);
     config.scene_timeout = std::chrono::milliseconds(
       declare_parameter<int>("scene_timeout_ms", 1500));
+    const int confirmations = declare_parameter<int>("switch_confirmations", 1);
+    if (confirmations <= 0 || confirmations > 100) {
+      throw std::invalid_argument("switch_confirmations must be between 1 and 100");
+    }
+    config.switch_confirmations = static_cast<std::uint32_t>(confirmations);
+    config.switch_confirmation_window = std::chrono::milliseconds(
+      declare_parameter<int>("switch_confirmation_window_ms", 1000));
     return config;
   }
   AttentionPolicy policy_;

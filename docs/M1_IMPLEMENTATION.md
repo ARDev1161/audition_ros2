@@ -735,3 +735,12 @@ publication was invalid, avoiding a redundant timer invalidation before the
 next valid target. Four pure-policy regression tests cover generation rollback,
 timestamp rollback and expiry, duplicate IDs, and frame transition. This
 remains advisory only: no robot movement or TF-derived position.
+
+## M3j: bounded attention challenger confirmation (2026-11-04)
+
+The opt-in attention manager supports startup-only `switch_confirmations` (default 1)
+and `switch_confirmation_window_ms` (default 1000) to prevent a single transient
+challenger from immediately replacing an eligible incumbent. Interrupted,
+expired, stale or generation/frame-changed challengers cannot inherit prior
+confirmation. Initial acquisition remains immediate. See
+[M3j confirmation](M3_ATTENTION_CONFIRMATION.md). This is advisory only.
