@@ -1,5 +1,5 @@
 """Fail-closed, ROS-independent M3 attention launch preflight."""
-from dataclasses import dataclass
+from typing import NamedTuple
 from pathlib import Path
 import math
 import yaml
@@ -9,8 +9,7 @@ class AttentionConfigError(ValueError):
     pass
 
 
-@dataclass(frozen=True)
-class AttentionLaunch:
+class AttentionLaunch(NamedTuple):
     enabled: bool
     parameters_path: str
 
