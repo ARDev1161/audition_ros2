@@ -16,3 +16,13 @@ invalid zero timestamp rejection, and generation reset.
 The test is deliberately independent of ODAS hardware, ASR models, or robot
 actuators. No Nav2 action or motion command is introduced. The strict policy
 is still opt-in; existing profile defaults remain unchanged.
+
+## M3s: asynchronous advisory correlation in the strict graph smoke
+
+The first PR Humble M3r run passed 225 unit tests and the earlier attention
+smoke, but the strict smoke saw an unsolicited `no_scene` timer advisory
+immediately after DDS graph discovery. The test incorrectly treated the first
+received message as the response to its first scene. It now correlates
+advisories by scene header stamp, frame and generation, and retries the first
+scene until the real node has accepted it. This does not weaken the strict
+replay or challenger assertions; the production policy is unchanged.

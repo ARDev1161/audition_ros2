@@ -47,11 +47,20 @@ def wait(node, predicate, timeout=12):
 
 
 def send(node, scene, expected_id=None, expected_reason=None):
+    # The timer can publish an unrelated no_scene/scene_timeout result
+    # while DDS discovery converges. Match the response to this exact
+    # published scene, rather than assuming the next callback is its reply.
     count = len(node.received)
     node.pub.publish(scene)
-    assert wait(node, lambda: len(node.received) > count), (
-        "no attention result for stamp " + str(scene.header.stamp.sec))
-    result = node.received[count]
+    def matching():
+        return [result for result in node.received[count:]
+                if result.header.stamp == scene.header.stamp
+                and result.header.frame_id == scene.header.frame_id
+                and result.scene_generation == scene.generation]
+    assert wait(node, lambda: bool(matching())), (
+        "no matching attention result for stamp " + str(scene.header.stamp.sec)
+        + "; graph=" + str(node.get_topic_names_and_types()))
+    result = matching()[0]
     if expected_id is not None:
         assert result.valid and result.source_id == expected_id, (
             "expected " + expected_id + ", got " + str((result.valid, result.source_id, result.reason)))
@@ -68,7 +77,20 @@ def main():
         assert wait(node, lambda: node.pub.get_subscription_count() > 0 and
                     node.count_publishers(NS + "/attention/target") > 0, 35), (
             "strict attention graph not discovered: " + str(node.get_topic_names_and_types()))
-        send(node, node.scene(10), expected_id="a")
+        # A discovered subscription does not guarantee the first DDS sample
+        # has crossed the reader's initialization boundary. Retry the initial
+        # snapshot with a stable stamp until its correlated advisory arrives.
+        initial = node.scene(10)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            node.pub.publish(initial)
+            rclpy.spin_once(node, timeout_sec=0.1)
+            if any(x.valid and x.source_id == "a" and
+                   x.header.stamp == initial.header.stamp and
+                   x.scene_generation == 1 for x in node.received):
+                break
+        else:
+            raise AssertionError("initial scene not accepted after graph discovery")
         send(node, node.scene(11, b=0.95), expected_id="a")
         send(node, node.scene(11, b=0.95), expected_reason="regressed_scene_stamp")
         send(node, node.scene(12, b=0.95), expected_id="a")

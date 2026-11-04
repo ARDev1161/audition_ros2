@@ -810,3 +810,11 @@ boolean, matching the C++ attention node. A new ROS 2 Humble graph smoke
 runs strict replay fencing and three-observation challenger confirmation
 against a real namespaced attention node. See
 [M3r strict graph](M3_ATTENTION_STRICT_GRAPH.md).
+
+## M3s: strict attention graph asynchronous correlation (2026-11-04)
+
+The M3r PR Humble smoke failed when a timer-originated `no_scene` advisory
+arrived before the first scene response. The graph test now matches replies
+to the published scene header and generation and retries initial admission
+across DDS startup. All replay and challenger assertions remain enforced.
+See [M3s strict graph](M3_ATTENTION_STRICT_GRAPH.md).
