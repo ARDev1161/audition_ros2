@@ -186,10 +186,16 @@ public:
     // New/re-acquired targets can require independent consecutive evidence.
     // This does not affect the incumbent's existing switch hysteresis.
     if (!incumbent && config_.acquisition_confirmations > 1) {
+      // Confirm bearing continuity during acquisition as well as after
+      // selection. A stable ID alone is insufficient if its DOA jumps.
+      const bool bearing_jump = config_.maximum_direction_jump_rad > 0.0 &&
+        acquisition_count_ > 0 &&
+        !directions_within_jump(best->direction_unit, acquisition_direction_);
       if (acquisition_id_ != best->source_id ||
           acquisition_generation_ != best->source_generation ||
           now < acquisition_since_ ||
-          now - acquisition_since_ > config_.acquisition_confirmation_window) {
+          now - acquisition_since_ > config_.acquisition_confirmation_window ||
+          bearing_jump) {
         acquisition_id_ = best->source_id;
         acquisition_generation_ = best->source_generation;
         acquisition_since_ = now;
@@ -197,6 +203,7 @@ public:
       } else if (acquisition_count_ < config_.acquisition_confirmations) {
         ++acquisition_count_;
       }
+      acquisition_direction_ = best->direction_unit;
       if (acquisition_count_ < config_.acquisition_confirmations) {
         return invalid(scene, "acquisition_pending");
       }
@@ -276,9 +283,8 @@ private:
     last_target_ = {};
   }
 
-  bool direction_consistent(const audition_msgs::msg::AcousticSource & source) const {
-    const auto & a = source.direction_unit;
-    const auto & b = last_target_.direction_unit;
+  bool directions_within_jump(const geometry_msgs::msg::Vector3 & a,
+                              const geometry_msgs::msg::Vector3 & b) const {
     // Both vectors were already validated as approximately unit length.
     const double dot = a.x * b.x + a.y * b.y + a.z * b.z;
     const double an = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
@@ -287,11 +293,16 @@ private:
     return std::acos(cosine) <= config_.maximum_direction_jump_rad;
   }
 
+  bool direction_consistent(const audition_msgs::msg::AcousticSource & source) const {
+    return directions_within_jump(source.direction_unit, last_target_.direction_unit);
+  }
+
   void clear_acquisition() {
     acquisition_id_.clear();
     acquisition_generation_ = 0;
     acquisition_count_ = 0;
     acquisition_since_ = {};
+    acquisition_direction_ = {};
   }
 
   void clear_pending() {
@@ -359,6 +370,7 @@ private:
   std::uint64_t acquisition_generation_ = 0;
   std::uint32_t acquisition_count_ = 0;
   Clock::time_point acquisition_since_{};
+  geometry_msgs::msg::Vector3 acquisition_direction_{};
   // All entries belong to the currently accepted stream generation/frame.
   std::unordered_set<std::string> quarantined_ids_;
   std::uint64_t pending_generation_ = 0;

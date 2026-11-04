@@ -1022,3 +1022,11 @@ node publishes invalid `acquisition_pending` advisories. Incumbent switching
 and direction quarantine remain separate. Five deterministic policy GTests
 cover confirmation, candidate change, timeout window, replay and disappearance.
 See [M3ac acquisition contract](M3_ATTENTION_ACQUISITION_CONFIRMATION.md).
+
+## M3ad: acquisition bearing continuity (2026-11-04)
+
+When acquisition confirmation and the optional direction-jump gate are both
+enabled, a candidate must keep a consistent bearing across consecutive
+observations. Large jumps restart acquisition rather than accumulating
+confirmations on a reused source ID. Existing defaults remain unchanged.
+See [M3ad bearing confirmation](M3_ATTENTION_ACQUISITION_BEARING.md).

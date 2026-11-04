@@ -894,3 +894,45 @@ TEST(AttentionPolicy, AcquisitionInvalidatedByMissingCandidate) {
   EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
   EXPECT_TRUE(p.observe(s, now + 300ms).valid);
 }
+
+TEST(AttentionPolicy, AcquisitionDirectionJumpRestartsConfirmation) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 3;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "acquisition_pending");
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 300ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "a");
+}
+TEST(AttentionPolicy, AcquisitionSmallBearingChangePreservesConfirmation) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  s.sources[0].direction_unit.x = std::cos(0.1);
+  s.sources[0].direction_unit.y = std::sin(0.1);
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}
+TEST(AttentionPolicy, AcquisitionBearingGateIsOptional) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}
