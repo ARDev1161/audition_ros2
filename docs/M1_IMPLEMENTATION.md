@@ -955,3 +955,14 @@ rotation that could previously pass consecutive pairwise checks. Out-of-limit
 bearings restart confirmation with a new anchor; small jitter is allowed.
 Defaults remain unchanged. Three GTests cover both confirmation paths and
 jitter. See [M3af anchored confirmation](M3_ATTENTION_ANCHORED_CONFIRMATION.md).
+
+## M3ag: bounded attention scene admission (2026-11-04)
+
+Optional `maximum_scene_sources` (0=disabled, 1–4096 when enabled) rejects
+oversized acoustic scenes before source-ID allocation or quarantine processing.
+The policy invalidates the advisory with `scene_source_limit`, preserves its
+last accepted stream watermark, and recovers on a subsequent bounded scene.
+Duplicates and malformed records count toward the cap. This bounds policy
+processing, not DDS deserialization or transport memory. Three GTests cover
+rejection, recovery and compatibility. See
+[M3ag scene admission](M3_ATTENTION_SCENE_ADMISSION.md).

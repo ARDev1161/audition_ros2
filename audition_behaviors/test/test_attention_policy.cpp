@@ -1065,3 +1065,46 @@ TEST(AttentionPolicy, StableAcquisitionAnchorAllowsSmallJitter) {
   s.sources[0].direction_unit.y = std::sin(-0.2);
   EXPECT_TRUE(p.observe(s, now + 200ms).valid);
 }
+
+TEST(AttentionPolicy, OversizedSceneFailsClosedAndDoesNotAdvanceWatermark) {
+  AttentionPolicy::Config config;
+  config.maximum_scene_sources = 2;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  auto oversized = s;
+  oversized.header.stamp.sec = 100;
+  oversized.sources = {source("a", 0.9f), source("b", 0.8f),
+                       source("c", 0.7f)};
+  EXPECT_EQ(p.observe(oversized, now + 100ms).reason, "scene_source_limit");
+  EXPECT_FALSE(p.expire(now + 200ms).valid);
+  // Rejected input must not poison the accepted timestamp watermark.
+  s.header.stamp.sec = 11;
+  EXPECT_TRUE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, SourceLimitCountsDuplicateAndInvalidRecords) {
+  AttentionPolicy::Config config;
+  config.maximum_scene_sources = 1;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f), source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "scene_source_limit");
+  s.sources = {source("a", 0.9f)};
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}
+TEST(AttentionPolicy, SourceLimitIsOptionalAndValidated) {
+  AttentionPolicy::Config config;
+  config.maximum_scene_sources = 4097;
+  EXPECT_THROW(AttentionPolicy p(config), std::invalid_argument);
+  config.maximum_scene_sources = 0;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.sources = {source("a", 0.9f), source("b", 0.8f),
+               source("c", 0.7f)};
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}

@@ -36,6 +36,9 @@ public:
     double maximum_direction_jump_rad = 0.0;
     // Reject equal scene stamps to prevent duplicate snapshots counting as evidence.
     bool require_advancing_scene_stamp = false;
+    // Optional cap on per-scene source records, including duplicates and invalid records.
+    // Zero preserves legacy unbounded behavior.
+    std::uint32_t maximum_scene_sources = 0;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -44,6 +47,7 @@ public:
         !std::isfinite(config_.switch_margin) ||
         config_.switch_margin < 0 || config_.switch_margin > 1 ||
         config_.scene_timeout.count() <= 0 ||
+        config_.maximum_scene_sources > 4096 ||
         config_.acquisition_confirmations == 0 ||
         config_.acquisition_confirmations > 100 ||
         config_.acquisition_confirmation_window.count() <= 0 ||
@@ -69,6 +73,14 @@ public:
         (now < last_observation_ ||
          now - last_observation_ > config_.scene_timeout)) {
       invalidate_target();
+    }
+    // Bound adversarial or malfunctioning scene producers before allocating ID sets
+    // or walking the sources. Do not advance the accepted stream watermark.
+    // The previous advisory is invalidated, never silently retained.
+    if (config_.maximum_scene_sources > 0 &&
+        scene.sources.size() > config_.maximum_scene_sources) {
+      invalidate_target();
+      return invalid(scene, "scene_source_limit");
     }
     // A reset/invalid scene must never leave the previous bearing actionable.
     if (scene.header.frame_id.empty() || scene.generation == 0) {

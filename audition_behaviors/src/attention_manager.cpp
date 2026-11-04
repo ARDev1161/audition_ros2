@@ -58,6 +58,11 @@ private:
       declare_parameter<int>("maximum_source_age_ms", 0));
     config.maximum_direction_jump_rad = declare_parameter<double>(
       "maximum_direction_jump_rad", 0.0);
+    const int maximum_scene_sources = declare_parameter<int>("maximum_scene_sources", 0);
+    if (maximum_scene_sources < 0 || maximum_scene_sources > 4096) {
+      throw std::invalid_argument("maximum_scene_sources must be between 0 and 4096");
+    }
+    config.maximum_scene_sources = static_cast<std::uint32_t>(maximum_scene_sources);
     config.require_advancing_scene_stamp = declare_parameter<bool>(
       "require_advancing_scene_stamp", false);
     return config;
