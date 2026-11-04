@@ -39,6 +39,8 @@ public:
     // Optional cap on per-scene source records, including duplicates and invalid records.
     // Zero preserves legacy unbounded behavior.
     std::uint32_t maximum_scene_sources = 0;
+    // Optional per-record source identity byte limit, before hashing IDs.
+    std::uint32_t maximum_source_id_bytes = 0;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -48,6 +50,7 @@ public:
         config_.switch_margin < 0 || config_.switch_margin > 1 ||
         config_.scene_timeout.count() <= 0 ||
         config_.maximum_scene_sources > 4096 ||
+        config_.maximum_source_id_bytes > 4096 ||
         config_.acquisition_confirmations == 0 ||
         config_.acquisition_confirmations > 100 ||
         config_.acquisition_confirmation_window.count() <= 0 ||
@@ -81,6 +84,16 @@ public:
         scene.sources.size() > config_.maximum_scene_sources) {
       invalidate_target();
       return invalid(scene, "scene_source_limit");
+    }
+    // Reject oversized identity strings before constructing the duplicate-ID
+    // sets. This is an admission limit, not a DDS deserialization bound.
+    if (config_.maximum_source_id_bytes > 0) {
+      for (const auto & source : scene.sources) {
+        if (source.source_id.size() > config_.maximum_source_id_bytes) {
+          invalidate_target();
+          return invalid(scene, "source_id_limit");
+        }
+      }
     }
     // A reset/invalid scene must never leave the previous bearing actionable.
     if (scene.header.frame_id.empty() || scene.generation == 0) {

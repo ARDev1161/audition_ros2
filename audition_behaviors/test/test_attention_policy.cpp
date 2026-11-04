@@ -1108,3 +1108,45 @@ TEST(AttentionPolicy, SourceLimitIsOptionalAndValidated) {
                source("c", 0.7f)};
   EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
 }
+
+TEST(AttentionPolicy, OversizedSourceIdFailsClosedWithoutAdvancingStamp) {
+  AttentionPolicy::Config config;
+  config.maximum_source_id_bytes = 4;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("good", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  auto oversized = s;
+  oversized.header.stamp.sec = 100;
+  oversized.sources = {source("long-identity", 0.99f)};
+  EXPECT_EQ(p.observe(oversized, now + 100ms).reason, "source_id_limit");
+  EXPECT_FALSE(p.expire(now + 200ms).valid);
+  s.header.stamp.sec = 11;
+  EXPECT_TRUE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, OversizedNonCandidateIdStillRejectsScene) {
+  AttentionPolicy::Config config;
+  config.maximum_source_id_bytes = 3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  auto invalid_source = source("oversized", 0.1f);
+  invalid_source.has_direction = false;
+  s.sources = {source("ok", 0.9f), invalid_source};
+  EXPECT_EQ(p.observe(s, now).reason, "source_id_limit");
+  s.sources.pop_back();
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "ok");
+}
+TEST(AttentionPolicy, IdentityByteLimitIsOptionalAndValidated) {
+  AttentionPolicy::Config config;
+  config.maximum_source_id_bytes = 4097;
+  EXPECT_THROW(AttentionPolicy p(config), std::invalid_argument);
+  config.maximum_source_id_bytes = 0;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.sources = {source("long-identity", 0.9f)};
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}

@@ -1059,3 +1059,12 @@ Duplicates and malformed records count toward the cap. This bounds policy
 processing, not DDS deserialization or transport memory. Three GTests cover
 rejection, recovery and compatibility. See
 [M3ag scene admission](M3_ATTENTION_SCENE_ADMISSION.md).
+
+## M3ah: bounded acoustic source identity admission (2026-11-05)
+
+Optional `maximum_source_id_bytes` (0=disabled, 1–4096 when enabled) rejects
+scenes containing any overlong source ID before duplicate-ID hashing or
+quarantine reconciliation. Even ineligible records count. Rejection emits
+`source_id_limit`, invalidates the advisory and preserves the accepted stream
+watermark for recovery. This does not bound DDS deserialization. Three GTests
+cover rejection and recovery. See [M3ah ID admission](M3_ATTENTION_ID_ADMISSION.md).
