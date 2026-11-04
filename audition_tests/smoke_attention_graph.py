@@ -81,7 +81,7 @@ def main():
         count = len(node.targets)
         assert wait(node, lambda: any(
             not t.valid and t.reason == "scene_timeout"
-            for t in node.targets[count:],), 4), "stale target remained actionable"
+            for t in node.targets[count:]), 4), "stale target remained actionable"
         assert not any(t.valid for t in node.targets[count:]), (
             "target became valid again without a new scene")
         print("PASS: namespaced canonical scene -> advisory target, revoke, generation, expiry")
