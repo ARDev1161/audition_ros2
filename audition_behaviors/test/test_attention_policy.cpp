@@ -660,3 +660,70 @@ TEST(AttentionPolicy, QuarantinesClearTogetherOnNewGeneration) {
   for (auto & src : s.sources) src.source_generation = 2;
   EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
 }
+
+TEST(AttentionPolicy, InvalidIncumbentBearingIsQuarantinedUntilAbsence) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].has_direction = false;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].has_direction = true;
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  s.sources.clear();
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_TRUE(p.observe(s, now + 400ms).valid);
+}
+TEST(AttentionPolicy, NonfiniteIncumbentDoesNotBlockIndependentCandidate) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f), source("b", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].direction_unit.x = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[0] = source("a", 0.99f);
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, LowActivityDoesNotCauseDirectionQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].activity_score = 0.1f;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].activity_score = 0.9f;
+  EXPECT_TRUE(p.observe(s, now + 200ms).valid);
+}
+TEST(AttentionPolicy, InvalidIncumbentUncertaintyRequiresAbsence) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  c.maximum_angular_variance_rad2 = 0.05;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  auto a = source("a", 0.9f);
+  a.has_angular_variance = true;
+  a.angular_variance_rad2 = 0.01;
+  s.sources = {a};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].angular_variance_rad2 = 0.2;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].angular_variance_rad2 = 0.01;
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  s.sources.clear();
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+  s.sources = {a};
+  EXPECT_TRUE(p.observe(s, now + 400ms).valid);
+}

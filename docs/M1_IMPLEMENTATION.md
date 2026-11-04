@@ -877,3 +877,15 @@ Three deterministic regressions cover successive jumps, replay-resistant
 independent release, and generation reset. This remains opt-in and advisory;
 no range, movement command, or hardware accuracy claim is introduced.
 See [M3x multi-source quarantine](M3_ATTENTION_MULTI_QUARANTINE.md).
+
+## M3y: invalid incumbent bearing quarantine
+
+With `maximum_direction_jump_rad` enabled, a selected source with missing,
+nonfinite or non-unit direction is quarantined before its reference bearing
+can be lost. If angular variance gating is also enabled, missing or invalid
+uncertainty likewise quarantines the selected source. Reappearance at a new
+angle cannot bypass the continuity check. An accepted snapshot without the
+source (or a new generation/frame) releases the quarantine. Independent
+sources remain eligible; low activity alone does not quarantine an identity.
+Four GTest regressions cover the transition. This is an advisory continuity
+check, not a claim of measured localization accuracy or robot motion safety.

@@ -129,6 +129,28 @@ public:
     }
     for (const auto & source : scene.sources) {
       if (quarantined_ids_.count(source.source_id)) continue;
+      // Do not lose the reference bearing when the selected source temporarily
+      // reports invalid direction evidence. Otherwise it could reappear at an
+      // arbitrary angle and bypass the jump gate on fresh acquisition.
+      if (config_.maximum_direction_jump_rad > 0.0 &&
+          source.source_id == selected_id_ &&
+          source.source_generation == selected_generation_ &&
+          last_target_.valid &&
+          (!source.has_direction ||
+           !std::isfinite(source.direction_unit.x) ||
+           !std::isfinite(source.direction_unit.y) ||
+           !std::isfinite(source.direction_unit.z) ||
+           std::abs(source.direction_unit.x * source.direction_unit.x +
+                    source.direction_unit.y * source.direction_unit.y +
+                    source.direction_unit.z * source.direction_unit.z - 1.0) > 0.05 ||
+           (config_.maximum_angular_variance_rad2 > 0.0 &&
+            (!source.has_angular_variance ||
+             !std::isfinite(source.angular_variance_rad2) ||
+             source.angular_variance_rad2 < 0.0 ||
+             source.angular_variance_rad2 > config_.maximum_angular_variance_rad2)))) {
+        quarantined_ids_.insert(source.source_id);
+        continue;
+      }
       if (ambiguous_ids.count(source.source_id) || !eligible(source, scene)) continue;
       if (config_.maximum_direction_jump_rad > 0.0 &&
           source.source_id == selected_id_ &&
