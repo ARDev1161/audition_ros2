@@ -218,7 +218,9 @@ public:
       if (pending_id_ != best->source_id ||
           pending_generation_ != best->source_generation ||
           now < pending_since_ ||
-          now - pending_since_ > config_.switch_confirmation_window) {
+          now - pending_since_ > config_.switch_confirmation_window ||
+          (config_.maximum_direction_jump_rad > 0.0 && pending_count_ > 0 &&
+           !directions_within_jump(best->direction_unit, pending_direction_))) {
         pending_id_ = best->source_id;
         pending_generation_ = best->source_generation;
         pending_since_ = now;
@@ -226,6 +228,7 @@ public:
       } else if (pending_count_ < config_.switch_confirmations) {
         ++pending_count_;
       }
+      pending_direction_ = best->direction_unit;
       if (pending_count_ >= config_.switch_confirmations) {
         chosen = best;
         clear_pending();
@@ -310,6 +313,7 @@ private:
     pending_generation_ = 0;
     pending_count_ = 0;
     pending_since_ = {};
+    pending_direction_ = {};
   }
 
   bool fresh_source(const audition_msgs::msg::AcousticSource & source,
@@ -376,6 +380,7 @@ private:
   std::uint64_t pending_generation_ = 0;
   std::uint32_t pending_count_ = 0;
   Clock::time_point pending_since_{};
+  geometry_msgs::msg::Vector3 pending_direction_{};
   Clock::time_point last_observation_{};
   builtin_interfaces::msg::Time last_stamp_{};
   audition_msgs::msg::AttentionTarget last_target_{};

@@ -1030,3 +1030,12 @@ enabled, a candidate must keep a consistent bearing across consecutive
 observations. Large jumps restart acquisition rather than accumulating
 confirmations on a reused source ID. Existing defaults remain unchanged.
 See [M3ad bearing confirmation](M3_ATTENTION_ACQUISITION_BEARING.md).
+
+## M3ae: challenger bearing continuity during switch confirmation (2026-11-04)
+
+When `switch_confirmations > 1` and `maximum_direction_jump_rad > 0`,
+challenger observations must remain directionally consistent while gathering
+switch evidence. A jump resets the confirmation count, while small changes
+and unchanged defaults preserve previous behavior. Four policy regression
+tests cover continuity and candidate replacement. See
+[M3ae switch bearing](M3_ATTENTION_SWITCH_BEARING.md).

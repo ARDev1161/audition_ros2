@@ -936,3 +936,69 @@ TEST(AttentionPolicy, AcquisitionBearingGateIsOptional) {
   s.sources[0].direction_unit.y = 1.0;
   EXPECT_TRUE(p.observe(s, now + 100ms).valid);
 }
+
+TEST(AttentionPolicy, ChallengerDirectionJumpRestartsSwitchConfirmation) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 3;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.7f), source("b", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+  s.sources[1].direction_unit.x = 0.0;
+  s.sources[1].direction_unit.y = 1.0;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 500ms).source_id, "b");
+}
+TEST(AttentionPolicy, ChallengerSmallDirectionChangePreservesSwitchConfirmation) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 2;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.7f), source("b", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  s.sources[1].direction_unit.x = std::cos(0.1);
+  s.sources[1].direction_unit.y = std::sin(0.1);
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, ChallengerBearingContinuityGateIsOptional) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.7f), source("b", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  s.sources[1].direction_unit.x = 0.0;
+  s.sources[1].direction_unit.y = 1.0;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, ChallengerCandidateChangeResetsBearingReference) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 2;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.6f), source("b", 0.85f), source("c", 0.7f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "b");
+  s.sources[0].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[2].activity_score = 1.0f;
+  s.sources[0].activity_score = 0.8f;
+  s.sources[2].direction_unit.x = 0.0;
+  s.sources[2].direction_unit.y = 1.0;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "c");
+}
