@@ -871,3 +871,12 @@ validated `attention_parameters` YAML file. Default remains disabled; the
 consumer shares the selected namespace and canonical scene topic. Standalone
 launch and fail-closed parameter preflight are provided with five tests.
 See [M3n launch integration](M3_ATTENTION_LAUNCH.md). No robot motion added.
+
+## M3o: ROS graph attention integration smoke (2026-11-04)
+
+ROS 2 Humble CI now launches the installed standalone attention node in a
+non-default namespace and verifies canonical scene to typed advisory delivery,
+empty-scene invalidation, new-generation acquisition and wall-timer expiry
+through a separate rclpy process. The bringup package declares its runtime
+dependency on `audition_behaviors`. See
+[M3o graph smoke](M3_ATTENTION_GRAPH_SMOKE.md). No robot motion is exercised.

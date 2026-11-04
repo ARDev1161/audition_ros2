@@ -46,7 +46,30 @@ jobs:
           ros2 interface show audition_msgs/msg/SemanticProgress
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/attention_config.py
+
+      - name: Smoke M3 attention advisory over real ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=112
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cat > /tmp/audition_attention_ci.yaml <<'YAML'
+          /**/attention_manager:
+            ros__parameters:
+              scene_timeout_ms: 500
+          YAML
+          ros2 launch audition_bringup m3_attention.launch.py \
+            audition_namespace:=robot_ci/audition \
+            attention_parameters:=/tmp/audition_attention_ci.yaml \
+            > /tmp/audition_attention_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_graph.py; then
+            cat /tmp/audition_attention_launch.log
+            exit 1
+          fi
 
       - name: Smoke WAV to acoustic scene over ROS graph
         shell: bash
