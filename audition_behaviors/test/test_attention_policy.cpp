@@ -1024,8 +1024,8 @@ TEST(AttentionPolicy, AcquisitionGradualBearingDriftCannotPassAnchor) {
   s.sources[0].direction_unit.x = std::cos(0.6);
   s.sources[0].direction_unit.y = std::sin(0.6);
   EXPECT_EQ(p.observe(s, now + 400ms).reason, "acquisition_pending");
-  EXPECT_EQ(p.observe(s, now + 500ms).reason, "acquisition_pending");
-  EXPECT_TRUE(p.observe(s, now + 600ms).valid);
+  EXPECT_EQ(p.observe(s, now + 500ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 600ms).reason, "retained");
 }
 
 TEST(AttentionPolicy, ChallengerGradualBearingDriftCannotPassAnchor) {
