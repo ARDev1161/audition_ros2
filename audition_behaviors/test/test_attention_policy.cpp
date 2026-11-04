@@ -997,6 +997,7 @@ TEST(AttentionPolicy, ChallengerCandidateChangeResetsBearingReference) {
   EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
   s.sources[2].activity_score = 1.0f;
   s.sources[0].activity_score = 0.8f;
+  s.sources[1].activity_score = 0.7f;
   s.sources[2].direction_unit.x = 0.0;
   s.sources[2].direction_unit.y = 1.0;
   EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
