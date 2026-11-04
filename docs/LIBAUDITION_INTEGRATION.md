@@ -854,3 +854,11 @@ than the configured age relative to the scene producer's own header stamp.
 This complements the independent steady-clock scene timeout and does not
 compare remote source timestamps to local wall time. See
 [M3l source freshness](M3_ATTENTION_SOURCE_FRESHNESS.md).
+
+## M3m: optional attention bearing continuity gate (2026-11-04)
+
+The opt-in attention manager can reject an abrupt direction change of the
+currently selected source via `maximum_direction_jump_rad` (default 0,
+disabled). A rejected bearing invalidates the target rather than retaining
+an actionable stale direction; new source identities and generations are
+independently eligible. See [M3m direction continuity](M3_ATTENTION_DIRECTION_CONTINUITY.md).

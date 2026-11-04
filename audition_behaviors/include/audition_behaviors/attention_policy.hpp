@@ -29,6 +29,8 @@ public:
     double maximum_angular_variance_rad2 = 0.0;
     // Zero disables per-source last_seen age validation against the scene stamp.
     std::chrono::milliseconds maximum_source_age{0};
+    // Zero disables angular jump rejection for the currently selected source.
+    double maximum_direction_jump_rad = 0.0;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -42,7 +44,10 @@ public:
         config_.switch_confirmation_window.count() <= 0 ||
         !std::isfinite(config_.maximum_angular_variance_rad2) ||
         config_.maximum_angular_variance_rad2 < 0 ||
-        config_.maximum_source_age.count() < 0)
+        config_.maximum_source_age.count() < 0 ||
+        !std::isfinite(config_.maximum_direction_jump_rad) ||
+        config_.maximum_direction_jump_rad < 0.0 ||
+        config_.maximum_direction_jump_rad > 3.14159265358979323846)
       throw std::invalid_argument("invalid attention policy configuration");
   }
 
@@ -70,6 +75,7 @@ public:
       selected_id_.clear();
       selected_generation_ = 0;
       clear_pending();
+      last_target_ = {};
     }
     have_scene_ = true;
     generation_ = scene.generation;
@@ -86,6 +92,10 @@ public:
     }
     for (const auto & source : scene.sources) {
       if (ambiguous_ids.count(source.source_id) || !eligible(source, scene)) continue;
+      if (config_.maximum_direction_jump_rad > 0.0 &&
+          source.source_id == selected_id_ &&
+          source.source_generation == selected_generation_ &&
+          last_target_.valid && !direction_consistent(source)) continue;
       if (source.source_id == selected_id_ &&
           source.source_generation == selected_generation_) incumbent = &source;
       if (!best || source.activity_score > best->activity_score ||
@@ -96,6 +106,7 @@ public:
       selected_id_.clear();
       selected_generation_ = 0;
       clear_pending();
+      last_target_ = {};
       return invalid(scene, "no_eligible_bearing");
     }
     const bool challenger = incumbent && best != incumbent &&
@@ -163,6 +174,17 @@ public:
   }
 
 private:
+  bool direction_consistent(const audition_msgs::msg::AcousticSource & source) const {
+    const auto & a = source.direction_unit;
+    const auto & b = last_target_.direction_unit;
+    // Both vectors were already validated as approximately unit length.
+    const double dot = a.x * b.x + a.y * b.y + a.z * b.z;
+    const double an = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+    const double bn = std::sqrt(b.x * b.x + b.y * b.y + b.z * b.z);
+    const double cosine = std::max(-1.0, std::min(1.0, dot / (an * bn)));
+    return std::acos(cosine) <= config_.maximum_direction_jump_rad;
+  }
+
   void clear_pending() {
     pending_id_.clear();
     pending_generation_ = 0;

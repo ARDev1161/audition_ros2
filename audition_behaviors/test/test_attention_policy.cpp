@@ -282,3 +282,61 @@ TEST(AttentionPolicy, SourceAgeConfigValidation) {
   config.maximum_source_age = -1ms;
   EXPECT_THROW(AttentionPolicy p(config), std::invalid_argument);
 }
+
+TEST(AttentionPolicy, DirectionJumpGateRejectsAbruptSameIdentityChange) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  EXPECT_FALSE(p.expire(now + 150ms).valid);
+}
+TEST(AttentionPolicy, DirectionJumpGateAllowsSmallChangeAndNewIdentity) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = std::cos(0.2);
+  s.sources[0].direction_unit.y = std::sin(0.2);
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+  s.sources = {source("b", 0.8f)};
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, DirectionJumpGateResetsOnNewGeneration) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s = scene(2);
+  s.sources = {source("a", 0.9f, 2)};
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}
+TEST(AttentionPolicy, DirectionJumpGateDisabledAndInvalidConfig) {
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  AttentionPolicy p({});
+  auto now = AttentionPolicy::Clock::now();
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = -1.0;
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = -0.1;
+  EXPECT_THROW(AttentionPolicy invalid(c), std::invalid_argument);
+  c.maximum_direction_jump_rad = 3.2;
+  EXPECT_THROW(AttentionPolicy invalid(c), std::invalid_argument);
+}

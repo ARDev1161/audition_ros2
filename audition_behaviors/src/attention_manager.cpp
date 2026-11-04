@@ -49,6 +49,8 @@ private:
       "maximum_angular_variance_rad2", 0.0);
     config.maximum_source_age = std::chrono::milliseconds(
       declare_parameter<int>("maximum_source_age_ms", 0));
+    config.maximum_direction_jump_rad = declare_parameter<double>(
+      "maximum_direction_jump_rad", 0.0);
     return config;
   }
   AttentionPolicy policy_;
