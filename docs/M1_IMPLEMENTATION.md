@@ -918,3 +918,14 @@ startup stamp before advancing to a new retry. This avoids a DDS scheduling
 race where acknowledgements consistently arrived one sample behind a rapid
 100 ms retry loop, causing a false failure despite valid advisories. See
 [M3ab startup synchronization](M3_ATTENTION_STARTUP_SYNCHRONIZATION.md).
+
+## M3ac: optional attention acquisition confirmation (2026-11-04)
+
+`attention_manager` now supports startup parameters `acquisition_confirmations`
+(default 1, range 1–100) and `acquisition_confirmation_window_ms` (default
+1000, positive). With confirmations above one, initial/re-acquired targets
+require consecutive accepted scenes with the same best source; otherwise the
+node publishes invalid `acquisition_pending` advisories. Incumbent switching
+and direction quarantine remain separate. Five deterministic policy GTests
+cover confirmation, candidate change, timeout window, replay and disappearance.
+See [M3ac acquisition contract](M3_ATTENTION_ACQUISITION_CONFIRMATION.md).

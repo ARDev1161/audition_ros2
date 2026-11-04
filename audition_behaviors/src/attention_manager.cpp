@@ -43,6 +43,13 @@ private:
       throw std::invalid_argument("switch_confirmations must be between 1 and 100");
     }
     config.switch_confirmations = static_cast<std::uint32_t>(confirmations);
+    const int acquisition = declare_parameter<int>("acquisition_confirmations", 1);
+    if (acquisition <= 0 || acquisition > 100) {
+      throw std::invalid_argument("acquisition_confirmations must be between 1 and 100");
+    }
+    config.acquisition_confirmations = static_cast<std::uint32_t>(acquisition);
+    config.acquisition_confirmation_window = std::chrono::milliseconds(
+      declare_parameter<int>("acquisition_confirmation_window_ms", 1000));
     config.switch_confirmation_window = std::chrono::milliseconds(
       declare_parameter<int>("switch_confirmation_window_ms", 1000));
     config.maximum_angular_variance_rad2 = declare_parameter<double>(

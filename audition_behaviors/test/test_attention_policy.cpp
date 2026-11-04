@@ -829,3 +829,68 @@ TEST(AttentionPolicy, RegressedSnapshotCannotReleaseQuarantine) {
   s.sources = {source("a", 0.9f)};
   EXPECT_FALSE(p.observe(s, now + 300ms).valid);
 }
+
+TEST(AttentionPolicy, AcquisitionRequiresConsecutiveAcceptedSnapshots) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 300ms).reason, "retained");
+}
+TEST(AttentionPolicy, AcquisitionCandidateChangeRestartsEvidence) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  s.sources = {source("b", 0.9f)};
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, AcquisitionWindowExpiresAndRestarts) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.acquisition_confirmation_window = 100ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
+  EXPECT_TRUE(p.observe(s, now + 250ms).valid);
+}
+TEST(AttentionPolicy, AcquisitionCannotCountRegressedScene) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.require_advancing_scene_stamp = true;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 11;
+  EXPECT_TRUE(p.observe(s, now + 200ms).valid);
+}
+TEST(AttentionPolicy, AcquisitionInvalidatedByMissingCandidate) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  s.sources.clear();
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
+  EXPECT_TRUE(p.observe(s, now + 300ms).valid);
+}

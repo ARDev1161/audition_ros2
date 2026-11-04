@@ -24,6 +24,9 @@ public:
     std::chrono::milliseconds scene_timeout{1500};
     // Require repeated accepted snapshots before changing to a new source.
     std::uint32_t switch_confirmations = 1;
+    // Optional independent confirmation gate for initial/re-acquired targets.
+    std::uint32_t acquisition_confirmations = 1;
+    std::chrono::milliseconds acquisition_confirmation_window{1000};
     std::chrono::milliseconds switch_confirmation_window{1000};
     // Zero disables the optional DOA uncertainty gate.
     double maximum_angular_variance_rad2 = 0.0;
@@ -41,6 +44,9 @@ public:
         !std::isfinite(config_.switch_margin) ||
         config_.switch_margin < 0 || config_.switch_margin > 1 ||
         config_.scene_timeout.count() <= 0 ||
+        config_.acquisition_confirmations == 0 ||
+        config_.acquisition_confirmations > 100 ||
+        config_.acquisition_confirmation_window.count() <= 0 ||
         config_.switch_confirmations == 0 ||
         config_.switch_confirmations > 100 ||
         config_.switch_confirmation_window.count() <= 0 ||
@@ -94,6 +100,7 @@ public:
       selected_id_.clear();
       selected_generation_ = 0;
       clear_pending();
+      clear_acquisition();
       last_target_ = {};
       quarantined_ids_.clear();
     }
@@ -176,6 +183,25 @@ public:
       invalidate_target();
       return invalid(scene, "no_eligible_bearing");
     }
+    // New/re-acquired targets can require independent consecutive evidence.
+    // This does not affect the incumbent's existing switch hysteresis.
+    if (!incumbent && config_.acquisition_confirmations > 1) {
+      if (acquisition_id_ != best->source_id ||
+          acquisition_generation_ != best->source_generation ||
+          now < acquisition_since_ ||
+          now - acquisition_since_ > config_.acquisition_confirmation_window) {
+        acquisition_id_ = best->source_id;
+        acquisition_generation_ = best->source_generation;
+        acquisition_since_ = now;
+        acquisition_count_ = 1;
+      } else if (acquisition_count_ < config_.acquisition_confirmations) {
+        ++acquisition_count_;
+      }
+      if (acquisition_count_ < config_.acquisition_confirmations) {
+        return invalid(scene, "acquisition_pending");
+      }
+    }
+    clear_acquisition();
     const bool challenger = incumbent && best != incumbent &&
       best->activity_score >= incumbent->activity_score + config_.switch_margin;
     const auto * chosen = incumbent ? incumbent : best;
@@ -246,6 +272,7 @@ private:
     selected_id_.clear();
     selected_generation_ = 0;
     clear_pending();
+    clear_acquisition();
     last_target_ = {};
   }
 
@@ -258,6 +285,13 @@ private:
     const double bn = std::sqrt(b.x * b.x + b.y * b.y + b.z * b.z);
     const double cosine = std::max(-1.0, std::min(1.0, dot / (an * bn)));
     return std::acos(cosine) <= config_.maximum_direction_jump_rad;
+  }
+
+  void clear_acquisition() {
+    acquisition_id_.clear();
+    acquisition_generation_ = 0;
+    acquisition_count_ = 0;
+    acquisition_since_ = {};
   }
 
   void clear_pending() {
@@ -321,6 +355,10 @@ private:
   std::string frame_id_;
   std::string selected_id_;
   std::string pending_id_;
+  std::string acquisition_id_;
+  std::uint64_t acquisition_generation_ = 0;
+  std::uint32_t acquisition_count_ = 0;
+  Clock::time_point acquisition_since_{};
   // All entries belong to the currently accepted stream generation/frame.
   std::unordered_set<std::string> quarantined_ids_;
   std::uint64_t pending_generation_ = 0;
