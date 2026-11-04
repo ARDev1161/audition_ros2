@@ -115,11 +115,13 @@ public:
     // disappears from a subsequent accepted snapshot or the stream changes.
     // Multiple identities may jump in successive accepted scenes. Retain all
     // quarantines while their identities remain visible in this generation.
-    // The set is bounded by the identities present in the latest scene.
+    // The set is bounded by IDs present in the latest scene. A foreign-generation
+    // or foreign-frame record with the same ID is NOT proof of absence:
+    // quarantine must remain until an accepted snapshot omits that ID.
     for (auto it = quarantined_ids_.begin(); it != quarantined_ids_.end();) {
       bool present = false;
       for (const auto & source : scene.sources) {
-        if (source.source_id == *it && source.source_generation == scene.generation) {
+        if (source.source_id == *it) {
           present = true;
           break;
         }

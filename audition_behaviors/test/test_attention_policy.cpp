@@ -773,3 +773,59 @@ TEST(AttentionPolicy, ForeignGenerationIncumbentCannotPoisonQuarantine) {
   s.sources = {source("a", 0.9f)};
   EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
 }
+
+TEST(AttentionPolicy, ForeignGenerationPresenceCannotReleaseQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].source_generation = 99;
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+  s.sources.clear();
+  EXPECT_FALSE(p.observe(s, now + 400ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_TRUE(p.observe(s, now + 500ms).valid);
+}
+TEST(AttentionPolicy, ForeignFramePresenceCannotReleaseQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].has_direction = false;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].header.frame_id = "other";
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, RegressedSnapshotCannotReleaseQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  c.require_advancing_scene_stamp = true;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.header.stamp.sec = 11;
+  s.sources[0].has_direction = false;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.header.stamp.sec = 10;
+  s.sources.clear();
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 12;
+  s.sources = {source("a", 0.9f)};
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+}

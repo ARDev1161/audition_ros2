@@ -901,3 +901,12 @@ evidence. Three GTest regressions exercise duplicate-ID, foreign-frame and
 foreign-generation recovery. The existing M3y quarantine for a unique,
 same-frame, same-generation invalid bearing is preserved. Advisory only; no
 robot control or claim of localization accuracy.
+
+## M3aa: quarantine release requires accepted ID absence (2026-11-04)
+
+A foreign-generation or foreign-frame record bearing a quarantined source ID
+cannot count as disappearance and clear its direction quarantine. Only an
+accepted scene with no record of that ID releases the fence, independently
+of other sources. Regressed snapshots cannot release it either. Three
+regression tests cover the identity-presence fence. See
+[M3aa quarantine release](M3_ATTENTION_QUARANTINE_RELEASE.md).
