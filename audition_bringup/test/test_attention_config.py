@@ -32,7 +32,8 @@ class AttentionConfigTests(unittest.TestCase):
 
     def test_valid_parameters(self):
         path = self.write({"minimum_activity": 0.4, "switch_confirmations": 3,
-                           "maximum_source_age_ms": 500})
+                           "maximum_source_age_ms": 500,
+                           "require_advancing_scene_stamp": True})
         result = config.resolve_attention("true", path)
         self.assertEqual(result.parameters_path, path)
 
@@ -48,7 +49,10 @@ class AttentionConfigTests(unittest.TestCase):
                        {"switch_confirmations": True},
                        {"maximum_direction_jump_rad": 4.0},
                        {"minimum_activity": float("nan")},
-                       {"scene_timeout_ms": -1}):
+                       {"scene_timeout_ms": -1},
+                       {"require_advancing_scene_stamp": 1},
+                       {"require_advancing_scene_stamp": "true"},
+                       {"require_advancing_scene_stamp": None}):
             with self.subTest(params=params):
                 with self.assertRaises(config.AttentionConfigError):
                     config.resolve_attention("true", self.write(params))
@@ -62,3 +66,9 @@ class AttentionConfigTests(unittest.TestCase):
             "ros__parameters": {"minimum_activity": 0.5}}}), encoding="utf-8")
         with self.assertRaises(config.AttentionConfigError):
             config.resolve_attention("true", str(self.path))
+
+    def test_strict_replay_bool_accepts_both_values(self):
+        for flag in (True, False):
+            with self.subTest(flag=flag):
+                path = self.write({"require_advancing_scene_stamp": flag})
+                self.assertEqual(config.resolve_attention("true", path).parameters_path, path)

@@ -23,6 +23,7 @@ _ALLOWED = {
     "maximum_angular_variance_rad2": (float, 0.0, float("inf")),
     "maximum_source_age_ms": (int, 0, 2147483647),
     "maximum_direction_jump_rad": (float, 0.0, math.pi),
+    "require_advancing_scene_stamp": (bool, False, True),
 }
 
 
@@ -54,7 +55,8 @@ def resolve_attention(enabled, parameters_path):
         if key not in _ALLOWED:
             raise AttentionConfigError("unknown attention parameter: " + str(key))
         kind, low, high = _ALLOWED[key]
-        if (type(value) not in ((int,) if kind is int else (int, float)) or
+        if (type(value) not in ((int,) if kind is int else
+                                (bool,) if kind is bool else (int, float)) or
                 not math.isfinite(value) or not low <= value <= high):
             raise AttentionConfigError("invalid attention parameter: " + key)
     return AttentionLaunch(True, str(path.resolve()))

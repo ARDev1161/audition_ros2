@@ -71,6 +71,32 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M3r strict replay and challenger confirmation over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=113
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cat > /tmp/audition_attention_strict_ci.yaml <<'YAML'
+          /**/attention_manager:
+            ros__parameters:
+              scene_timeout_ms: 5000
+              switch_confirmations: 3
+              switch_confirmation_window_ms: 4000
+              require_advancing_scene_stamp: true
+          YAML
+          ros2 launch audition_bringup m3_attention.launch.py \
+            audition_namespace:=robot_ci/attention_strict \
+            attention_parameters:=/tmp/audition_attention_strict_ci.yaml \
+            > /tmp/audition_attention_strict_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_strict.py; then
+            cat /tmp/audition_attention_strict_launch.log
+            exit 1
+          fi
+
       - name: Smoke WAV to acoustic scene over ROS graph
         shell: bash
         run: |

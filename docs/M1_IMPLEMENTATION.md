@@ -802,3 +802,11 @@ header timestamps within a generation/frame using startup-only
 `require_advancing_scene_stamp` (default false). Duplicate or malformed
 snapshots cannot count toward challenger confirmation or extend freshness.
 See [M3q scene replay fencing](M3_ATTENTION_SCENE_REPLAY.md).
+
+## M3r: strict replay launch parity and ROS graph integration (2026-11-04)
+
+The YAML preflight now accepts `require_advancing_scene_stamp` as a strict
+boolean, matching the C++ attention node. A new ROS 2 Humble graph smoke
+runs strict replay fencing and three-observation challenger confirmation
+against a real namespaced attention node. See
+[M3r strict graph](M3_ATTENTION_STRICT_GRAPH.md).
