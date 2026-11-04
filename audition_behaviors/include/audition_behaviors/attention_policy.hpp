@@ -56,6 +56,14 @@ public:
   audition_msgs::msg::AttentionTarget observe(
     const audition_msgs::msg::AcousticScene & scene, Clock::time_point now)
   {
+    // Timer callbacks are not guaranteed to run before a new scene arrives.
+    // A stalled executor must not preserve an expired incumbent or its
+    // partially confirmed challenger. Keep the accepted stream watermark.
+    if (have_scene_ &&
+        (now < last_observation_ ||
+         now - last_observation_ > config_.scene_timeout)) {
+      invalidate_target();
+    }
     // A reset/invalid scene must never leave the previous bearing actionable.
     if (scene.header.frame_id.empty() || scene.generation == 0) {
       // Invalidate the advisory, but keep the accepted generation/stamp fence.

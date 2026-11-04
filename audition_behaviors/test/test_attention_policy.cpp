@@ -462,3 +462,60 @@ TEST(AttentionPolicy, ExplicitResetClearsWatermarkForNewSession) {
   old.sources = {source("new_session", 0.9f, 1)};
   EXPECT_EQ(p.observe(old, now + 100ms).source_id, "new_session");
 }
+
+// A queued scene can arrive after a long executor stall before the wall timer
+// gets an opportunity to expire the previous selection.
+TEST(AttentionPolicy, ObserveAfterTimeoutDoesNotRetainExpiredIncumbent) {
+  AttentionPolicy::Config config;
+  config.scene_timeout = 200ms;
+  config.switch_margin = 0.4;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(5);
+  s.sources = {source("a", 0.8f, 5), source("b", 0.6f, 5)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].activity_score = 0.4f;
+  s.sources[1].activity_score = 0.7f;
+  // Without implicit expiry, incumbent a would remain selected by hysteresis.
+  EXPECT_EQ(p.observe(s, now + 201ms).source_id, "b");
+}
+TEST(AttentionPolicy, ObserveAfterClockRollbackStartsNewSelection) {
+  AttentionPolicy::Config config;
+  config.scene_timeout = 200ms;
+  config.switch_margin = 0.4;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(5);
+  s.sources = {source("a", 0.8f, 5), source("b", 0.6f, 5)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].activity_score = 0.4f;
+  s.sources[1].activity_score = 0.7f;
+  EXPECT_EQ(p.observe(s, now - 1ms).source_id, "b");
+}
+TEST(AttentionPolicy, ObserveAfterTimeoutStillRejectsOlderGeneration) {
+  AttentionPolicy::Config config;
+  config.scene_timeout = 200ms;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(8);
+  s.sources = {source("a", 0.9f, 8)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  auto older = scene(7);
+  older.sources = {source("old", 0.99f, 7)};
+  EXPECT_EQ(p.observe(older, now + 201ms).reason, "regressed_generation");
+  EXPECT_FALSE(p.expire(now + 202ms).valid);
+  EXPECT_EQ(p.observe(s, now + 210ms).source_id, "a");
+}
+TEST(AttentionPolicy, ObserveWithinTimeoutPreservesIncumbentHysteresis) {
+  AttentionPolicy::Config config;
+  config.scene_timeout = 200ms;
+  config.switch_margin = 0.4;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(5);
+  s.sources = {source("a", 0.8f, 5), source("b", 0.6f, 5)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].activity_score = 0.4f;
+  s.sources[1].activity_score = 0.7f;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}

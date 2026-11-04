@@ -826,3 +826,12 @@ forgetting the last accepted scene generation, frame or timestamp. Delayed
 older generations cannot re-arm attention after timeout; strict timestamp
 mode also rejects old/equal stamps. A fresh scene may reacquire normally.
 See [M3t timeout fence](M3_ATTENTION_TIMEOUT_FENCE.md).
+
+## M3u: attention expiry before scene admission (2026-11-04)
+
+A delayed timer cannot preserve an expired incumbent when a new scene arrives
+following an executor stall. The policy now invalidates target and pending
+challenger on observation-clock rollback or a gap beyond `scene_timeout_ms`,
+while preserving the accepted stream watermark. Four regression tests cover
+stall, rollback, generation replay and the timeout boundary. See
+[M3u admission timeout](M3_ATTENTION_ADMISSION_TIMEOUT.md).
