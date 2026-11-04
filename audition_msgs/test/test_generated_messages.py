@@ -278,3 +278,19 @@ def test_pipeline_status_graph_watchdog_round_trip():
     assert back.semantic_miss_count == 4
     assert back.accepted_semantic_frames == 10
     assert back.last_semantic_age_ms == 11000
+
+
+def test_attention_target_round_trip():
+    from audition_msgs.msg import AttentionTarget
+    target = AttentionTarget()
+    target.header.frame_id = "microphone_array"
+    target.valid = True
+    target.source_id = "track-1"
+    target.source_generation = 7
+    target.scene_generation = 7
+    target.direction_unit.x = 1.0
+    target.priority = 0.8
+    restored = deserialize_message(serialize_message(target), AttentionTarget)
+    assert restored.valid and restored.source_id == "track-1"
+    assert restored.source_generation == restored.scene_generation == 7
+    assert restored.header.frame_id == "microphone_array"

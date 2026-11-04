@@ -714,3 +714,11 @@ visible in the test node's own DDS graph, with node/subscription diagnostics
 on failure. Session-generation, old-session replay, malformed ID, duplicate,
 reorder and recovery assertions are unchanged. This is a bounded test
 readiness fix, not a change to production session fencing.
+
+## M3h: opt-in advisory attention consumer (2026-11-04)
+
+`audition_behaviors` adds a standalone ROS 2 attention candidate selector
+with a new typed `AttentionTarget` interface and unit tests. It consumes
+canonical `scene`, never raw unvalidated ODAS tracks, and is not activated
+by M1/M2 presets. It is not a robot action or metric localization. See
+[M3h attention policy](M3_ATTENTION_POLICY.md).
