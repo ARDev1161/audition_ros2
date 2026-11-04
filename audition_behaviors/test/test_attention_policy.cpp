@@ -340,3 +340,58 @@ TEST(AttentionPolicy, DirectionJumpGateDisabledAndInvalidConfig) {
   c.maximum_direction_jump_rad = 3.2;
   EXPECT_THROW(AttentionPolicy invalid(c), std::invalid_argument);
 }
+
+TEST(AttentionPolicy, StrictSceneStampRejectsDuplicateWithoutRefreshingTimeout) {
+  AttentionPolicy::Config config;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  ASSERT_TRUE(p.observe(s, now).valid);
+  EXPECT_EQ(p.observe(s, now + 1000ms).reason, "regressed_scene_stamp");
+  EXPECT_FALSE(p.expire(now + 1501ms).valid);
+}
+TEST(AttentionPolicy, StrictSceneStampPreventsReplayConfirmations) {
+  AttentionPolicy::Config config;
+  config.require_advancing_scene_stamp = true;
+  config.switch_confirmations = 2;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.7f), source("b", 0.5f)};
+  auto now = AttentionPolicy::Clock::now();
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.header.stamp.sec = 11;
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 12;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "b");
+}
+TEST(AttentionPolicy, StrictSceneStampRejectsMalformedAndAcceptsGenerationReset) {
+  AttentionPolicy::Config config;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  EXPECT_EQ(p.observe(s, now).reason, "invalid_scene_stamp");
+  s.header.stamp.sec = 10;
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+  s.header.stamp.nanosec = 1000000000u;
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "invalid_scene_stamp");
+  s = scene(2);
+  s.header.stamp.sec = 1;
+  s.sources = {source("b", 0.9f, 2)};
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "b");
+}
+TEST(AttentionPolicy, DefaultAllowsEqualSceneStampsForCompatibility) {
+  AttentionPolicy p({});
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  EXPECT_TRUE(p.observe(s, now).valid);
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}

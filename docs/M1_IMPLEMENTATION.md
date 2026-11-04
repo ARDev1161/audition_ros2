@@ -794,3 +794,11 @@ M3o CI failed at graph readiness because Humble rclpy Subscription lacks
 `get_publisher_count()`. The smoke now uses `Node.count_publishers`
 and tests generation replay, invalid DOA rejection, reacquisition and expiry
 against the real attention node. See [M3p](M3_ATTENTION_GRAPH_SMOKE.md).
+
+## M3q: optional strict scene timestamp replay fencing (2026-11-04)
+
+The opt-in attention manager can require strictly advancing nonzero scene
+header timestamps within a generation/frame using startup-only
+`require_advancing_scene_stamp` (default false). Duplicate or malformed
+snapshots cannot count toward challenger confirmation or extend freshness.
+See [M3q scene replay fencing](M3_ATTENTION_SCENE_REPLAY.md).

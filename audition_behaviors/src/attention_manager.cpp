@@ -51,6 +51,8 @@ private:
       declare_parameter<int>("maximum_source_age_ms", 0));
     config.maximum_direction_jump_rad = declare_parameter<double>(
       "maximum_direction_jump_rad", 0.0);
+    config.require_advancing_scene_stamp = declare_parameter<bool>(
+      "require_advancing_scene_stamp", false);
     return config;
   }
   AttentionPolicy policy_;

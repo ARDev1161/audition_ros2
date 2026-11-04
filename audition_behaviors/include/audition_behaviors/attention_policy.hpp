@@ -31,6 +31,8 @@ public:
     std::chrono::milliseconds maximum_source_age{0};
     // Zero disables angular jump rejection for the currently selected source.
     double maximum_direction_jump_rad = 0.0;
+    // Reject equal scene stamps to prevent duplicate snapshots counting as evidence.
+    bool require_advancing_scene_stamp = false;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -63,11 +65,18 @@ public:
     if (have_scene_ && scene.generation < generation_) {
       return invalid(scene, "regressed_generation");
     }
+    if (config_.require_advancing_scene_stamp &&
+        (scene.header.stamp.sec < 0 || scene.header.stamp.nanosec >= 1000000000u ||
+         (scene.header.stamp.sec == 0 && scene.header.stamp.nanosec == 0))) {
+      return invalid(scene, "invalid_scene_stamp");
+    }
     if (have_scene_ && scene.generation == generation_ &&
         scene.header.frame_id == frame_id_ &&
         (scene.header.stamp.sec < last_stamp_.sec ||
          (scene.header.stamp.sec == last_stamp_.sec &&
-          scene.header.stamp.nanosec < last_stamp_.nanosec))) {
+          (scene.header.stamp.nanosec < last_stamp_.nanosec ||
+           (config_.require_advancing_scene_stamp &&
+            scene.header.stamp.nanosec == last_stamp_.nanosec))))) {
       return invalid(scene, "regressed_scene_stamp");
     }
     if (have_scene_ && (scene.generation != generation_ ||
