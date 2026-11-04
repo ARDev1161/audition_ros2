@@ -847,3 +847,18 @@ valid replies to the exact attempt, and tests replay and challenger
 confirmation relative to the acknowledged stamp. Production policy remains
 unchanged; strict replay protection is not weakened. This fixes the M3u
 Humble CI strict graph failure, not a physical-device acceptance test.
+
+
+## M3w: discontinuous bearing identity quarantine (2026-11-04)
+
+With `maximum_direction_jump_rad > 0`, a source that suddenly changes
+direction is now quarantined for its current `(source_id, generation)`.
+Previously, rejecting the jump invalidated the incumbent but also erased the
+identity used to check continuity, allowing the same jumped track to become
+actionable on the very next snapshot. Quarantine persists through timer expiry
+and rejected/replayed snapshots. An accepted snapshot where the source is
+absent, a new stream generation/frame, or explicit policy reset releases it.
+Other independently eligible sources remain selectable. The default disabled
+direction gate is unchanged. Four model-independent regression tests cover
+repeat observations, alternate candidates, disappearance and timeout/epoch.
+See [M3w quarantine contract](M3_ATTENTION_DIRECTION_QUARANTINE.md).
