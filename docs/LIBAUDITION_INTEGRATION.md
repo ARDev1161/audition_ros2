@@ -845,3 +845,12 @@ using startup-only `maximum_angular_variance_rad2` (default 0, disabled).
 When enabled, missing, nonfinite, negative or excessive variance excludes a
 source before hysteresis and confirmation. See
 [M3k uncertainty gate](M3_ATTENTION_UNCERTAINTY.md). No motion control is added.
+
+## M3l: opt-in per-source observation freshness (2026-11-04)
+
+The attention manager supports `maximum_source_age_ms` (default 0, disabled),
+rejecting sources whose `last_seen` is missing, future, malformed or older
+than the configured age relative to the scene producer's own header stamp.
+This complements the independent steady-clock scene timeout and does not
+compare remote source timestamps to local wall time. See
+[M3l source freshness](M3_ATTENTION_SOURCE_FRESHNESS.md).

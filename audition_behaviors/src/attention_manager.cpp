@@ -47,6 +47,8 @@ private:
       declare_parameter<int>("switch_confirmation_window_ms", 1000));
     config.maximum_angular_variance_rad2 = declare_parameter<double>(
       "maximum_angular_variance_rad2", 0.0);
+    config.maximum_source_age = std::chrono::milliseconds(
+      declare_parameter<int>("maximum_source_age_ms", 0));
     return config;
   }
   AttentionPolicy policy_;

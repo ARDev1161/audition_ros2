@@ -233,3 +233,52 @@ TEST(AttentionPolicy, AngularGateConfigValidation) {
   c.maximum_angular_variance_rad2 = std::numeric_limits<double>::quiet_NaN();
   EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
 }
+
+TEST(AttentionPolicy, SourceAgeGateFiltersStaleSources) {
+  AttentionPolicy::Config config;
+  config.maximum_source_age = 200ms;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.header.stamp.nanosec = 100000000;
+  auto stale = source("stale", 0.99f);
+  stale.last_seen.sec = 9;
+  stale.last_seen.nanosec = 500000000;
+  auto fresh = source("fresh", 0.6f);
+  fresh.last_seen.sec = 10;
+  fresh.last_seen.nanosec = 0;
+  s.sources = {stale, fresh};
+  EXPECT_EQ(p.observe(s, AttentionPolicy::Clock::now()).source_id, "fresh");
+}
+TEST(AttentionPolicy, SourceAgeGateRejectsFutureAndMalformedStamps) {
+  AttentionPolicy::Config config;
+  config.maximum_source_age = 200ms;
+  AttentionPolicy p(config);
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  auto a = source("a", 0.9f);
+  a.last_seen.sec = 11;
+  s.sources = {a};
+  EXPECT_FALSE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+  s.sources[0].last_seen.sec = 10;
+  s.sources[0].last_seen.nanosec = 1000000000u;
+  EXPECT_FALSE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+  s.sources[0].last_seen.nanosec = 0;
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}
+TEST(AttentionPolicy, SourceAgeGateRejectsMissingLastSeenButDefaultDoesNot) {
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  AttentionPolicy default_policy({});
+  EXPECT_TRUE(default_policy.observe(s, AttentionPolicy::Clock::now()).valid);
+  AttentionPolicy::Config config;
+  config.maximum_source_age = 200ms;
+  AttentionPolicy strict(config);
+  EXPECT_FALSE(strict.observe(s, AttentionPolicy::Clock::now()).valid);
+}
+TEST(AttentionPolicy, SourceAgeConfigValidation) {
+  AttentionPolicy::Config config;
+  config.maximum_source_age = -1ms;
+  EXPECT_THROW(AttentionPolicy p(config), std::invalid_argument);
+}
