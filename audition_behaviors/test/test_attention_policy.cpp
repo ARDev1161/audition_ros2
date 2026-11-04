@@ -519,3 +519,69 @@ TEST(AttentionPolicy, ObserveWithinTimeoutPreservesIncumbentHysteresis) {
   s.sources[1].activity_score = 0.7f;
   EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
 }
+
+
+TEST(AttentionPolicy, DirectionDiscontinuityQuarantinesSameSourceAcrossSnapshots) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(3);
+  s.sources = {source("a", 0.9f, 3)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  // Invalidation must not turn a discontinuous track into a new acquisition.
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  EXPECT_FALSE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, QuarantinedSourceDoesNotBlockIndependentCandidate) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(3);
+  s.sources = {source("a", 0.9f, 3)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  s.sources.push_back(source("b", 0.6f, 3));
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[0].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
+}
+TEST(AttentionPolicy, QuarantineClearsAfterAcceptedAbsence) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(3);
+  s.sources = {source("a", 0.9f, 3)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources.clear();
+  EXPECT_FALSE(p.observe(s, now + 200ms).valid);
+  s.sources = {source("a", 0.9f, 3)};
+  EXPECT_TRUE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, QuarantineClearsOnNewGenerationButNotTimeout) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  config.scene_timeout = 200ms;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(3);
+  s.sources = {source("a", 0.9f, 3)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  EXPECT_FALSE(p.expire(now + 400ms).valid);
+  EXPECT_FALSE(p.observe(s, now + 500ms).valid);
+  s.generation = 4;
+  s.sources[0].source_generation = 4;
+  EXPECT_TRUE(p.observe(s, now + 600ms).valid);
+}
