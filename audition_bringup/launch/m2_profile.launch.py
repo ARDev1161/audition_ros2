@@ -59,7 +59,9 @@ def _configure(context, *args, **kwargs):
             "sample_rate_hz": str(capture["sample_rate_hz"]),
             "channel_count": str(capture["channels"]),
         })
-    return [
+    attention = resolver_attention().resolve_attention(
+        value("enable_attention"), value("attention_parameters"))
+    actions = [
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(base)),
                                  launch_arguments=arguments.items()),
         ComposableNodeContainer(
@@ -79,6 +81,22 @@ def _configure(context, *args, **kwargs):
             ],
         ),
     ]
+    if attention.enabled:
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(str(share / "launch" / "m3_attention.launch.py")),
+            launch_arguments={
+                "audition_namespace": namespace,
+                "attention_parameters": attention.parameters_path,
+            }.items()))
+    return actions
+
+
+def resolver_attention():
+    spec = importlib.util.spec_from_file_location(
+        "audition_m3_attention_config", Path(__file__).with_name("attention_config.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def generate_launch_description():
@@ -92,6 +110,10 @@ def generate_launch_description():
                               description="Override WAV file in profile"),
         DeclareLaunchArgument("device", default_value="",
                               description="Override ALSA PCM device in profile"),
+        DeclareLaunchArgument("enable_attention", default_value="false",
+                              description="Opt-in bearing-only advisory attention manager"),
+        DeclareLaunchArgument("attention_parameters", default_value="",
+                              description="Optional absolute attention manager ROS parameter YAML"),
         DeclareLaunchArgument("models_dir", default_value="",
                               description="Directory for explicitly named model files"),
         OpaqueFunction(function=_configure),

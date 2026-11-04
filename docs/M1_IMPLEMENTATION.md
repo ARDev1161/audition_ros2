@@ -769,3 +769,12 @@ currently selected source via `maximum_direction_jump_rad` (default 0,
 disabled). A rejected bearing invalidates the target rather than retaining
 an actionable stale direction; new source identities and generations are
 independently eligible. See [M3m direction continuity](M3_ATTENTION_DIRECTION_CONTINUITY.md).
+
+## M3n: opt-in attention launch integration (2026-11-04)
+
+The validated M2 profile launch can now explicitly enable the standalone
+bearing-only attention manager using `enable_attention:=true` and an optional
+validated `attention_parameters` YAML file. Default remains disabled; the
+consumer shares the selected namespace and canonical scene topic. Standalone
+launch and fail-closed parameter preflight are provided with five tests.
+See [M3n launch integration](M3_ATTENTION_LAUNCH.md). No robot motion added.
