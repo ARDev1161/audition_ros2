@@ -1003,3 +1003,65 @@ TEST(AttentionPolicy, ChallengerCandidateChangeResetsBearingReference) {
   EXPECT_EQ(p.observe(s, now + 200ms).source_id, "b");
   EXPECT_EQ(p.observe(s, now + 300ms).source_id, "c");
 }
+
+TEST(AttentionPolicy, AcquisitionGradualBearingDriftCannotPassAnchor) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 4;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  for (int i = 1; i <= 3; ++i) {
+    const double angle = 0.2 * i;
+    s.sources[0].direction_unit.x = std::cos(angle);
+    s.sources[0].direction_unit.y = std::sin(angle);
+    EXPECT_EQ(p.observe(s, now + std::chrono::milliseconds(100 * i)).reason,
+              "acquisition_pending");
+  }
+  // After the 0.4-radian drift reset, 0.6 is still inside the new anchor.
+  s.sources[0].direction_unit.x = std::cos(0.6);
+  s.sources[0].direction_unit.y = std::sin(0.6);
+  EXPECT_EQ(p.observe(s, now + 400ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 500ms).reason, "acquisition_pending");
+  EXPECT_TRUE(p.observe(s, now + 600ms).valid);
+}
+
+TEST(AttentionPolicy, ChallengerGradualBearingDriftCannotPassAnchor) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 4;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.6f), source("b", 0.5f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  for (int i = 1; i <= 3; ++i) {
+    const double angle = 0.2 * i;
+    s.sources[1].direction_unit.x = std::cos(angle);
+    s.sources[1].direction_unit.y = std::sin(angle);
+    EXPECT_EQ(p.observe(s, now + std::chrono::milliseconds(100 * (i + 1))).source_id, "a");
+  }
+  EXPECT_EQ(p.observe(s, now + 500ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 600ms).source_id, "b");
+}
+
+TEST(AttentionPolicy, StableAcquisitionAnchorAllowsSmallJitter) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 3;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_FALSE(p.observe(s, now).valid);
+  s.sources[0].direction_unit.x = std::cos(0.2);
+  s.sources[0].direction_unit.y = std::sin(0.2);
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources[0].direction_unit.x = std::cos(-0.2);
+  s.sources[0].direction_unit.y = std::sin(-0.2);
+  EXPECT_TRUE(p.observe(s, now + 200ms).valid);
+}

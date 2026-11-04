@@ -200,10 +200,11 @@ public:
         acquisition_generation_ = best->source_generation;
         acquisition_since_ = now;
         acquisition_count_ = 1;
+        // Keep the first bearing of this confirmation run as the anchor.
+        acquisition_direction_ = best->direction_unit;
       } else if (acquisition_count_ < config_.acquisition_confirmations) {
         ++acquisition_count_;
       }
-      acquisition_direction_ = best->direction_unit;
       if (acquisition_count_ < config_.acquisition_confirmations) {
         return invalid(scene, "acquisition_pending");
       }
@@ -225,10 +226,12 @@ public:
         pending_generation_ = best->source_generation;
         pending_since_ = now;
         pending_count_ = 1;
+        // A sequence of individually small turns must not accumulate into
+        // a large drift from the first challenger bearing.
+        pending_direction_ = best->direction_unit;
       } else if (pending_count_ < config_.switch_confirmations) {
         ++pending_count_;
       }
-      pending_direction_ = best->direction_unit;
       if (pending_count_ >= config_.switch_confirmations) {
         chosen = best;
         clear_pending();

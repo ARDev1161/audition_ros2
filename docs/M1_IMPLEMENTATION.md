@@ -946,3 +946,12 @@ switch evidence. A jump resets the confirmation count, while small changes
 and unchanged defaults preserve previous behavior. Four policy regression
 tests cover continuity and candidate replacement. See
 [M3ae switch bearing](M3_ATTENTION_SWITCH_BEARING.md).
+
+## M3af: anchored bearing confirmation (2026-11-04)
+
+Acquisition and challenger switch confirmation now hold the first accepted
+bearing of a confirmation run as its reference. This rejects gradual cumulative
+rotation that could previously pass consecutive pairwise checks. Out-of-limit
+bearings restart confirmation with a new anchor; small jitter is allowed.
+Defaults remain unchanged. Three GTests cover both confirmation paths and
+jitter. See [M3af anchored confirmation](M3_ATTENTION_ANCHORED_CONFIRMATION.md).
