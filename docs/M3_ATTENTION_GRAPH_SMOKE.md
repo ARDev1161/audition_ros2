@@ -18,3 +18,13 @@ check, **not** a unit-only policy test or evidence of microphone direction
 accuracy. The source is synthetic, injected at the canonical scene boundary;
 no motion or Nav2 actions are exercised. The CI uses a separate ROS_DOMAIN_ID
 and dumps launch logs and graph state on failure. Existing defaults stay off.
+
+## M3p: real ROS graph negative cases and Humble discovery
+
+ROS 2 Humble rclpy Subscription has no `get_publisher_count()`. The readiness
+barrier now queries `node.count_publishers()` for the fully-qualified
+advisory topic, retaining the publisher's subscription count and bounded
+35-second wait. The previous M3o CI failure occurred before message assertions.
+The smoke also rejects replayed old generations and zero-length bearings,
+checks that neither becomes actionable, reacquires a valid source, and verifies
+timer expiry. No motion or Nav2 commands are exercised.

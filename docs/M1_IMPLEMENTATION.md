@@ -787,3 +787,10 @@ empty-scene invalidation, new-generation acquisition and wall-timer expiry
 through a separate rclpy process. The bringup package declares its runtime
 dependency on `audition_behaviors`. See
 [M3o graph smoke](M3_ATTENTION_GRAPH_SMOKE.md). No robot motion is exercised.
+
+## M3p: ROS graph negative cases and Humble readiness (2026-11-04)
+
+M3o CI failed at graph readiness because Humble rclpy Subscription lacks
+`get_publisher_count()`. The smoke now uses `Node.count_publishers`
+and tests generation replay, invalid DOA rejection, reacquisition and expiry
+against the real attention node. See [M3p](M3_ATTENTION_GRAPH_SMOKE.md).

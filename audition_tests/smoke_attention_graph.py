@@ -52,8 +52,8 @@ def main():
     node = Probe()
     try:
         if not wait(node, lambda: node.publisher.get_subscription_count() >= 1
-                    and node.subscription.get_publisher_count() >= 1, 35):
-            raise AssertionError("attention graph not discovered in namespaced launch")
+                    and node.count_publishers(NS + "/attention/target") >= 1, 35):
+            raise AssertionError("attention graph not discovered in namespaced launch: " + str(node.get_topic_names_and_types()))
         # Re-publish until the real ROS node processes a valid target.
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and not any(
@@ -77,6 +77,30 @@ def main():
         assert wait(node, lambda: any(
             t.valid and t.scene_generation == 2 and t.source_id == "ci-b"
             for t in node.targets[count:])), "new generation was not selected"
+        # Reject replay of a previous generation after selecting generation 2.
+        count = len(node.targets)
+        node.publisher.publish(node.scene(generation=1, source_id="ci-old"))
+        assert wait(node, lambda: any(
+            not t.valid and t.reason == "regressed_generation"
+            for t in node.targets[count:])), "old generation was not rejected"
+        assert not any(t.valid and t.source_id == "ci-old"
+                       for t in node.targets[count:]), "old source became actionable"
+        # Reject zero-length DOA in a new accepted snapshot.
+        count = len(node.targets)
+        malformed = node.scene(generation=2, source_id="ci-invalid")
+        malformed.sources[0].direction_unit.x = 0.0
+        node.publisher.publish(malformed)
+        assert wait(node, lambda: any(
+            not t.valid and t.reason == "no_eligible_bearing"
+            for t in node.targets[count:])), "invalid direction was not rejected"
+        assert not any(t.valid and t.source_id == "ci-invalid"
+                       for t in node.targets[count:]), "invalid bearing became actionable"
+        # Reacquire a valid target before testing timer-driven expiration.
+        count = len(node.targets)
+        node.publisher.publish(node.scene(generation=2, source_id="ci-b"))
+        assert wait(node, lambda: any(
+            t.valid and t.source_id == "ci-b"
+            for t in node.targets[count:])), "valid target was not reacquired"
         # The timer must revoke an unattended target after the configured 500ms.
         count = len(node.targets)
         assert wait(node, lambda: any(
@@ -84,7 +108,7 @@ def main():
             for t in node.targets[count:]), 4), "stale target remained actionable"
         assert not any(t.valid for t in node.targets[count:]), (
             "target became valid again without a new scene")
-        print("PASS: namespaced canonical scene -> advisory target, revoke, generation, expiry")
+        print("PASS: namespaced scene, revoke, replay, invalid bearing, reacquisition, expiry")
         return 0
     except AssertionError as exc:
         print("FAIL:", exc, file=sys.stderr)
