@@ -835,3 +835,15 @@ challenger on observation-clock rollback or a gap beyond `scene_timeout_ms`,
 while preserving the accepted stream watermark. Four regression tests cover
 stall, rollback, generation replay and the timeout boundary. See
 [M3u admission timeout](M3_ATTENTION_ADMISSION_TIMEOUT.md).
+
+## M3v: strict attention startup acknowledgement and replay CI (2026-11-04)
+
+The strict ROS graph smoke no longer retries an identical initial timestamp
+while DDS publisher/subscriber discovery converges. Such a retry may be
+accepted by the attention policy before the probe receives its advisory,
+then correctly rejected as `regressed_scene_stamp` on every subsequent
+attempt. The smoke advances its initial scene stamp per attempt, correlates
+valid replies to the exact attempt, and tests replay and challenger
+confirmation relative to the acknowledged stamp. Production policy remains
+unchanged; strict replay protection is not weakened. This fixes the M3u
+Humble CI strict graph failure, not a physical-device acceptance test.

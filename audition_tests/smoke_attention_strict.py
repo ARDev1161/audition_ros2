@@ -80,25 +80,33 @@ def main():
         # A discovered subscription does not guarantee the first DDS sample
         # has crossed the reader's initialization boundary. Retry the initial
         # snapshot with a stable stamp until its correlated advisory arrives.
-        initial = node.scene(10)
+        # Strict replay fencing accepts a stamp only once. Re-sending the
+        # identical initial stamp can be admitted while the reply is still
+        # undiscovered, then every retry is correctly rejected as replay.
+        # Advance the stamp on each DDS startup retry and continue the test
+        # relative to the stamp whose acknowledgement we actually observed.
         deadline = time.monotonic() + 10
+        initial_stamp = 10
         while time.monotonic() < deadline:
+            initial = node.scene(initial_stamp)
+            before = len(node.received)
             node.pub.publish(initial)
             rclpy.spin_once(node, timeout_sec=0.1)
             if any(x.valid and x.source_id == "a" and
                    x.header.stamp == initial.header.stamp and
-                   x.scene_generation == 1 for x in node.received):
+                   x.scene_generation == 1 for x in node.received[before:]):
                 break
+            initial_stamp += 1
         else:
             raise AssertionError("initial scene not accepted after graph discovery")
-        send(node, node.scene(11, b=0.95), expected_id="a")
-        send(node, node.scene(11, b=0.95), expected_reason="regressed_scene_stamp")
-        send(node, node.scene(12, b=0.95), expected_id="a")
-        send(node, node.scene(13, b=0.95), expected_id="b")
-        send(node, node.scene(12, a=0.99), expected_reason="regressed_scene_stamp")
-        send(node, node.scene(14, a=0.99, b=0.4), expected_id="b")
-        send(node, node.scene(15, a=0.99, b=0.4), expected_id="b")
-        send(node, node.scene(16, a=0.99, b=0.4), expected_id="a")
+        send(node, node.scene(initial_stamp + 1, b=0.95), expected_id="a")
+        send(node, node.scene(initial_stamp + 1, b=0.95), expected_reason="regressed_scene_stamp")
+        send(node, node.scene(initial_stamp + 2, b=0.95), expected_id="a")
+        send(node, node.scene(initial_stamp + 3, b=0.95), expected_id="b")
+        send(node, node.scene(initial_stamp + 2, a=0.99), expected_reason="regressed_scene_stamp")
+        send(node, node.scene(initial_stamp + 4, a=0.99, b=0.4), expected_id="b")
+        send(node, node.scene(initial_stamp + 5, a=0.99, b=0.4), expected_id="b")
+        send(node, node.scene(initial_stamp + 6, a=0.99, b=0.4), expected_id="a")
         send(node, node.scene(0, a=0.99), expected_reason="invalid_scene_stamp")
         send(node, node.scene(1, a=0.99, generation=2), expected_id="a")
         print("PASS: strict ROS replay, bounded confirmation, generation reset")
