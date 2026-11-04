@@ -129,6 +129,11 @@ public:
     }
     for (const auto & source : scene.sources) {
       if (quarantined_ids_.count(source.source_id)) continue;
+      // Ambiguous or foreign-frame observations cannot establish identity
+      // continuity, nor can they poison a valid incumbent's quarantine.
+      if (ambiguous_ids.count(source.source_id) ||
+          source.source_generation != scene.generation ||
+          source.header.frame_id != scene.header.frame_id) continue;
       // Do not lose the reference bearing when the selected source temporarily
       // reports invalid direction evidence. Otherwise it could reappear at an
       // arbitrary angle and bypass the jump gate on fresh acquisition.

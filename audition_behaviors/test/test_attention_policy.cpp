@@ -727,3 +727,49 @@ TEST(AttentionPolicy, InvalidIncumbentUncertaintyRequiresAbsence) {
   s.sources = {a};
   EXPECT_TRUE(p.observe(s, now + 400ms).valid);
 }
+
+TEST(AttentionPolicy, AmbiguousIncumbentDoesNotPoisonDirectionQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  auto duplicate = source("a", 0.99f);
+  duplicate.has_direction = false;
+  s.sources.push_back(duplicate);
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}
+
+TEST(AttentionPolicy, ForeignFrameIncumbentCannotPoisonQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].header.frame_id = "other";
+  s.sources[0].has_direction = false;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}
+
+TEST(AttentionPolicy, ForeignGenerationIncumbentCannotPoisonQuarantine) {
+  AttentionPolicy::Config c;
+  c.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  s.sources[0].source_generation = 2;
+  s.sources[0].has_direction = false;
+  EXPECT_FALSE(p.observe(s, now + 100ms).valid);
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}

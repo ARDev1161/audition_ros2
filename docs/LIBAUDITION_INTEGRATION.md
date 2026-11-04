@@ -982,3 +982,15 @@ source (or a new generation/frame) releases the quarantine. Independent
 sources remain eligible; low activity alone does not quarantine an identity.
 Four GTest regressions cover the transition. This is an advisory continuity
 check, not a claim of measured localization accuracy or robot motion safety.
+
+## M3z: provenance-gated incumbent direction quarantine (2026-11-04)
+
+An invalid incumbent bearing now triggers direction quarantine only when the
+observation has a unique source ID and matches the accepted scene's generation
+and coordinate frame. Duplicate IDs and mismatched source generations/frames
+remain ineligible but cannot poison the selected identity's quarantine state.
+This separates ambiguous/foreign provenance from genuine invalid direction
+evidence. Three GTest regressions exercise duplicate-ID, foreign-frame and
+foreign-generation recovery. The existing M3y quarantine for a unique,
+same-frame, same-generation invalid bearing is preserved. Advisory only; no
+robot control or claim of localization accuracy.
