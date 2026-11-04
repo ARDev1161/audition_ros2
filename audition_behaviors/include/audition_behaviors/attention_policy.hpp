@@ -58,7 +58,9 @@ public:
   {
     // A reset/invalid scene must never leave the previous bearing actionable.
     if (scene.header.frame_id.empty() || scene.generation == 0) {
-      reset();
+      // Invalidate the advisory, but keep the accepted generation/stamp fence.
+      // A malformed snapshot must not make a delayed older stream admissible.
+      invalidate_target();
       return invalid(scene, "invalid_scene");
     }
     // A delayed old generation must never roll the policy back to a prior stream.
@@ -112,10 +114,7 @@ public:
            source.source_id < best->source_id)) best = &source;
     }
     if (!best) {
-      selected_id_.clear();
-      selected_generation_ = 0;
-      clear_pending();
-      last_target_ = {};
+      invalidate_target();
       return invalid(scene, "no_eligible_bearing");
     }
     const bool challenger = incumbent && best != incumbent &&
@@ -165,7 +164,9 @@ public:
       auto stale = invalid({}, "scene_timeout");
       stale.header.frame_id = frame_id_;
       stale.scene_generation = generation_;
-      reset();
+      // Preserve generation and last accepted stamp across timeout. Otherwise
+      // a delayed old scene could re-arm the advisory after the timer expires.
+      invalidate_target();
       return stale;
     }
     return last_target_;
@@ -173,9 +174,7 @@ public:
 
   void reset() {
     have_scene_ = false;
-    selected_id_.clear();
-    selected_generation_ = 0;
-    clear_pending();
+    invalidate_target();
     generation_ = 0;
     frame_id_.clear();
     last_target_ = {};
@@ -183,6 +182,13 @@ public:
   }
 
 private:
+  void invalidate_target() {
+    selected_id_.clear();
+    selected_generation_ = 0;
+    clear_pending();
+    last_target_ = {};
+  }
+
   bool direction_consistent(const audition_msgs::msg::AcousticSource & source) const {
     const auto & a = source.direction_unit;
     const auto & b = last_target_.direction_unit;

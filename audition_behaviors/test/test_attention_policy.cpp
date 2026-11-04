@@ -395,3 +395,70 @@ TEST(AttentionPolicy, DefaultAllowsEqualSceneStampsForCompatibility) {
   EXPECT_TRUE(p.observe(s, now).valid);
   EXPECT_TRUE(p.observe(s, now + 100ms).valid);
 }
+
+TEST(AttentionPolicy, TimeoutRetainsGenerationFenceAndAllowsFreshRecovery) {
+  AttentionPolicy::Config config;
+  config.require_advancing_scene_stamp = true;
+  config.scene_timeout = 200ms;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(7);
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f, 7)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  EXPECT_EQ(p.expire(now + 201ms).reason, "scene_timeout");
+  auto old = scene(6);
+  old.header.stamp.sec = 50;
+  old.sources = {source("old", 0.99f, 6)};
+  EXPECT_EQ(p.observe(old, now + 210ms).reason, "regressed_generation");
+  EXPECT_FALSE(p.expire(now + 220ms).valid);
+  EXPECT_EQ(p.observe(s, now + 230ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 11;
+  EXPECT_EQ(p.observe(s, now + 240ms).source_id, "a");
+}
+TEST(AttentionPolicy, MalformedSceneDoesNotEraseAcceptedWatermark) {
+  AttentionPolicy::Config config;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(4);
+  s.header.stamp.sec = 100;
+  s.sources = {source("a", 0.8f, 4)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  auto malformed = scene(0);
+  EXPECT_EQ(p.observe(malformed, now + 100ms).reason, "invalid_scene");
+  auto old = scene(3);
+  old.header.stamp.sec = 200;
+  old.sources = {source("old", 0.99f, 3)};
+  EXPECT_EQ(p.observe(old, now + 200ms).reason, "regressed_generation");
+  EXPECT_EQ(p.observe(s, now + 300ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 101;
+  EXPECT_TRUE(p.observe(s, now + 400ms).valid);
+}
+TEST(AttentionPolicy, TimeoutClearsPendingChallengerConfirmation) {
+  AttentionPolicy::Config config;
+  config.scene_timeout = 200ms;
+  config.switch_confirmations = 2;
+  AttentionPolicy p(config);
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(3);
+  s.sources = {source("a", 0.7f, 3), source("b", 0.5f, 3)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.95f;
+  EXPECT_EQ(p.observe(s, now + 50ms).source_id, "a");
+  EXPECT_FALSE(p.expire(now + 251ms).valid);
+  // No incumbent after timeout: acquisition is immediate, not a continuation
+  // of the expired confirmation counter.
+  EXPECT_EQ(p.observe(s, now + 260ms).source_id, "b");
+}
+TEST(AttentionPolicy, ExplicitResetClearsWatermarkForNewSession) {
+  AttentionPolicy p({});
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene(10);
+  s.sources = {source("a", 0.9f, 10)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  p.reset();
+  auto old = scene(1);
+  old.sources = {source("new_session", 0.9f, 1)};
+  EXPECT_EQ(p.observe(old, now + 100ms).source_id, "new_session");
+}

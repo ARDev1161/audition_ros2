@@ -911,3 +911,11 @@ arrived before the first scene response. The graph test now matches replies
 to the published scene header and generation and retries initial admission
 across DDS startup. All replay and challenger assertions remain enforced.
 See [M3s strict graph](M3_ATTENTION_STRICT_GRAPH.md).
+
+## M3t: persistent attention generation fence after timeout (2026-11-04)
+
+Scene expiry and malformed snapshots now invalidate the advisory without
+forgetting the last accepted scene generation, frame or timestamp. Delayed
+older generations cannot re-arm attention after timeout; strict timestamp
+mode also rejects old/equal stamps. A fresh scene may reacquire normally.
+See [M3t timeout fence](M3_ATTENTION_TIMEOUT_FENCE.md).
