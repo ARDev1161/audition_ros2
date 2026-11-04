@@ -16,7 +16,9 @@ public:
     subscription_ = create_subscription<audition_msgs::msg::AcousticScene>(
       "scene", rclcpp::QoS(10).reliable(),
       [this](const audition_msgs::msg::AcousticScene & scene) {
-        publisher_->publish(policy_.observe(scene, AttentionPolicy::Clock::now()));
+        auto target = policy_.observe(scene, AttentionPolicy::Clock::now());
+        publisher_->publish(target);
+        invalid_published_ = !target.valid;
       });
     timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
       auto target = policy_.expire(AttentionPolicy::Clock::now());

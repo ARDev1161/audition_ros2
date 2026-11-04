@@ -80,3 +80,50 @@ TEST(AttentionPolicy, ConfigValidation) {
   c.switch_margin = -0.1;
   EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
 }
+
+TEST(AttentionPolicy, RejectDelayedGenerationWithoutReactivatingOldSource) {
+  AttentionPolicy p({});
+  auto now = AttentionPolicy::Clock::now();
+  auto newer = scene(2);
+  newer.sources = {source("new", 0.8f, 2)};
+  EXPECT_TRUE(p.observe(newer, now).valid);
+  auto old = scene(1);
+  old.sources = {source("old", 0.99f)};
+  auto rejected = p.observe(old, now + 100ms);
+  EXPECT_FALSE(rejected.valid);
+  EXPECT_EQ(rejected.reason, "regressed_generation");
+  EXPECT_EQ(p.expire(now + 200ms).source_id, "new");
+}
+TEST(AttentionPolicy, RejectOutOfOrderTimestampWithoutExtendingFreshness) {
+  AttentionPolicy p({});
+  auto now = AttentionPolicy::Clock::now();
+  auto s = scene();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.8f)};
+  EXPECT_TRUE(p.observe(s, now).valid);
+  s.header.stamp.sec = 9;
+  s.sources = {source("b", 0.99f)};
+  EXPECT_EQ(p.observe(s, now + 1000ms).reason, "regressed_scene_stamp");
+  EXPECT_FALSE(p.expire(now + 1501ms).valid);
+}
+TEST(AttentionPolicy, DuplicateSourceIdsCannotWinSelection) {
+  AttentionPolicy p({});
+  auto s = scene();
+  s.sources = {source("duplicate", 0.99f), source("duplicate", 0.9f),
+               source("unique", 0.5f)};
+  EXPECT_EQ(p.observe(s, AttentionPolicy::Clock::now()).source_id, "unique");
+  s.sources.pop_back();
+  EXPECT_FALSE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}
+TEST(AttentionPolicy, SameGenerationFrameChangeResetsIncumbent) {
+  AttentionPolicy p({});
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.8f), source("b", 0.7f)};
+  EXPECT_EQ(p.observe(s, now).source_id, "a");
+  s.header.frame_id = "new_mic";
+  for (auto & item : s.sources) item.header.frame_id = "new_mic";
+  s.sources[0].activity_score = 0.6f;
+  s.sources[1].activity_score = 0.7f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "b");
+}

@@ -722,3 +722,16 @@ with a new typed `AttentionTarget` interface and unit tests. It consumes
 canonical `scene`, never raw unvalidated ODAS tracks, and is not activated
 by M1/M2 presets. It is not a robot action or metric localization. See
 [M3h attention policy](M3_ATTENTION_POLICY.md).
+
+## M3i: attention snapshot ordering and ambiguous-ID fencing (2026-11-04)
+
+The opt-in attention policy now rejects delayed scene generations and
+out-of-order scene header stamps within the same generation/frame without
+changing its retained candidate or refreshing the freshness timer. Source IDs
+repeated in a single scene are excluded from selection entirely; the policy
+does not guess which conflicting bearing is authoritative. A frame change
+resets the incumbent. The node now records whether its immediate scene
+publication was invalid, avoiding a redundant timer invalidation before the
+next valid target. Four pure-policy regression tests cover generation rollback,
+timestamp rollback and expiry, duplicate IDs, and frame transition. This
+remains advisory only: no robot movement or TF-derived position.

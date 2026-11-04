@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <unordered_set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -40,19 +41,37 @@ public:
       reset();
       return invalid(scene, "invalid_scene");
     }
+    // A delayed old generation must never roll the policy back to a prior stream.
+    if (have_scene_ && scene.generation < generation_) {
+      return invalid(scene, "regressed_generation");
+    }
+    if (have_scene_ && scene.generation == generation_ &&
+        scene.header.frame_id == frame_id_ &&
+        (scene.header.stamp.sec < last_stamp_.sec ||
+         (scene.header.stamp.sec == last_stamp_.sec &&
+          scene.header.stamp.nanosec < last_stamp_.nanosec))) {
+      return invalid(scene, "regressed_scene_stamp");
+    }
     if (have_scene_ && (scene.generation != generation_ ||
         scene.header.frame_id != frame_id_)) {
       selected_id_.clear();
+      selected_generation_ = 0;
     }
     have_scene_ = true;
     generation_ = scene.generation;
     frame_id_ = scene.header.frame_id;
     last_observation_ = now;
+    last_stamp_ = scene.header.stamp;
 
     const audition_msgs::msg::AcousticSource * best = nullptr;
     const audition_msgs::msg::AcousticSource * incumbent = nullptr;
+    std::unordered_set<std::string> seen_ids;
+    std::unordered_set<std::string> ambiguous_ids;
     for (const auto & source : scene.sources) {
-      if (!eligible(source, scene)) continue;
+      if (!seen_ids.insert(source.source_id).second) ambiguous_ids.insert(source.source_id);
+    }
+    for (const auto & source : scene.sources) {
+      if (ambiguous_ids.count(source.source_id) || !eligible(source, scene)) continue;
       if (source.source_id == selected_id_ &&
           source.source_generation == selected_generation_) incumbent = &source;
       if (!best || source.activity_score > best->activity_score ||
@@ -101,6 +120,7 @@ public:
     generation_ = 0;
     frame_id_.clear();
     last_target_ = {};
+    last_stamp_ = {};
   }
 
 private:
@@ -137,6 +157,7 @@ private:
   std::string frame_id_;
   std::string selected_id_;
   Clock::time_point last_observation_{};
+  builtin_interfaces::msg::Time last_stamp_{};
   audition_msgs::msg::AttentionTarget last_target_{};
 };
 
