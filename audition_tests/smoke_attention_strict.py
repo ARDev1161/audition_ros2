@@ -77,24 +77,22 @@ def main():
         assert wait(node, lambda: node.pub.get_subscription_count() > 0 and
                     node.count_publishers(NS + "/attention/target") > 0, 35), (
             "strict attention graph not discovered: " + str(node.get_topic_names_and_types()))
-        # A discovered subscription does not guarantee the first DDS sample
-        # has crossed the reader's initialization boundary. Retry the initial
-        # snapshot with a stable stamp until its correlated advisory arrives.
-        # Strict replay fencing accepts a stamp only once. Re-sending the
-        # identical initial stamp can be admitted while the reply is still
-        # undiscovered, then every retry is correctly rejected as replay.
-        # Advance the stamp on each DDS startup retry and continue the test
-        # relative to the stamp whose acknowledgement we actually observed.
-        deadline = time.monotonic() + 10
+        # DDS discovery can precede subscriber readiness. Publish one startup
+        # stamp at a time and give the executor time to receive its correlated
+        # reply. Advancing on every 100ms spin caused unbounded in-flight
+        # samples and could exhaust the entire retry window even while valid
+        # 'a' advisories were arriving one stamp behind the current attempt.
+        deadline = time.monotonic() + 15
         initial_stamp = 10
         while time.monotonic() < deadline:
             initial = node.scene(initial_stamp)
             before = len(node.received)
             node.pub.publish(initial)
-            rclpy.spin_once(node, timeout_sec=0.1)
-            if any(x.valid and x.source_id == "a" and
-                   x.header.stamp == initial.header.stamp and
-                   x.scene_generation == 1 for x in node.received[before:]):
+            if wait(node, lambda: any(
+                    x.valid and x.source_id == "a" and
+                    x.header.stamp == initial.header.stamp and
+                    x.scene_generation == 1 for x in node.received[before:]),
+                    timeout=0.75):
                 break
             initial_stamp += 1
         else:

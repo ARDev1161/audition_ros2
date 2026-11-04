@@ -910,3 +910,11 @@ accepted scene with no record of that ID releases the fence, independently
 of other sources. Regressed snapshots cannot release it either. Three
 regression tests cover the identity-presence fence. See
 [M3aa quarantine release](M3_ATTENTION_QUARANTINE_RELEASE.md).
+
+## M3ab: strict ROS graph startup synchronization (2026-11-04)
+
+The strict attention smoke probe now waits for a correlated response to each
+startup stamp before advancing to a new retry. This avoids a DDS scheduling
+race where acknowledgements consistently arrived one sample behind a rapid
+100 ms retry loop, causing a false failure despite valid advisories. See
+[M3ab startup synchronization](M3_ATTENTION_STARTUP_SYNCHRONIZATION.md).
