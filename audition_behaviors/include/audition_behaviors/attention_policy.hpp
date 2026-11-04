@@ -95,8 +95,7 @@ public:
       selected_generation_ = 0;
       clear_pending();
       last_target_ = {};
-      quarantined_id_.clear();
-      quarantined_generation_ = 0;
+      quarantined_ids_.clear();
     }
     have_scene_ = true;
     generation_ = scene.generation;
@@ -114,30 +113,28 @@ public:
     // A discontinuous bearing cannot become actionable again merely because
     // invalidation cleared the incumbent. Keep the identity fenced until it
     // disappears from a subsequent accepted snapshot or the stream changes.
-    if (!quarantined_id_.empty()) {
-      bool still_present = false;
+    // Multiple identities may jump in successive accepted scenes. Retain all
+    // quarantines while their identities remain visible in this generation.
+    // The set is bounded by the identities present in the latest scene.
+    for (auto it = quarantined_ids_.begin(); it != quarantined_ids_.end();) {
+      bool present = false;
       for (const auto & source : scene.sources) {
-        if (source.source_id == quarantined_id_ &&
-            source.source_generation == quarantined_generation_) {
-          still_present = true;
+        if (source.source_id == *it && source.source_generation == scene.generation) {
+          present = true;
           break;
         }
       }
-      if (!still_present) {
-        quarantined_id_.clear();
-        quarantined_generation_ = 0;
-      }
+      if (!present) it = quarantined_ids_.erase(it);
+      else ++it;
     }
     for (const auto & source : scene.sources) {
-      if (source.source_id == quarantined_id_ &&
-          source.source_generation == quarantined_generation_) continue;
+      if (quarantined_ids_.count(source.source_id)) continue;
       if (ambiguous_ids.count(source.source_id) || !eligible(source, scene)) continue;
       if (config_.maximum_direction_jump_rad > 0.0 &&
           source.source_id == selected_id_ &&
           source.source_generation == selected_generation_ &&
           last_target_.valid && !direction_consistent(source)) {
-        quarantined_id_ = source.source_id;
-        quarantined_generation_ = source.source_generation;
+        quarantined_ids_.insert(source.source_id);
         continue;
       }
       if (source.source_id == selected_id_ &&
@@ -212,8 +209,7 @@ public:
     frame_id_.clear();
     last_target_ = {};
     last_stamp_ = {};
-    quarantined_id_.clear();
-    quarantined_generation_ = 0;
+    quarantined_ids_.clear();
   }
 
 private:
@@ -296,8 +292,8 @@ private:
   std::string frame_id_;
   std::string selected_id_;
   std::string pending_id_;
-  std::string quarantined_id_;
-  std::uint64_t quarantined_generation_ = 0;
+  // All entries belong to the currently accepted stream generation/frame.
+  std::unordered_set<std::string> quarantined_ids_;
   std::uint64_t pending_generation_ = 0;
   std::uint32_t pending_count_ = 0;
   Clock::time_point pending_since_{};

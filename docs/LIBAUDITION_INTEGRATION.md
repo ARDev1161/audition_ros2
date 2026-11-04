@@ -955,3 +955,18 @@ Other independently eligible sources remain selectable. The default disabled
 direction gate is unchanged. Four model-independent regression tests cover
 repeat observations, alternate candidates, disappearance and timeout/epoch.
 See [M3w quarantine contract](M3_ATTENTION_DIRECTION_QUARANTINE.md).
+
+## M3x: multi-source direction quarantine (2026-11-04)
+
+Direction discontinuity fencing now retains **all** jumped source IDs in the
+current accepted generation/frame, rather than replacing the previous fenced
+ID when a second incumbent jumps. A scene can contain multiple successive
+tracker identity switches: none may become actionable merely because another
+source was selected. Each identity is released only by its own absence in an
+accepted scene; replayed/old snapshots cannot release it. Generation/frame
+change or explicit reset releases the entire set. Quarantine storage is
+bounded by IDs present in the latest accepted scene, not historical tracks.
+Three deterministic regressions cover successive jumps, replay-resistant
+independent release, and generation reset. This remains opt-in and advisory;
+no range, movement command, or hardware accuracy claim is introduced.
+See [M3x multi-source quarantine](M3_ATTENTION_MULTI_QUARANTINE.md).

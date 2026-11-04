@@ -585,3 +585,78 @@ TEST(AttentionPolicy, QuarantineClearsOnNewGenerationButNotTimeout) {
   s.sources[0].source_generation = 4;
   EXPECT_TRUE(p.observe(s, now + 600ms).valid);
 }
+
+TEST(AttentionPolicy, MultipleDiscontinuousIdentitiesRemainQuarantined) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.95f), source("b", 0.8f), source("c", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[1].direction_unit.x = 0.0;
+  s.sources[1].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 200ms).source_id, "c");
+  // Both higher-ranked sources are still present and must stay fenced.
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "c");
+  s.sources.erase(s.sources.begin() + 2);
+  EXPECT_FALSE(p.observe(s, now + 400ms).valid);
+  EXPECT_FALSE(p.observe(s, now + 500ms).valid);
+}
+
+TEST(AttentionPolicy, QuarantineReleaseIsPerIdentityAndRequiresAcceptedAbsence) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  config.require_advancing_scene_stamp = true;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.95f), source("b", 0.8f), source("c", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.header.stamp.sec = 11;
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.header.stamp.sec = 12;
+  s.sources[1].direction_unit.x = 0.0;
+  s.sources[1].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 200ms).source_id, "c");
+  // Replayed absence cannot release a quarantine.
+  auto absent = s;
+  absent.header.stamp.sec = 11;
+  absent.sources.erase(absent.sources.begin());
+  EXPECT_EQ(p.observe(absent, now + 250ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 13;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "c");
+  // Accepted absence of a releases a only; b remains quarantined.
+  absent.header.stamp.sec = 14;
+  ASSERT_EQ(p.observe(absent, now + 400ms).source_id, "c");
+  s.header.stamp.sec = 15;
+  EXPECT_EQ(p.observe(s, now + 500ms).source_id, "a");
+  s.sources.erase(s.sources.begin());
+  s.header.stamp.sec = 16;
+  EXPECT_EQ(p.observe(s, now + 600ms).source_id, "c");
+}
+
+TEST(AttentionPolicy, QuarantinesClearTogetherOnNewGeneration) {
+  AttentionPolicy::Config config;
+  config.maximum_direction_jump_rad = 0.3;
+  AttentionPolicy p(config);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.95f), source("b", 0.8f), source("c", 0.6f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[0].direction_unit.x = 0.0;
+  s.sources[0].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 100ms).source_id, "b");
+  s.sources[1].direction_unit.x = 0.0;
+  s.sources[1].direction_unit.y = 1.0;
+  ASSERT_EQ(p.observe(s, now + 200ms).source_id, "c");
+  s.generation = 2;
+  for (auto & src : s.sources) src.source_generation = 2;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
+}
