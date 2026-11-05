@@ -53,6 +53,54 @@ class FreshnessTest(unittest.TestCase):
         self.target.valid = False
         self.assertFalse(module.admissible_observation(self.target, "base_link"))
 
+    def test_ingress_replay_cannot_replace_newer_target(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            latest = None
+            last_stamp = None
+            sequence = 0
+            arrival = 0.0
+
+        server = Server()
+        self.target.header.stamp.sec = 20
+        module.LookAtSoundServer.on_target(server, self.target)
+        self.assertEqual(server.sequence, 1)
+        self.assertEqual(server.last_stamp, (0, 20, 0))
+        older = AttentionTarget()
+        older.valid = True
+        older.header.frame_id = "base_link"
+        older.direction_unit.x = 1.0
+        older.header.stamp.sec = 19
+        module.LookAtSoundServer.on_target(server, older)
+        self.assertIs(server.latest, self.target)
+        self.assertEqual(server.sequence, 1)
+        same = AttentionTarget()
+        same.valid = True
+        same.header.frame_id = "base_link"
+        same.direction_unit.x = 1.0
+        same.header.stamp.sec = 20
+        module.LookAtSoundServer.on_target(server, same)
+        self.assertIs(server.latest, self.target)
+        self.assertEqual(server.sequence, 1)
+        invalid = AttentionTarget()
+        invalid.valid = False
+        invalid.header.stamp.sec = 1000
+        module.LookAtSoundServer.on_target(server, invalid)
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.last_stamp, (0, 20, 0))
+        self.assertEqual(server.sequence, 1)
+        newer = AttentionTarget()
+        newer.valid = True
+        newer.header.frame_id = "base_link"
+        newer.direction_unit.x = 1.0
+        newer.header.stamp.sec = 21
+        module.LookAtSoundServer.on_target(server, newer)
+        self.assertIs(server.latest, newer)
+        self.assertEqual(server.sequence, 2)
+
     def test_admission_deadline_is_not_execution_deadline(self):
         # A delayed action worker must not extend the accepted timeout.
         class Request:

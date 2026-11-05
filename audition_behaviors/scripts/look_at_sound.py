@@ -69,10 +69,17 @@ class LookAtSoundServer(Node):
 
     def on_target(self, msg):
         with self.lock:
+            # A delayed DDS replay must not replace a newer accepted bearing.
+            # Invalid advisories revoke the cached bearing without consuming
+            # the watermark, allowing subsequent valid observations to recover.
+            if not admissible_observation(msg, self.frame):
+                self.latest = None
+                return
+            if not newer_stamp(msg, self.last_stamp):
+                return
+            self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.latest = msg
             self.sequence += 1
-            if admissible_observation(msg, self.frame) and newer_stamp(msg, self.last_stamp):
-                self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.arrival = time.monotonic()
 
     def on_goal(self, request):

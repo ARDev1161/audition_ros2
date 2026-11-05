@@ -68,3 +68,15 @@ contract; the existing ROS graph smoke verifies timeout abortion.
 ## Graph regression determinism
 
 The graph probe reuses a single stamped target during each acquisition rather than generating a new stamp on every publish. It also drains pending DDS callbacks before the cached-target rejection scenario. This prevents delayed deliveries from a previous successful acquisition from masquerading as a fresh measurement in the next goal. The server replay and admission rules are unchanged.
+
+## Monotonic ingress admission and cache revocation
+
+The action server now admits only **strictly advancing** valid transformed
+bearings to its cached target and ingress sequence. Duplicate and older
+DDS deliveries are ignored rather than replacing the newest bearing or
+refreshing its arrival age. Invalid or wrong-frame advisories clear the
+cached bearing but cannot consume the persistent watermark. A later valid,
+advancing observation restores acquisition. This is a conservative
+advisory-only cache policy, not publisher authentication or a motion safety
+controller. Unit tests exercise older, duplicate, invalid and recovering
+messages; the ROS graph probe injects out-of-order stamped DDS observations.

@@ -124,6 +124,21 @@ def main():
         advanced = node.publish_until(advancing_goal, GoalStatus.STATUS_SUCCEEDED)
         assert advanced.acquired and advanced.reason == "bearing_acquired"
 
+        # An out-of-order DDS delivery must not replace the newest bearing.
+        # Replay an older stamp after a newer observation was admitted.
+        old_observation = node.target()
+        old_observation.header.stamp.sec = 1
+        for _ in range(4):
+            node.publisher.publish(old_observation)
+            rclpy.spin_once(node, timeout_sec=0.05)
+        out_of_order_goal = node.start("ci-source", 450)
+        assert out_of_order_goal.accepted
+        for _ in range(5):
+            node.publisher.publish(old_observation)
+            rclpy.spin_once(node, timeout_sec=0.06)
+        out_of_order_result = node.await_future(out_of_order_goal.get_result_async(), 5)
+        assert out_of_order_result.status == GoalStatus.STATUS_ABORTED, "old replay acquired"
+
         # A goal cannot acquire after its admission-time deadline, even if
         # a new valid observation arrives during worker scheduling.
         timeout_goal = node.start("missing-source", 300)
