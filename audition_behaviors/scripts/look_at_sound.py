@@ -73,7 +73,9 @@ class LookAtSoundServer(Node):
             # Invalid advisories revoke the cached bearing without consuming
             # the watermark, allowing subsequent valid observations to recover.
             if not admissible_observation(msg, self.frame):
-                self.latest = None
+                # Ignore stale invalidations arriving after newer valid DDS data.
+                if newer_stamp(msg, self.last_stamp):
+                    self.latest = None
                 return
             if not newer_stamp(msg, self.last_stamp):
                 return

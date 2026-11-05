@@ -139,6 +139,17 @@ def main():
         out_of_order_result = node.await_future(out_of_order_goal.get_result_async(), 5)
         assert out_of_order_result.status == GoalStatus.STATUS_ABORTED, "old replay acquired"
 
+        # Delayed invalidation must not poison subsequent acquisition.
+        stale_invalid = node.target(valid=False)
+        stale_invalid.header.stamp.sec = 1
+        for _ in range(3):
+            node.publisher.publish(stale_invalid)
+            rclpy.spin_once(node, timeout_sec=0.05)
+        recovery_goal = node.start("ci-source", 3000)
+        assert recovery_goal.accepted
+        recovered = node.publish_until(recovery_goal, GoalStatus.STATUS_SUCCEEDED)
+        assert recovered.acquired
+
         # A goal cannot acquire after its admission-time deadline, even if
         # a new valid observation arrives during worker scheduling.
         timeout_goal = node.start("missing-source", 300)

@@ -80,3 +80,7 @@ advancing observation restores acquisition. This is a conservative
 advisory-only cache policy, not publisher authentication or a motion safety
 controller. Unit tests exercise older, duplicate, invalid and recovering
 messages; the ROS graph probe injects out-of-order stamped DDS observations.
+
+## Stale invalidation fence
+
+Invalid advisories stamped at or before the latest accepted valid bearing no longer revoke its cache. Newer invalid advisories still revoke without advancing the valid watermark; a valid advancing observation can recover. Unstamped invalid advisories cannot be ordered and do not revoke. Unit and ROS graph regressions cover stale invalidation and recovery. This is not publisher authentication or robot motion safety.

@@ -100,6 +100,25 @@ class FreshnessTest(unittest.TestCase):
         module.LookAtSoundServer.on_target(server, newer)
         self.assertIs(server.latest, newer)
         self.assertEqual(server.sequence, 2)
+        stale_invalid = AttentionTarget()
+        stale_invalid.valid = False
+        stale_invalid.header.stamp.sec = 19
+        module.LookAtSoundServer.on_target(server, stale_invalid)
+        self.assertIs(server.latest, newer)
+        current_invalid = AttentionTarget()
+        current_invalid.valid = False
+        current_invalid.header.stamp.sec = 22
+        module.LookAtSoundServer.on_target(server, current_invalid)
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.last_stamp, (0, 21, 0))
+        recovery = AttentionTarget()
+        recovery.valid = True
+        recovery.header.frame_id = "base_link"
+        recovery.direction_unit.x = 1.0
+        recovery.header.stamp.sec = 22
+        module.LookAtSoundServer.on_target(server, recovery)
+        self.assertIs(server.latest, recovery)
+        self.assertEqual(server.sequence, 3)
 
     def test_admission_deadline_is_not_execution_deadline(self):
         # A delayed action worker must not extend the accepted timeout.
