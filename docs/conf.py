@@ -10,6 +10,10 @@ root_doc = "index"
 myst_fence_as_directive = ["mermaid"]
 myst_heading_anchors = 3
 mermaid_fullscreen = False
+mermaid_config = {"securityLevel": "loose"}
+html_static_path = ["_static"]
+html_js_files = ["diagram-viewer.js"]
+html_css_files = ["layout.css", "diagram-viewer.css"]
 exclude_patterns = ["_build", ".DS_Store", "Thumbs.db"]
 
 html_theme = "furo"
