@@ -91,6 +91,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M3 LookAtSound cancellation and acquisition over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=115
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/look \
+            > /tmp/audition_look_at_sound.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_graph.py; then
+            cat /tmp/audition_look_at_sound.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |

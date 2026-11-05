@@ -22,3 +22,13 @@ replay. It does not verify actual actuator rotation or robot orientation.
 Downstream motion controllers must independently validate freshness,
 frames, safety limits and collision clearance; they must not interpret
 this action's success as physical completion.
+
+## ROS graph regression
+
+The Humble CI workflow launches the actual Python action server in a
+separate process and DDS domain (115), then runs
+`audition_tests/smoke_look_at_sound_graph.py`. It checks source-filtered
+acquisition, rejection of concurrent and invalid goals, timeout abortion,
+cancellation and preservation of source/scene provenance. The probe injects
+synthetic transformed targets; it does not measure acoustic localization or
+exercise robot actuators.
