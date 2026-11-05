@@ -14,6 +14,11 @@ from audition_msgs.action import LookAtSound
 from audition_msgs.msg import AttentionTarget
 
 
+def admissible_observation(target, frame):
+    """Only valid bearings in our frame may advance the acquisition watermark."""
+    return fresh_target(target, 0.0, 0.0, float('inf'), '', frame)
+
+
 def newer_stamp(target, baseline):
     if target is None:
         return False
@@ -65,7 +70,7 @@ class LookAtSoundServer(Node):
         with self.lock:
             self.latest = msg
             self.sequence += 1
-            if msg.valid and newer_stamp(msg, self.last_stamp):
+            if admissible_observation(msg, self.frame) and newer_stamp(msg, self.last_stamp):
                 self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.arrival = time.monotonic()
 

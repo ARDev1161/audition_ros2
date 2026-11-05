@@ -102,6 +102,15 @@ def main():
         assert replay_result.status == GoalStatus.STATUS_ABORTED, "replayed stamp accepted"
         assert replay_result.result.reason == "timeout"
 
+        # A malformed/wrong-frame advisory with an enormous scene generation
+        # must not poison the watermark and block later legitimate acquisition.
+        poisoned = node.target(source="ci-source")
+        poisoned.scene_generation = 999999
+        poisoned.header.frame_id = "map"
+        for _ in range(4):
+            node.publisher.publish(poisoned)
+            rclpy.spin_once(node, timeout_sec=0.06)
+
         # A genuinely advancing observation must still acquire.
         advancing_goal = node.start("ci-source", 3000)
         assert advancing_goal.accepted

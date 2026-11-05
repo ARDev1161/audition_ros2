@@ -50,3 +50,7 @@ The persistent stamp watermark is initialized before DDS subscriptions or
 ActionServer callbacks are created, including when the first goal arrives
 before the first acoustic observation. The replay probe uses a fixed stamp
 for all replay publications and an advancing clock stamp for recovery.
+
+## Validated watermark admission
+
+Only valid unit-vector bearings in the configured target frame can advance the action server's persistent observation watermark. An invalid or wrong-frame advisory (even with a very high scene generation or timestamp) cannot poison the watermark and block later legitimate acquisition. A ROS graph regression publishes a wrong-frame high-generation observation, then checks recovery using a normal source. This does not replace upstream TF2 replay checks or authenticate message publishers.

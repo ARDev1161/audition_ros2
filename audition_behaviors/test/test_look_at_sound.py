@@ -40,6 +40,18 @@ class FreshnessTest(unittest.TestCase):
         self.target.header.stamp.sec = 6
         self.assertTrue(module.newer_stamp(self.target, (0, 5, 0)))
 
+    def test_watermark_admission(self):
+        self.target.header.stamp.sec = 12
+        self.assertTrue(module.admissible_observation(self.target, "base_link"))
+        self.target.header.frame_id = "map"
+        self.assertFalse(module.admissible_observation(self.target, "base_link"))
+        self.target.header.frame_id = "base_link"
+        self.target.direction_unit.x = float("inf")
+        self.assertFalse(module.admissible_observation(self.target, "base_link"))
+        self.target.direction_unit.x = 1.0
+        self.target.valid = False
+        self.assertFalse(module.admissible_observation(self.target, "base_link"))
+
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))
 
