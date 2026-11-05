@@ -48,8 +48,9 @@ class Probe(Node):
     def publish_until(self, handle, expected_status, timeout=5, source="ci-source"):
         result_future = handle.get_result_async()
         deadline = time.monotonic() + timeout
+        observation = self.target(source)
         while time.monotonic() < deadline and not result_future.done():
-            self.publisher.publish(self.target(source))
+            self.publisher.publish(observation)
             rclpy.spin_once(self, timeout_sec=0.05)
         assert result_future.done(), "result never arrived"
         outcome = result_future.result()
@@ -80,6 +81,12 @@ def main():
         assert result.acquired and result.reason == "bearing_acquired"
         assert result.target.source_id == "ci-source"
         assert result.target.scene_generation == 3 and result.target.header.frame_id == "base_link"
+
+        # Drain in-flight DDS deliveries from the previous acquisition before
+        # establishing the next goal admission watermark.
+        drain_until = time.monotonic() + 0.35
+        while time.monotonic() < drain_until:
+            rclpy.spin_once(node, timeout_sec=0.05)
 
         # A second goal cannot reuse the valid target cached before acceptance.
         cached_goal = node.start("ci-source", 450)

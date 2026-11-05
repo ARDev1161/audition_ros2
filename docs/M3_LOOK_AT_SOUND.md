@@ -64,3 +64,7 @@ expiration before attempting success, so a late valid observation cannot
 turn an already expired goal into a success. Cancellation remains available.
 A deterministic policy test freezes the admission clock to verify this
 contract; the existing ROS graph smoke verifies timeout abortion.
+
+## Graph regression determinism
+
+The graph probe reuses a single stamped target during each acquisition rather than generating a new stamp on every publish. It also drains pending DDS callbacks before the cached-target rejection scenario. This prevents delayed deliveries from a previous successful acquisition from masquerading as a fresh measurement in the next goal. The server replay and admission rules are unchanged.
