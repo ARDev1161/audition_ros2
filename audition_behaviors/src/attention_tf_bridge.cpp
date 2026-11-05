@@ -1,4 +1,4 @@
-#include <audition_msgs/msg/attention_target.hpp>
+#include "audition_behaviors/attention_tf_geometry.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
@@ -34,44 +34,23 @@ private:
     output.direction_unit.y = 0.0;
     output.direction_unit.z = 0.0;
     output.header.frame_id = target_frame_;
-    if (!input.valid) {
-      output.reason = "upstream_invalid";
-      publisher_->publish(output);
-      return;
-    }
-    const rclcpp::Time stamp(input.header.stamp);
-    const auto age_ns = (now() - stamp).nanoseconds();
-    if (stamp.nanoseconds() <= 0 || age_ns < 0 ||
-        age_ns > static_cast<int64_t>(maximum_age_ms_) * 1000000LL ||
-        input.header.frame_id.empty()) {
-      output.reason = "stale_or_missing_stamp";
+    std::string reason;
+    if (!valid_attention_observation(input, now().nanoseconds(), maximum_age_ms_, reason)) {
+      output.reason = reason;
       publisher_->publish(output);
       return;
     }
     const auto & v = input.direction_unit;
-    const double norm = std::hypot(std::hypot(v.x, v.y), v.z);
-    if (!std::isfinite(norm) || std::abs(norm - 1.0) > 0.01) {
-      output.reason = "invalid_bearing";
-      publisher_->publish(output);
-      return;
-    }
     try {
       // Look up the transform at the *observation timestamp*, never latest.
       const auto tf = tf_buffer_->lookupTransform(
         target_frame_, input.header.frame_id, input.header.stamp,
         rclcpp::Duration::from_seconds(0.0));
       const auto & q = tf.transform.rotation;
-      const double qnorm = std::sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w);
-      if (!std::isfinite(qnorm) || std::abs(qnorm - 1.0) > 0.01) {
+      if (!rotate_attention_direction(v, q, output.direction_unit)) {
+        output.direction_unit = geometry_msgs::msg::Vector3();
         output.reason = "invalid_tf_rotation";
       } else {
-        // Quaternion rotation of a direction vector: translation must NOT apply.
-        const double tx = 2.0 * (q.y*v.z - q.z*v.y);
-        const double ty = 2.0 * (q.z*v.x - q.x*v.z);
-        const double tz = 2.0 * (q.x*v.y - q.y*v.x);
-        output.direction_unit.x = v.x + q.w*tx + (q.y*tz - q.z*ty);
-        output.direction_unit.y = v.y + q.w*ty + (q.z*tx - q.x*tz);
-        output.direction_unit.z = v.z + q.w*tz + (q.x*ty - q.y*tx);
         output.valid = true;
         output.reason = "tf_transformed";
       }

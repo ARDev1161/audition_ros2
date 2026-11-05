@@ -17,3 +17,8 @@ Run the existing M3 attention manager separately and launch
 `m3_attention_tf.launch.py` only when the robot has a valid TF tree.
 `maximum_age_ms` defaults to 500 and must be positive. This is a
 transport/coordinate adapter, not an acoustic localization algorithm.
+
+The timestamp and direction gates and quaternion rotation are covered by
+`attention_tf_geometry_test`, including stale/future stamps, missing frames,
+invalid vectors and 90-degree rotation. This is not a substitute for a live
+TF tree integration test. The adapter remains strictly advisory.
