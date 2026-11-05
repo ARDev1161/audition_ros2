@@ -1039,3 +1039,11 @@ replay-after-expiry check cover this advisory-only protection. See
 ## M3 LookAtSound advisory acquisition (2026-11-05)
 
 The ROS 2 action server exposes bounded, cancellable bearing acquisition without controlling actuators. See [LookAtSound contract](M3_LOOK_AT_SOUND.md).
+
+## M3 LookAtSound sector graph verification (2026-11-05)
+
+The opt-in angular acquisition sector now has a dedicated live ROS 2
+launch/action regression for both azimuth and elevation exclusion and
+in-sector recovery. Finite-vector and monotonic arrival validation are
+covered by deterministic Python policy tests. See
+[M3 LookAtSound](M3_LOOK_AT_SOUND.md).

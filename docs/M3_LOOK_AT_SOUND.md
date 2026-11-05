@@ -88,3 +88,14 @@ Invalid advisories stamped at or before the latest accepted valid bearing no lon
 ## Optional acquisition bearing sector
 
 `maximum_abs_azimuth_rad` (0 disables; otherwise 0..pi) and `maximum_abs_elevation_rad` (0 disables; otherwise 0..pi/2) restrict advisory bearing acquisition in `target_frame`. Azimuth uses `atan2(y,x)` and elevation uses `atan2(z,hypot(x,y))`. Parameters must be finite. Out-of-sector observations cannot satisfy a goal. Defaults preserve unrestricted acquisition. This is not actuator authorization, a collision check, or a motion controller.
+
+## Sector-constrained live ROS graph acceptance
+
+The Humble workflow additionally launches a dedicated LookAtSound server
+in DDS domain 116 with both angular limits set to 0.5 rad. A synthetic
+ROS publisher sends unit-length bearings outside azimuth and elevation
+limits and verifies goal timeout, then sends an in-sector bearing and
+verifies successful acquisition. This tests the configured launch-to-action
+path rather than just the Python predicate. Freshness validation also
+rejects non-finite coordinates and impossible future monotonic arrivals.
+The test does not exercise physical robot motion or collision avoidance.

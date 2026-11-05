@@ -30,14 +30,16 @@ def newer_stamp(target, baseline):
 
 
 def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minimum_sequence=0, max_azimuth=0.0, max_elevation=0.0):
-    if sequence <= minimum_sequence or target is None or not target.valid or now - arrival > max_age:
+    if sequence <= minimum_sequence or target is None or not target.valid or not math.isfinite(now) or not math.isfinite(arrival) or now < arrival or now - arrival > max_age:
         return False
     if target.header.frame_id != frame:
         return False
     if source and target.source_id != source:
         return False
     v = target.direction_unit
-    norm = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+    if not all(math.isfinite(component) for component in (v.x, v.y, v.z)):
+        return False
+    norm = math.hypot(v.x, v.y, v.z)
     if not math.isfinite(norm) or abs(norm - 1.0) > 0.01:
         return False
     if max_azimuth > 0.0 and abs(math.atan2(v.y, v.x)) > max_azimuth:

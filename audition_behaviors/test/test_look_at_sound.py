@@ -153,6 +153,26 @@ class FreshnessTest(unittest.TestCase):
         self.assertFalse(module.admissible_observation(self.target, "base_link", 0.0, 0.5))
         self.assertTrue(module.admissible_observation(self.target, "base_link", 0.0, math.pi / 2))
 
+    def test_future_arrival_and_nonfinite_coordinates(self):
+        self.assertFalse(self.check(now=0.9, arrival=1.0))
+        self.assertFalse(self.check(now=float("nan")))
+        self.target.direction_unit.y = float("inf")
+        self.assertFalse(self.check())
+        self.target.direction_unit.y = 0.0
+        self.target.direction_unit.z = float("-inf")
+        self.assertFalse(self.check())
+
+    def test_sector_boundaries_and_outside(self):
+        self.target.direction_unit.x = math.cos(0.6)
+        self.target.direction_unit.y = math.sin(0.6)
+        self.assertTrue(module.admissible_observation(self.target, "base_link", 0.6, 0.0))
+        self.assertFalse(module.admissible_observation(self.target, "base_link", 0.59, 0.0))
+        self.target.direction_unit.x = math.cos(0.4)
+        self.target.direction_unit.y = 0.0
+        self.target.direction_unit.z = math.sin(0.4)
+        self.assertTrue(module.admissible_observation(self.target, "base_link", 0.0, 0.4))
+        self.assertFalse(module.admissible_observation(self.target, "base_link", 0.0, 0.39))
+
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))
 
