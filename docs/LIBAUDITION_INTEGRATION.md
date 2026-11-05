@@ -1108,3 +1108,13 @@ time is sufficient, and caps its count at the configured threshold. Duration
 also works with one required confirmation. Two new GTests cover duration-only
 and repeated early observations, in addition to the original failing tests.
 See [M3al gate correction](M3_ATTENTION_DURATION_GATE_FIX.md).
+
+## M3am: attention publication recovery (2026-11-05)
+
+The attention node now publishes timer-driven validity transitions in both
+directions. After a rejected replay publishes an invalid advisory while the
+policy retains its last accepted valid target, the timer republishes that
+valid target once, rather than silently changing internal state. Timeout
+invalidation is still emitted once; unchanged timer states are suppressed.
+Four deterministic publication-gate GTests cover transitions. See
+[M3am publication recovery](M3_ATTENTION_PUBLICATION_RECOVERY.md).

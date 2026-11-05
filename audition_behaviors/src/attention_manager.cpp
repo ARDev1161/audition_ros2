@@ -1,4 +1,5 @@
 #include "audition_behaviors/attention_policy.hpp"
+#include "audition_behaviors/attention_publication_gate.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -19,15 +20,13 @@ public:
       [this](const audition_msgs::msg::AcousticScene & scene) {
         auto target = policy_.observe(scene, AttentionPolicy::Clock::now());
         publisher_->publish(target);
-        invalid_published_ = !target.valid;
+        publication_gate_.on_scene_published(target.valid);
       });
     timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
       auto target = policy_.expire(AttentionPolicy::Clock::now());
-      if (!target.valid && !invalid_published_) {
+      if (publication_gate_.should_publish_timer(target.valid)) {
         publisher_->publish(target);
-        invalid_published_ = true;
-      } else if (target.valid) {
-        invalid_published_ = false;
+        publication_gate_.on_timer_published(target.valid);
       }
     });
   }
@@ -84,7 +83,7 @@ private:
     return config;
   }
   AttentionPolicy policy_;
-  bool invalid_published_ = false;
+  AttentionPublicationGate publication_gate_;
   rclcpp::Subscription<audition_msgs::msg::AcousticScene>::SharedPtr subscription_;
   rclcpp::Publisher<audition_msgs::msg::AttentionTarget>::SharedPtr publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
