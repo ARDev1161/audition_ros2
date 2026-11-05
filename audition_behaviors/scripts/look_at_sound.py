@@ -50,6 +50,8 @@ class LookAtSoundServer(Node):
         self.reserved = False
         self.sequence = 0
         self.goal_start_sequence = 0
+        self.last_stamp = None
+        self.goal_stamp = None
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, "attention/target_base", self.on_target, 10,

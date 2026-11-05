@@ -40,3 +40,13 @@ A newly accepted goal requires a target message received after goal admission. A
 ## Stamp replay gate
 
 Acquisition now requires a valid target observation timestamp strictly newer than the most recent valid stamp observed at goal acceptance, or a higher scene generation. This complements the post-admission DDS sequence gate: replaying the same stamped observation cannot complete a new action. The upstream TF2 bridge remains responsible for authenticating stream provenance and rejecting replay. A pure policy regression covers equal and advancing stamps.
+
+## Live replay regression and server startup
+
+The ROS graph smoke now exercises both stale cached observations and a
+replayed identical observation stamp delivered after goal acceptance. Neither
+may satisfy a new goal; a genuinely advancing stamp must still acquire.
+The persistent stamp watermark is initialized before DDS subscriptions or
+ActionServer callbacks are created, including when the first goal arrives
+before the first acoustic observation. The replay probe uses a fixed stamp
+for all replay publications and an advancing clock stamp for recovery.

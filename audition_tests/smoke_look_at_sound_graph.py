@@ -87,6 +87,27 @@ def main():
         cached_outcome = node.await_future(cached_goal.get_result_async(), 5)
         assert cached_outcome.status == GoalStatus.STATUS_ABORTED, "cached pre-goal target incorrectly accepted"
         assert cached_outcome.result.reason == "timeout"
+        # Replaying a previously seen observation with a new DDS arrival
+        # must not satisfy a new goal.
+        replay = node.target()
+        for _ in range(3):
+            node.publisher.publish(replay)
+            rclpy.spin_once(node, timeout_sec=0.05)
+        replay_goal = node.start("ci-source", 550)
+        assert replay_goal.accepted
+        for _ in range(6):
+            node.publisher.publish(replay)
+            rclpy.spin_once(node, timeout_sec=0.06)
+        replay_result = node.await_future(replay_goal.get_result_async(), 5)
+        assert replay_result.status == GoalStatus.STATUS_ABORTED, "replayed stamp accepted"
+        assert replay_result.result.reason == "timeout"
+
+        # A genuinely advancing observation must still acquire.
+        advancing_goal = node.start("ci-source", 3000)
+        assert advancing_goal.accepted
+        advanced = node.publish_until(advancing_goal, GoalStatus.STATUS_SUCCEEDED)
+        assert advanced.acquired and advanced.reason == "bearing_acquired"
+
         timeout_goal = node.start("missing-source", 300)
         assert timeout_goal.accepted
         timeout_result = node.await_future(timeout_goal.get_result_async(), 5)
