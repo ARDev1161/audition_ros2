@@ -118,14 +118,29 @@ def main():
         assert not any(x.valid for x in node.results), "expired replay re-armed target"
         node.results.clear()
         node.send(source="unknown_mic")
-        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_unavailable"), "missing TF accepted"
+        assert node.wait_for(lambda x: not x.valid and
+                             x.reason == "tf_frame_changed_without_generation"), (
+            "same-generation frame substitution bypassed provenance fence")
+        # Advance the generation to permit a new sensor frame; now the
+        # missing TF path, rather than the frame fence, must reject it.
+        node.results.clear()
+        missing = AttentionTarget()
+        missing.valid = True
+        missing.header.frame_id = "unknown_mic"
+        missing.header.stamp = node.get_clock().now().to_msg()
+        missing.scene_generation = 8
+        missing.source_id = "source-ci"
+        missing.direction_unit.x = 1.0
+        node.publisher.publish(missing)
+        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_unavailable"), (
+            "missing TF accepted after legitimate generation advance")
         node.results.clear()
         node.send(age_ns=3_000_000_000)
         assert node.wait_for(lambda x: not x.valid and x.reason != "tf_transformed"), "stale observation accepted"
         node.results.clear()
         node.send(valid=False)
         assert node.wait_for(lambda x: not x.valid), "invalid upstream target accepted"
-        print("PASS: TF rotation, translation isolation, provenance, silent timeout, missing TF, stale and invalid input")
+        print("PASS: TF rotation, translation isolation, provenance frame fence, silent timeout, missing TF, stale and invalid input")
         return 0
     except AssertionError as error:
         print("FAIL:", error, [(x.valid, x.reason) for x in node.results[-10:]], file=sys.stderr)

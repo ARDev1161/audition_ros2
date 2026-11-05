@@ -86,3 +86,12 @@ and disarms the prior valid lease; no subsequent timeout is expected for that
 already-revoked target. A **new** successfully transformed observation arms a
 fresh monotonic lease, and upstream silence then emits exactly one
 `tf_target_timeout`. The ROS graph smoke tests both transitions separately.
+
+## Live graph frame-provenance regression (2026-11-05)
+
+The graph test distinguishes a sensor-frame substitution within an accepted
+scene generation (`tf_frame_changed_without_generation`) from an unavailable
+TF after advancing the generation (`tf_unavailable`). The previous smoke
+incorrectly expected the latter for a same-generation frame change, although
+the production bridge correctly rejects that change before consulting TF.
+Both cases are fail-closed; no production gate was weakened.
