@@ -33,3 +33,7 @@ translation must not affect a unit direction. The test also exercises
 source/generation provenance, absent TF, stale timestamps and invalid
 upstream attention. This is a synthetic TF graph, **not** calibrated
 ReSpeaker geometry or a navigation safety validation.
+
+The graph probe separately waits for DDS endpoint discovery before waiting for
+messages. Discovery must not depend on receiving a target, since the bridge
+publishes only after input. This prevents a startup deadlock in the CI test.

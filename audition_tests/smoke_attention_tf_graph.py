@@ -47,8 +47,14 @@ def main():
     rclpy.init()
     node = Probe()
     try:
-        assert node.wait_for(lambda _: node.publisher.get_subscription_count() > 0
-                             and node.count_publishers(NS + "/attention/target_base") > 0, 25), "graph discovery"
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+            if (node.publisher.get_subscription_count() > 0 and
+                    node.count_publishers(NS + "/attention/target_base") > 0):
+                break
+        else:
+            raise AssertionError("graph discovery")
         tf = TransformStamped()
         tf.header.stamp = node.get_clock().now().to_msg()
         tf.header.frame_id = "base_link"
