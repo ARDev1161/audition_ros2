@@ -1190,3 +1190,67 @@ TEST(AttentionPolicy, AggregateBudgetIsOptionalAndValidated) {
   s.sources = {source("very-long-source-id", 0.9f)};
   EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
 }
+
+TEST(AttentionPolicy, DistinctStampModePreventsReplayAcquisition) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 3;
+  c.require_distinct_confirmation_stamp = true;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "regressed_scene_stamp");
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 11;
+  EXPECT_EQ(p.observe(s, now + 300ms).reason, "acquisition_pending");
+  s.header.stamp.sec = 12;
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "a");
+}
+TEST(AttentionPolicy, DistinctStampModePreventsReplaySwitch) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 3;
+  c.require_distinct_confirmation_stamp = true;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("a", 0.6f), source("b", 0.5f)};
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  s.header.stamp.sec = 11;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "regressed_scene_stamp");
+  s.header.stamp.sec = 12;
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
+  s.header.stamp.sec = 13;
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "b");
+}
+TEST(AttentionPolicy, DistinctStampModeRejectsMalformedStampWithoutPoisoningStream) {
+  AttentionPolicy::Config c;
+  c.require_distinct_confirmation_stamp = true;
+  c.acquisition_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "invalid_scene_stamp");
+  s.header.stamp.sec = 10;
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "acquisition_pending");
+  s.header.stamp.sec = 11;
+  EXPECT_TRUE(p.observe(s, now + 200ms).valid);
+  s.header.stamp.sec = 10;
+  EXPECT_EQ(p.observe(s, now + 300ms).reason, "regressed_scene_stamp");
+  EXPECT_EQ(p.expire(now + 400ms).source_id, "a");
+}
+TEST(AttentionPolicy, DistinctStampModePreservesDefaultCompatibility) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("a", 0.9f)};
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}

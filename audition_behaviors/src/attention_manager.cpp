@@ -73,6 +73,8 @@ private:
       throw std::invalid_argument("maximum_total_source_id_bytes must be between 0 and 1048576");
     }
     config.maximum_total_source_id_bytes = static_cast<std::uint32_t>(total_id_bytes);
+    config.require_distinct_confirmation_stamp = declare_parameter<bool>(
+      "require_distinct_confirmation_stamp", false);
     config.require_advancing_scene_stamp = declare_parameter<bool>(
       "require_advancing_scene_stamp", false);
     return config;

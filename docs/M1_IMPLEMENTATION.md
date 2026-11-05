@@ -985,3 +985,13 @@ advisory, and preserve the accepted watermark. The check precedes ID hashing
 and uses overflow-safe remaining-budget arithmetic. Three policy GTests cover
 boundary, recovery and default compatibility. This does not bound DDS
 transport/deserialization. See [M3ai aggregate ID budget](M3_ATTENTION_TOTAL_ID_BUDGET.md).
+
+## M3aj: opt-in distinct confirmation scene stamps (2026-11-05)
+
+`require_distinct_confirmation_stamp` (default false) enables strict valid,
+advancing scene timestamps for the accepted stream, preventing repeated
+identical-stamp snapshots from counting as independent acquisition or switch
+confirmations. Rejected observations preserve the accepted watermark and do
+not accumulate evidence. Four GTests cover both confirmation paths, malformed
+stamps and default compatibility. See
+[M3aj distinct confirmation stamps](M3_ATTENTION_DISTINCT_CONFIRMATION_STAMPS.md).

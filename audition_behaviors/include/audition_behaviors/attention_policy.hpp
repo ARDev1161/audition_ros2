@@ -36,6 +36,9 @@ public:
     double maximum_direction_jump_rad = 0.0;
     // Reject equal scene stamps to prevent duplicate snapshots counting as evidence.
     bool require_advancing_scene_stamp = false;
+    // Opt-in: repeated confirmations must use distinct valid scene stamps.
+    // Enforces monotonic stamps for all observations in this stream.
+    bool require_distinct_confirmation_stamp = false;
     // Optional cap on per-scene source records, including duplicates and invalid records.
     // Zero preserves legacy unbounded behavior.
     std::uint32_t maximum_scene_sources = 0;
@@ -121,7 +124,9 @@ public:
     if (have_scene_ && scene.generation < generation_) {
       return invalid(scene, "regressed_generation");
     }
-    if (config_.require_advancing_scene_stamp &&
+    const bool strict_stamp = config_.require_advancing_scene_stamp ||
+      config_.require_distinct_confirmation_stamp;
+    if (strict_stamp &&
         (scene.header.stamp.sec < 0 || scene.header.stamp.nanosec >= 1000000000u ||
          (scene.header.stamp.sec == 0 && scene.header.stamp.nanosec == 0))) {
       return invalid(scene, "invalid_scene_stamp");
@@ -131,7 +136,7 @@ public:
         (scene.header.stamp.sec < last_stamp_.sec ||
          (scene.header.stamp.sec == last_stamp_.sec &&
           (scene.header.stamp.nanosec < last_stamp_.nanosec ||
-           (config_.require_advancing_scene_stamp &&
+           (strict_stamp &&
             scene.header.stamp.nanosec == last_stamp_.nanosec))))) {
       return invalid(scene, "regressed_scene_stamp");
     }
