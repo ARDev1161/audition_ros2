@@ -23,3 +23,5 @@ private:
   Clock::time_point last_valid_{};
   bool active_ = false;
 };
+
+}  // namespace audition_behaviors
