@@ -70,3 +70,11 @@ a producer that resets generation without doing so must restart the bridge.
 Four deterministic GTests and the ROS graph replay-after-timeout case cover
 the contract. This is an advisory-only anti-replay guard, not authenticated
 source provenance.
+
+## Replay vs. expiry precedence
+
+The ROS graph test deliberately checks a duplicate observation **before** its
+age deadline, so it exercises the replay fence rather than the age gate.
+After the deadline either `stale_or_missing_stamp` or
+`tf_replayed_observation` is a valid fail-closed rejection; no rejection
+may re-arm a target. A rejected replay does not renew the expiry lease.

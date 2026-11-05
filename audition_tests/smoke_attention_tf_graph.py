@@ -77,11 +77,9 @@ def main():
         assert out.source_id == "source-ci" and out.scene_generation == 7
         assert abs(out.direction_unit.x) < 0.001 and abs(out.direction_unit.y - 1.0) < 0.001
         assert abs(out.direction_unit.z) < 0.001, "translation leaked into bearing"
+        # Replay immediately while the original stamp is still fresh:
+        # this isolates the replay fence from the independent age gate.
         node.results.clear()
-        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), "silence did not revoke transformed bearing"
-        assert sum(x.reason == "tf_target_timeout" for x in node.results) == 1, "timeout repeated"
-        node.results.clear()
-        # Replayed observation after expiry must not re-arm the old bearing.
         replay = AttentionTarget()
         replay.valid = True
         replay.header = out.header
@@ -91,7 +89,19 @@ def main():
         replay.direction_unit.x = 1.0
         node.publisher.publish(replay)
         assert node.wait_for(lambda x: not x.valid and
-                             x.reason == "tf_replayed_observation"), "replay re-armed expired target"
+                             x.reason == "tf_replayed_observation"), "fresh replay bypassed fence"
+        node.results.clear()
+        # Invalid replay must not keep the previous valid target alive.
+        # Once its original lease expires, the bridge revokes exactly once.
+        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), "silence did not revoke transformed bearing"
+        assert sum(x.reason == "tf_target_timeout" for x in node.results) == 1, "timeout repeated"
+        node.results.clear()
+        # Once stale, the age gate can reject the replay before the fence;
+        # both rejection reasons are safe and must never publish valid=True.
+        node.publisher.publish(replay)
+        assert node.wait_for(lambda x: not x.valid and x.reason in (
+            "stale_or_missing_stamp", "tf_replayed_observation")), "expired replay was accepted"
+        assert not any(x.valid for x in node.results), "expired replay re-armed target"
         node.results.clear()
         node.send(source="unknown_mic")
         assert node.wait_for(lambda x: not x.valid and x.reason == "tf_unavailable"), "missing TF accepted"
