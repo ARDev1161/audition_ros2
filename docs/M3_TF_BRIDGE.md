@@ -78,3 +78,11 @@ age deadline, so it exercises the replay fence rather than the age gate.
 After the deadline either `stale_or_missing_stamp` or
 `tf_replayed_observation` is a valid fail-closed rejection; no rejection
 may re-arm a target. A rejected replay does not renew the expiry lease.
+
+## Revocation contract (ROS graph regression)
+
+An invalid/replayed observation immediately publishes an invalid advisory
+and disarms the prior valid lease; no subsequent timeout is expected for that
+already-revoked target. A **new** successfully transformed observation arms a
+fresh monotonic lease, and upstream silence then emits exactly one
+`tf_target_timeout`. The ROS graph smoke tests both transitions separately.
