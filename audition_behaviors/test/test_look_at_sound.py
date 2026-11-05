@@ -32,6 +32,14 @@ class FreshnessTest(unittest.TestCase):
         self.assertFalse(module.fresh_target(self.target, 1.0, 1.1, 0.5, "", "base_link", 4, 5))
         self.assertTrue(module.fresh_target(self.target, 1.0, 1.1, 0.5, "", "base_link", 6, 5))
 
+    def test_stamp_replay(self):
+        self.assertFalse(module.newer_stamp(self.target, None))
+        self.target.header.stamp.sec = 5
+        self.assertTrue(module.newer_stamp(self.target, None))
+        self.assertFalse(module.newer_stamp(self.target, (0, 5, 0)))
+        self.target.header.stamp.sec = 6
+        self.assertTrue(module.newer_stamp(self.target, (0, 5, 0)))
+
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))
 

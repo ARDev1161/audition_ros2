@@ -14,6 +14,16 @@ from audition_msgs.action import LookAtSound
 from audition_msgs.msg import AttentionTarget
 
 
+def newer_stamp(target, baseline):
+    if target is None:
+        return False
+    stamp = target.header.stamp
+    if stamp.sec < 0 or stamp.nanosec >= 1000000000 or (stamp.sec == 0 and stamp.nanosec == 0):
+        return False
+    key = (target.scene_generation, stamp.sec, stamp.nanosec)
+    return baseline is None or key > baseline
+
+
 def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minimum_sequence=0):
     if sequence <= minimum_sequence or target is None or not target.valid or now - arrival > max_age:
         return False
@@ -53,6 +63,8 @@ class LookAtSoundServer(Node):
         with self.lock:
             self.latest = msg
             self.sequence += 1
+            if msg.valid and newer_stamp(msg, self.last_stamp):
+                self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.arrival = time.monotonic()
 
     def on_goal(self, request):
@@ -61,6 +73,7 @@ class LookAtSoundServer(Node):
                 return GoalResponse.REJECT
             self.reserved = True
             self.goal_start_sequence = self.sequence
+            self.goal_stamp = self.last_stamp
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
@@ -81,8 +94,9 @@ class LookAtSoundServer(Node):
                     arrival = self.arrival
                     sequence = self.sequence
                     start_sequence = self.goal_start_sequence
+                    start_stamp = self.goal_stamp
                 if fresh_target(candidate, arrival, now, self.max_age,
-                                goal.request.source_id, self.frame, sequence, start_sequence):
+                                goal.request.source_id, self.frame, sequence, start_sequence) and newer_stamp(candidate, start_stamp):
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"

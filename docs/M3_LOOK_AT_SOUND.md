@@ -36,3 +36,7 @@ exercise robot actuators.
 ## Post-acceptance observation fence
 
 A newly accepted goal requires a target message received after goal admission. A valid bearing cached before the goal cannot satisfy it, even inside the arrival-age window. The server records an ingress sequence under the existing lock and requires a strictly later sequence for success. This does not guarantee a new sensor measurement: upstream TF2 timestamp/replay fencing remains mandatory. The ROS graph regression tests cached-target rejection and unit tests cover sequence equality, regression and advancement.
+
+## Stamp replay gate
+
+Acquisition now requires a valid target observation timestamp strictly newer than the most recent valid stamp observed at goal acceptance, or a higher scene generation. This complements the post-admission DDS sequence gate: replaying the same stamped observation cannot complete a new action. The upstream TF2 bridge remains responsible for authenticating stream provenance and rejecting replay. A pure policy regression covers equal and advancing stamps.
