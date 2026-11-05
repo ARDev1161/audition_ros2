@@ -91,9 +91,23 @@ def main():
         assert node.wait_for(lambda x: not x.valid and
                              x.reason == "tf_replayed_observation"), "fresh replay bypassed fence"
         node.results.clear()
-        # Invalid replay must not keep the previous valid target alive.
-        # Once its original lease expires, the bridge revokes exactly once.
-        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), "silence did not revoke transformed bearing"
+        # Rejected replay immediately disarms the previous lease.
+        node.results.clear()
+        deadline = time.monotonic() + 0.8
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        assert not any(x.valid or x.reason == "tf_target_timeout" for x in node.results), (
+            "rejected replay left an active lease")
+        # A fresh successful observation arms a new lease; silence revokes once.
+        node.results.clear()
+        node.send()
+        assert node.wait_for(lambda x: x.valid), "fresh bearing not reacquired"
+        node.results.clear()
+        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), (
+            "silence did not revoke transformed bearing")
+        deadline = time.monotonic() + 0.5
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
         assert sum(x.reason == "tf_target_timeout" for x in node.results) == 1, "timeout repeated"
         node.results.clear()
         # Once stale, the age gate can reject the replay before the fence;
