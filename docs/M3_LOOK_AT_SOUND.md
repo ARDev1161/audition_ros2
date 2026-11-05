@@ -32,3 +32,7 @@ acquisition, rejection of concurrent and invalid goals, timeout abortion,
 cancellation and preservation of source/scene provenance. The probe injects
 synthetic transformed targets; it does not measure acoustic localization or
 exercise robot actuators.
+
+## Post-acceptance observation fence
+
+A newly accepted goal requires a target message received after goal admission. A valid bearing cached before the goal cannot satisfy it, even inside the arrival-age window. The server records an ingress sequence under the existing lock and requires a strictly later sequence for success. This does not guarantee a new sensor measurement: upstream TF2 timestamp/replay fencing remains mandatory. The ROS graph regression tests cached-target rejection and unit tests cover sequence equality, regression and advancement.

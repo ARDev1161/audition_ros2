@@ -27,6 +27,11 @@ class FreshnessTest(unittest.TestCase):
         self.assertTrue(self.check())
         self.assertTrue(self.check(source="voice-a"))
 
+    def test_goal_requires_new_observation(self):
+        self.assertFalse(module.fresh_target(self.target, 1.0, 1.1, 0.5, "", "base_link", 5, 5))
+        self.assertFalse(module.fresh_target(self.target, 1.0, 1.1, 0.5, "", "base_link", 4, 5))
+        self.assertTrue(module.fresh_target(self.target, 1.0, 1.1, 0.5, "", "base_link", 6, 5))
+
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))
 

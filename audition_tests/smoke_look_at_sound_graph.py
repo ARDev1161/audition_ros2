@@ -81,10 +81,12 @@ def main():
         assert result.target.source_id == "ci-source"
         assert result.target.scene_generation == 3 and result.target.header.frame_id == "base_link"
 
-        # Do not reuse the successful target; replace it with an invalid advisory.
-        node.publisher.publish(node.target(valid=False))
-        for _ in range(4):
-            rclpy.spin_once(node, timeout_sec=0.05)
+        # A second goal cannot reuse the valid target cached before acceptance.
+        cached_goal = node.start("ci-source", 450)
+        assert cached_goal.accepted
+        cached_outcome = node.await_future(cached_goal.get_result_async(), 5)
+        assert cached_outcome.status == GoalStatus.STATUS_ABORTED, "cached pre-goal target incorrectly accepted"
+        assert cached_outcome.result.reason == "timeout"
         timeout_goal = node.start("missing-source", 300)
         assert timeout_goal.accepted
         timeout_result = node.await_future(timeout_goal.get_result_async(), 5)

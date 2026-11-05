@@ -14,8 +14,8 @@ from audition_msgs.action import LookAtSound
 from audition_msgs.msg import AttentionTarget
 
 
-def fresh_target(target, arrival, now, max_age, source, frame):
-    if target is None or not target.valid or now - arrival > max_age:
+def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minimum_sequence=0):
+    if sequence <= minimum_sequence or target is None or not target.valid or now - arrival > max_age:
         return False
     if target.header.frame_id != frame:
         return False
@@ -38,6 +38,8 @@ class LookAtSoundServer(Node):
         self.latest = None
         self.arrival = 0.0
         self.reserved = False
+        self.sequence = 0
+        self.goal_start_sequence = 0
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, "attention/target_base", self.on_target, 10,
@@ -50,6 +52,7 @@ class LookAtSoundServer(Node):
     def on_target(self, msg):
         with self.lock:
             self.latest = msg
+            self.sequence += 1
             self.arrival = time.monotonic()
 
     def on_goal(self, request):
@@ -57,6 +60,7 @@ class LookAtSoundServer(Node):
             if self.reserved or request.timeout_ms < 1 or request.timeout_ms > self.max_timeout:
                 return GoalResponse.REJECT
             self.reserved = True
+            self.goal_start_sequence = self.sequence
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
@@ -75,8 +79,10 @@ class LookAtSoundServer(Node):
                 with self.lock:
                     candidate = self.latest
                     arrival = self.arrival
+                    sequence = self.sequence
+                    start_sequence = self.goal_start_sequence
                 if fresh_target(candidate, arrival, now, self.max_age,
-                                goal.request.source_id, self.frame):
+                                goal.request.source_id, self.frame, sequence, start_sequence):
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"
