@@ -1098,3 +1098,13 @@ must not exceed their respective confirmation windows. New evidence is
 required even after the elapsed time has passed; no timer auto-promotes a
 candidate. Four policy regressions cover both gates, reset and validation.
 See [M3ak confirmation duration](M3_ATTENTION_CONFIRMATION_DURATION.md).
+
+## M3al: fix acquisition elapsed-time gate (2026-11-05)
+
+M3ak's acquisition gate prematurely promoted a candidate as soon as its
+confirmation count was satisfied, ignoring the configured minimum duration.
+The gate now requires both conditions, retains pending evidence until elapsed
+time is sufficient, and caps its count at the configured threshold. Duration
+also works with one required confirmation. Two new GTests cover duration-only
+and repeated early observations, in addition to the original failing tests.
+See [M3al gate correction](M3_ATTENTION_DURATION_GATE_FIX.md).

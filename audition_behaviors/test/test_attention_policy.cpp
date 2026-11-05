@@ -1307,3 +1307,30 @@ TEST(AttentionPolicy, AcquisitionTimeGateRestartsOnCandidateChange) {
   EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
   EXPECT_EQ(p.observe(s, now + 300ms).source_id, "b");
 }
+
+TEST(AttentionPolicy, AcquisitionDurationAloneRequiresElapsedTime) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 1;
+  c.acquisition_minimum_duration = 200ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 199ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 200ms).source_id, "a");
+}
+TEST(AttentionPolicy, AcquisitionDurationDoesNotAccumulateUnboundedCount) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.acquisition_minimum_duration = 500ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  for (int i = 0; i < 10; ++i) {
+    EXPECT_EQ(p.observe(s, now + std::chrono::milliseconds(i * 40)).reason,
+              "acquisition_pending");
+  }
+  EXPECT_EQ(p.observe(s, now + 500ms).source_id, "a");
+}

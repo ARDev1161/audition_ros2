@@ -238,7 +238,8 @@ public:
     }
     // New/re-acquired targets can require independent consecutive evidence.
     // This does not affect the incumbent's existing switch hysteresis.
-    if (!incumbent && config_.acquisition_confirmations > 1) {
+    if (!incumbent && (config_.acquisition_confirmations > 1 ||
+                       config_.acquisition_minimum_duration.count() > 0)) {
       // Confirm bearing continuity during acquisition as well as after
       // selection. A stable ID alone is insufficient if its DOA jumps.
       const bool bearing_jump = config_.maximum_direction_jump_rad > 0.0 &&
@@ -255,11 +256,13 @@ public:
         acquisition_count_ = 1;
         // Keep the first bearing of this confirmation run as the anchor.
         acquisition_direction_ = best->direction_unit;
-      } else if (acquisition_count_ < config_.acquisition_confirmations ||
-          now - acquisition_since_ < config_.acquisition_minimum_duration) {
+      } else if (acquisition_count_ < config_.acquisition_confirmations) {
         ++acquisition_count_;
       }
-      if (acquisition_count_ < config_.acquisition_confirmations) {
+      // A sufficient count alone is not enough: keep the candidate pending
+      // until both independent observations and elapsed time are satisfied.
+      if (acquisition_count_ < config_.acquisition_confirmations ||
+          now - acquisition_since_ < config_.acquisition_minimum_duration) {
         return invalid(scene, "acquisition_pending");
       }
     }
