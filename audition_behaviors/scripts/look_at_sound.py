@@ -14,9 +14,9 @@ from audition_msgs.action import LookAtSound
 from audition_msgs.msg import AttentionTarget
 
 
-def admissible_observation(target, frame):
+def admissible_observation(target, frame, max_azimuth=0.0, max_elevation=0.0):
     """Only valid bearings in our frame may advance the acquisition watermark."""
-    return fresh_target(target, 0.0, 0.0, float('inf'), '', frame)
+    return fresh_target(target, 0.0, 0.0, float('inf'), '', frame, max_azimuth=max_azimuth, max_elevation=max_elevation)
 
 
 def newer_stamp(target, baseline):
@@ -29,7 +29,7 @@ def newer_stamp(target, baseline):
     return baseline is None or key > baseline
 
 
-def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minimum_sequence=0):
+def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minimum_sequence=0, max_azimuth=0.0, max_elevation=0.0):
     if sequence <= minimum_sequence or target is None or not target.valid or now - arrival > max_age:
         return False
     if target.header.frame_id != frame:
@@ -38,7 +38,13 @@ def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minim
         return False
     v = target.direction_unit
     norm = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
-    return math.isfinite(norm) and abs(norm - 1.0) <= 0.01
+    if not math.isfinite(norm) or abs(norm - 1.0) > 0.01:
+        return False
+    if max_azimuth > 0.0 and abs(math.atan2(v.y, v.x)) > max_azimuth:
+        return False
+    if max_elevation > 0.0 and abs(math.atan2(v.z, math.hypot(v.x, v.y))) > max_elevation:
+        return False
+    return True
 
 
 class LookAtSoundServer(Node):
@@ -47,7 +53,13 @@ class LookAtSoundServer(Node):
         self.frame = self.declare_parameter("target_frame", "base_link").value
         self.max_age = self.declare_parameter("maximum_target_age_ms", 500).value / 1000.0
         self.max_timeout = self.declare_parameter("maximum_goal_timeout_ms", 10000).value
-        if not self.frame or self.frame.startswith("/") or self.max_age <= 0 or self.max_timeout < 1:
+        self.max_azimuth = self.declare_parameter("maximum_abs_azimuth_rad", 0.0).value
+        self.max_elevation = self.declare_parameter("maximum_abs_elevation_rad", 0.0).value
+        if (not self.frame or self.frame.startswith("/") or self.max_age <= 0 or self.max_timeout < 1
+                or not isinstance(self.max_azimuth, (int, float)) or not math.isfinite(self.max_azimuth)
+                or not 0.0 <= self.max_azimuth <= math.pi
+                or not isinstance(self.max_elevation, (int, float)) or not math.isfinite(self.max_elevation)
+                or not 0.0 <= self.max_elevation <= math.pi / 2):
             raise ValueError("invalid LookAtSound parameters")
         self.lock = threading.Lock()
         self.latest = None
@@ -72,7 +84,7 @@ class LookAtSoundServer(Node):
             # A delayed DDS replay must not replace a newer accepted bearing.
             # Invalid advisories revoke the cached bearing without consuming
             # the watermark, allowing subsequent valid observations to recover.
-            if not admissible_observation(msg, self.frame):
+            if not admissible_observation(msg, self.frame, self.max_azimuth, self.max_elevation):
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp):
                     self.latest = None
@@ -119,7 +131,8 @@ class LookAtSoundServer(Node):
                     goal.abort()
                     return result
                 if fresh_target(candidate, arrival, now, self.max_age,
-                                goal.request.source_id, self.frame, sequence, start_sequence) and newer_stamp(candidate, start_stamp):
+                                goal.request.source_id, self.frame, sequence, start_sequence,
+                                self.max_azimuth, self.max_elevation) and newer_stamp(candidate, start_stamp):
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"

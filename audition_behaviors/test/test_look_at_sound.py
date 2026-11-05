@@ -2,6 +2,7 @@
 """Pure policy regression for LookAtSound freshness and source matching."""
 import importlib.util
 import pathlib
+import math
 import unittest
 from unittest.mock import patch
 
@@ -59,6 +60,8 @@ class FreshnessTest(unittest.TestCase):
         class Server:
             lock = threading.Lock()
             frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
             latest = None
             last_stamp = None
             sequence = 0
@@ -135,6 +138,20 @@ class FreshnessTest(unittest.TestCase):
             response = module.LookAtSoundServer.on_goal(server, Request())
         self.assertEqual(response, module.GoalResponse.ACCEPT)
         self.assertAlmostEqual(server.goal_deadline, 10.2)
+
+    def test_optional_bearing_sector(self):
+        self.target.header.stamp.sec = 10
+        self.target.direction_unit.x = -1.0
+        self.assertTrue(module.admissible_observation(self.target, "base_link"))
+        self.assertFalse(module.admissible_observation(self.target, "base_link", math.pi / 2, 0.0))
+        self.target.direction_unit.x = 0.0
+        self.target.direction_unit.y = 1.0
+        self.assertTrue(module.admissible_observation(self.target, "base_link", math.pi / 2, 0.0))
+        self.assertFalse(module.admissible_observation(self.target, "base_link", 0.5, 0.0))
+        self.target.direction_unit.y = 0.0
+        self.target.direction_unit.z = 1.0
+        self.assertFalse(module.admissible_observation(self.target, "base_link", 0.0, 0.5))
+        self.assertTrue(module.admissible_observation(self.target, "base_link", 0.0, math.pi / 2))
 
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))

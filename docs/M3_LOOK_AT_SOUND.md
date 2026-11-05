@@ -84,3 +84,7 @@ messages; the ROS graph probe injects out-of-order stamped DDS observations.
 ## Stale invalidation fence
 
 Invalid advisories stamped at or before the latest accepted valid bearing no longer revoke its cache. Newer invalid advisories still revoke without advancing the valid watermark; a valid advancing observation can recover. Unstamped invalid advisories cannot be ordered and do not revoke. Unit and ROS graph regressions cover stale invalidation and recovery. This is not publisher authentication or robot motion safety.
+
+## Optional acquisition bearing sector
+
+`maximum_abs_azimuth_rad` (0 disables; otherwise 0..pi) and `maximum_abs_elevation_rad` (0 disables; otherwise 0..pi/2) restrict advisory bearing acquisition in `target_frame`. Azimuth uses `atan2(y,x)` and elevation uses `atan2(z,hypot(x,y))`. Parameters must be finite. Out-of-sector observations cannot satisfy a goal. Defaults preserve unrestricted acquisition. This is not actuator authorization, a collision check, or a motion controller.
