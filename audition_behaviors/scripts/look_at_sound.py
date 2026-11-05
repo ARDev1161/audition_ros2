@@ -49,6 +49,24 @@ def fresh_target(target, arrival, now, max_age, source, frame, sequence=1, minim
     return True
 
 
+def accumulate_bearing_evidence(count, previous, target, maximum_jump):
+    """Count independent advancing observations from the same source and scene.
+
+    A changed identity, generation, frame, or discontinuous bearing restarts
+    confirmation. The first observation is an anchor, not a rolling reference.
+    """
+    if previous is None:
+        return 1, target
+    same = (previous.source_id == target.source_id
+            and previous.scene_generation == target.scene_generation
+            and previous.header.frame_id == target.header.frame_id)
+    if same and maximum_jump > 0:
+        a, b = previous.direction_unit, target.direction_unit
+        dot = max(-1.0, min(1.0, a.x*b.x + a.y*b.y + a.z*b.z))
+        same = math.acos(dot) <= maximum_jump
+    return (min(100, count + 1), previous) if same else (1, target)
+
+
 class LookAtSoundServer(Node):
     def __init__(self):
         super().__init__("look_at_sound")
@@ -57,11 +75,17 @@ class LookAtSoundServer(Node):
         self.max_timeout = self.declare_parameter("maximum_goal_timeout_ms", 10000).value
         self.max_azimuth = self.declare_parameter("maximum_abs_azimuth_rad", 0.0).value
         self.max_elevation = self.declare_parameter("maximum_abs_elevation_rad", 0.0).value
+        self.confirmations = self.declare_parameter("bearing_confirmations", 1).value
+        self.confirmation_angle = self.declare_parameter("maximum_confirmation_jump_rad", 0.0).value
         if (not self.frame or self.frame.startswith("/") or self.max_age <= 0 or self.max_timeout < 1
                 or not isinstance(self.max_azimuth, (int, float)) or not math.isfinite(self.max_azimuth)
                 or not 0.0 <= self.max_azimuth <= math.pi
                 or not isinstance(self.max_elevation, (int, float)) or not math.isfinite(self.max_elevation)
-                or not 0.0 <= self.max_elevation <= math.pi / 2):
+                or not 0.0 <= self.max_elevation <= math.pi / 2
+                or type(self.confirmations) is not int or not 1 <= self.confirmations <= 100
+                or not isinstance(self.confirmation_angle, (int, float))
+                or not math.isfinite(self.confirmation_angle)
+                or not 0.0 <= self.confirmation_angle <= math.pi):
             raise ValueError("invalid LookAtSound parameters")
         self.lock = threading.Lock()
         self.latest = None
@@ -72,6 +96,9 @@ class LookAtSoundServer(Node):
         self.last_stamp = None
         self.goal_stamp = None
         self.goal_deadline = 0.0
+        self.goal_evidence = None
+        self.goal_evidence_count = 0
+        self.goal_evidence_sequence = 0
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, "attention/target_base", self.on_target, 10,
@@ -106,6 +133,9 @@ class LookAtSoundServer(Node):
             self.goal_start_sequence = self.sequence
             self.goal_stamp = self.last_stamp
             self.goal_deadline = time.monotonic() + request.timeout_ms / 1000.0
+            self.goal_evidence = None
+            self.goal_evidence_count = 0
+            self.goal_evidence_sequence = self.sequence
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
@@ -132,9 +162,16 @@ class LookAtSoundServer(Node):
                     result.reason = "timeout"
                     goal.abort()
                     return result
-                if fresh_target(candidate, arrival, now, self.max_age,
+                eligible = (fresh_target(candidate, arrival, now, self.max_age,
                                 goal.request.source_id, self.frame, sequence, start_sequence,
-                                self.max_azimuth, self.max_elevation) and newer_stamp(candidate, start_stamp):
+                                self.max_azimuth, self.max_elevation) and newer_stamp(candidate, start_stamp))
+                with self.lock:
+                    if eligible and sequence > self.goal_evidence_sequence:
+                        self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
+                            self.goal_evidence_count, self.goal_evidence, candidate, self.confirmation_angle)
+                        self.goal_evidence_sequence = sequence
+                    confirmed = eligible and self.goal_evidence_count >= self.confirmations
+                if confirmed:
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"

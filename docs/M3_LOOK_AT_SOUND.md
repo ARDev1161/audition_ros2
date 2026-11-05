@@ -99,3 +99,18 @@ verifies successful acquisition. This tests the configured launch-to-action
 path rather than just the Python predicate. Freshness validation also
 rejects non-finite coordinates and impossible future monotonic arrivals.
 The test does not exercise physical robot motion or collision avoidance.
+
+## Optional multi-observation acquisition confirmation (2026-11-06)
+
+`bearing_confirmations` (1–100, default 1) requires multiple distinct,
+strictly advancing accepted target messages **after** goal admission before
+reporting acquisition. Polling the same cached DDS observation repeatedly does
+not add evidence. Source identity, scene generation and target frame must stay
+consistent; a change restarts confirmation. Optional
+`maximum_confirmation_jump_rad` (0 disables, otherwise 0..pi) requires every
+confirmed bearing to remain within the configured angle of the **first**
+observation in its current confirmation run. A discontinuity restarts the run.
+The deadline remains measured from goal admission, including while gathering
+evidence. No physical motion is performed. A single ROS publisher can still
+fabricate multiple advancing observations: this is a stability filter, not
+source authentication or independent sensor validation.

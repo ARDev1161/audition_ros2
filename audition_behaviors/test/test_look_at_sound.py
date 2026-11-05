@@ -25,6 +25,38 @@ class FreshnessTest(unittest.TestCase):
     def check(self, now=1.1, arrival=1.0, source="", frame="base_link"):
         return module.fresh_target(self.target, arrival, now, 0.5, source, frame)
 
+    def test_confirmation_evidence(self):
+        first = self.target
+        second = AttentionTarget()
+        second.valid = True
+        second.source_id = "voice-a"
+        second.scene_generation = first.scene_generation
+        second.header.frame_id = "base_link"
+        second.direction_unit.x = 1.0
+        count, anchor = module.accumulate_bearing_evidence(0, None, first, 0.2)
+        self.assertEqual(count, 1)
+        count, anchor = module.accumulate_bearing_evidence(count, anchor, second, 0.2)
+        self.assertEqual(count, 2)
+        self.assertIs(anchor, first)
+        second.source_id = "voice-b"
+        count, anchor = module.accumulate_bearing_evidence(count, anchor, second, 0.2)
+        self.assertEqual(count, 1)
+        self.assertIs(anchor, second)
+
+    def test_confirmation_bearing_anchor_and_generation(self):
+        first = self.target
+        second = AttentionTarget()
+        second.source_id = first.source_id
+        second.header.frame_id = "base_link"
+        second.direction_unit.x = math.cos(0.3)
+        second.direction_unit.y = math.sin(0.3)
+        count, anchor = module.accumulate_bearing_evidence(1, first, second, 0.2)
+        self.assertEqual(count, 1)
+        self.assertIs(anchor, second)
+        second.scene_generation += 1
+        count, anchor = module.accumulate_bearing_evidence(2, first, second, 0.0)
+        self.assertEqual(count, 1)
+
     def test_fresh(self):
         self.assertTrue(self.check())
         self.assertTrue(self.check(source="voice-a"))
