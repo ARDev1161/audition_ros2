@@ -1,5 +1,0 @@
-# Same Furo / MyST / Mermaid stack as libaudition documentation.
-Sphinx>=8.2,<9
-myst-parser>=4.0,<5
-sphinxcontrib-mermaid>=1.0,<2
-furo>=2024.8,<2027
