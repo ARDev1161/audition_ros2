@@ -1,0 +1,71 @@
+/* Wider, responsive Furo reading area on large desktop screens.
+ * This affects the PAGE layout, not the Mermaid diagrams or modal viewer.
+ * Furo normally limits the article to ~46em even on ultrawide monitors.
+ * Under the desktop breakpoint Furo's original mobile/tablet styles remain.
+ */
+@media screen and (min-width: 76rem) {
+  :root {
+    --content-width: none;
+  }
+
+  .page {
+    width: 100%;
+    max-width: none;
+  }
+
+  /* Stop Furo's sidebar from reserving oversized blank gutters. */
+  .page .sidebar-drawer {
+    width: unset;
+  }
+
+  .page .main {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Give the center column all available space between both sidebars. */
+  .page .main > .content,
+  .page .content {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .page .content .article-container {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .page .toc-drawer {
+    flex-shrink: 0;
+  }
+}
+
+/* Long code lines and tables must not expand the entire page horizontally. */
+.page .content .highlight,
+.page .content .literal-block {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.page .content p {
+  overflow-wrap: break-word;
+}
+
+/* Keep the documentation title and public release on separate sidebar lines. */
+.sidebar-brand .sidebar-brand-text {
+  display: block;
+}
+
+.sidebar-brand .sidebar-brand-version {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: nowrap;
+  opacity: 0.75;
+}
