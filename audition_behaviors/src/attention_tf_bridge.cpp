@@ -1,9 +1,11 @@
 #include "audition_behaviors/attention_tf_geometry.hpp"
+#include "audition_behaviors/attention_tf_expiry.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <chrono>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -15,6 +17,7 @@ public:
   AttentionTfBridge() : Node("attention_tf_bridge"),
     target_frame_(declare_parameter<std::string>("target_frame", "base_link")),
     maximum_age_ms_(declare_parameter<int>("maximum_age_ms", 500)),
+    expiry_(std::chrono::milliseconds(maximum_age_ms_)),
     tf_buffer_(std::make_shared<tf2_ros::Buffer>(get_clock())),
     tf_listener_(std::make_shared<tf2_ros::TransformListener>(*tf_buffer_)) {
     if (target_frame_.empty() || target_frame_[0] == '/' || maximum_age_ms_ <= 0) {
@@ -25,6 +28,14 @@ public:
     subscription_ = create_subscription<audition_msgs::msg::AttentionTarget>(
       "attention/target", rclcpp::QoS(10).reliable(),
       [this](const audition_msgs::msg::AttentionTarget & input) { transform(input); });
+    timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() {
+      if (!expiry_.expire(AttentionTfExpiry::Clock::now())) return;
+      auto revoked = last_valid_;
+      revoked.valid = false;
+      revoked.direction_unit = geometry_msgs::msg::Vector3();
+      revoked.reason = "tf_target_timeout";
+      publisher_->publish(revoked);
+    });
   }
 private:
   void transform(const audition_msgs::msg::AttentionTarget & input) {
@@ -37,7 +48,7 @@ private:
     std::string reason;
     if (!valid_attention_observation(input, now().nanoseconds(), maximum_age_ms_, reason)) {
       output.reason = reason;
-      publisher_->publish(output);
+      publish(output);
       return;
     }
     const auto & v = input.direction_unit;
@@ -57,10 +68,18 @@ private:
     } catch (const tf2::TransformException &) {
       output.reason = "tf_unavailable";
     }
+    publish(output);
+  }
+  void publish(const audition_msgs::msg::AttentionTarget & output) {
+    expiry_.observe(output.valid, AttentionTfExpiry::Clock::now());
+    if (output.valid) last_valid_ = output;
     publisher_->publish(output);
   }
   std::string target_frame_;
   int maximum_age_ms_;
+  AttentionTfExpiry expiry_;
+  audition_msgs::msg::AttentionTarget last_valid_;
+  rclcpp::TimerBase::SharedPtr timer_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<audition_msgs::msg::AttentionTarget>::SharedPtr subscription_;

@@ -78,6 +78,9 @@ def main():
         assert abs(out.direction_unit.x) < 0.001 and abs(out.direction_unit.y - 1.0) < 0.001
         assert abs(out.direction_unit.z) < 0.001, "translation leaked into bearing"
         node.results.clear()
+        assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), "silence did not revoke transformed bearing"
+        assert sum(x.reason == "tf_target_timeout" for x in node.results) == 1, "timeout repeated"
+        node.results.clear()
         node.send(source="unknown_mic")
         assert node.wait_for(lambda x: not x.valid and x.reason == "tf_unavailable"), "missing TF accepted"
         node.results.clear()
@@ -86,7 +89,7 @@ def main():
         node.results.clear()
         node.send(valid=False)
         assert node.wait_for(lambda x: not x.valid), "invalid upstream target accepted"
-        print("PASS: TF rotation, translation isolation, provenance, missing TF, stale and invalid input")
+        print("PASS: TF rotation, translation isolation, provenance, silent timeout, missing TF, stale and invalid input")
         return 0
     except AssertionError as error:
         print("FAIL:", error, [(x.valid, x.reason) for x in node.results[-10:]], file=sys.stderr)

@@ -37,3 +37,17 @@ ReSpeaker geometry or a navigation safety validation.
 The graph probe separately waits for DDS endpoint discovery before waiting for
 messages. Discovery must not depend on receiving a target, since the bridge
 publishes only after input. This prevents a startup deadlock in the CI test.
+
+## Fail-closed silence expiry
+
+A successfully transformed bearing is now revoked after `maximum_age_ms`
+without another successfully transformed bearing. A 50ms steady-clock timer
+publishes exactly one `valid=false` target with `reason=tf_target_timeout`,
+zero direction and the last source provenance. Incoming invalid observations
+revoke immediately; repeated timer ticks do not spam invalidations.
+A new valid transformed observation re-arms the deadline. This is a bridge
+output safety lease, not a motion controller or an estimate of source range.
+
+`attention_tf_expiry_test` covers deadline boundaries, renewal, immediate
+invalidation and monotonic clock regression. The real ROS graph smoke tests
+the silent-upstream revocation as well as the TF geometry path.
