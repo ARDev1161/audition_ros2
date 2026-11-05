@@ -81,6 +81,18 @@ def main():
         assert node.wait_for(lambda x: not x.valid and x.reason == "tf_target_timeout", 4), "silence did not revoke transformed bearing"
         assert sum(x.reason == "tf_target_timeout" for x in node.results) == 1, "timeout repeated"
         node.results.clear()
+        # Replayed observation after expiry must not re-arm the old bearing.
+        replay = AttentionTarget()
+        replay.valid = True
+        replay.header = out.header
+        replay.header.frame_id = "mic_ci"
+        replay.source_id = out.source_id
+        replay.scene_generation = out.scene_generation
+        replay.direction_unit.x = 1.0
+        node.publisher.publish(replay)
+        assert node.wait_for(lambda x: not x.valid and
+                             x.reason == "tf_replayed_observation"), "replay re-armed expired target"
+        node.results.clear()
         node.send(source="unknown_mic")
         assert node.wait_for(lambda x: not x.valid and x.reason == "tf_unavailable"), "missing TF accepted"
         node.results.clear()

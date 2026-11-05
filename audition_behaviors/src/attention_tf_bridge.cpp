@@ -1,5 +1,6 @@
 #include "audition_behaviors/attention_tf_geometry.hpp"
 #include "audition_behaviors/attention_tf_expiry.hpp"
+#include "audition_behaviors/attention_tf_replay_fence.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
@@ -51,6 +52,11 @@ private:
       publish(output);
       return;
     }
+    if (!replay_fence_.admissible(input, reason)) {
+      output.reason = reason;
+      publish(output);
+      return;
+    }
     const auto & v = input.direction_unit;
     try {
       // Look up the transform at the *observation timestamp*, never latest.
@@ -68,6 +74,7 @@ private:
     } catch (const tf2::TransformException &) {
       output.reason = "tf_unavailable";
     }
+    if (output.valid) replay_fence_.accept(input);
     publish(output);
   }
   void publish(const audition_msgs::msg::AttentionTarget & output) {
@@ -78,6 +85,7 @@ private:
   std::string target_frame_;
   int maximum_age_ms_;
   AttentionTfExpiry expiry_;
+  AttentionTfReplayFence replay_fence_;
   audition_msgs::msg::AttentionTarget last_valid_;
   rclcpp::TimerBase::SharedPtr timer_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

@@ -51,3 +51,22 @@ output safety lease, not a motion controller or an estimate of source range.
 `attention_tf_expiry_test` covers deadline boundaries, renewal, immediate
 invalidation and monotonic clock regression. The real ROS graph smoke tests
 the silent-upstream revocation as well as the TF geometry path.
+
+## M3 replay fencing
+
+The TF bridge now keeps an accepted-observation watermark across silence and
+invalid input. A transformed valid observation advances the scene generation,
+sensor frame and timestamp watermark. Within the same generation, only a
+strictly newer stamp from the same sensor frame can be accepted. A generation
+rollback is rejected even if its timestamp is newer. Changing sensor frame
+requires a new scene generation. Rejection publishes a zero-vector invalid
+advisory with `tf_replayed_observation`, `tf_regressed_generation` or
+`tf_frame_changed_without_generation`, and does not refresh the expiry
+timer. Failed TF lookup does not consume the watermark, so a valid observation
+may be retried once the transform arrives. The watermark is not cleared by
+timeout, preventing a previously accepted observation from rearming the target.
+The policy assumes the producer advances generation when restarting its stream;
+a producer that resets generation without doing so must restart the bridge.
+Four deterministic GTests and the ROS graph replay-after-timeout case cover
+the contract. This is an advisory-only anti-replay guard, not authenticated
+source provenance.

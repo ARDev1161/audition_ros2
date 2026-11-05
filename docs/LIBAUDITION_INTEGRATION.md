@@ -1118,3 +1118,13 @@ valid target once, rather than silently changing internal state. Timeout
 invalidation is still emitted once; unchanged timer states are suppressed.
 Four deterministic publication-gate GTests cover transitions. See
 [M3am publication recovery](M3_ATTENTION_PUBLICATION_RECOVERY.md).
+
+## M3 TF2 replay fencing (2026-11-05)
+
+The opt-in TF2 bearing bridge now rejects duplicate/regressed observation
+stamps within a scene generation, older scene generations, and frame changes
+without generation advance. Only successfully transformed bearings advance
+its persistent watermark; invalid/failed TF observations cannot consume it.
+Timeout does not clear the watermark. Four GTests and a live ROS graph
+replay-after-expiry check cover this advisory-only protection. See
+[M3 TF bridge](M3_TF_BRIDGE.md).
