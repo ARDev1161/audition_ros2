@@ -1254,3 +1254,56 @@ TEST(AttentionPolicy, DistinctStampModePreservesDefaultCompatibility) {
   EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
   EXPECT_TRUE(p.observe(s, now + 100ms).valid);
 }
+
+TEST(AttentionPolicy, AcquisitionNeedsElapsedTimeAsWellAsCount) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.acquisition_minimum_duration = 300ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("a", 0.9f)};
+  auto now = AttentionPolicy::Clock::now();
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 10ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 299ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "a");
+}
+TEST(AttentionPolicy, SwitchNeedsElapsedTimeAsWellAsCount) {
+  AttentionPolicy::Config c;
+  c.switch_confirmations = 2;
+  c.switch_minimum_duration = 300ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("a", 0.6f), source("b", 0.5f)};
+  auto now = AttentionPolicy::Clock::now();
+  ASSERT_EQ(p.observe(s, now).source_id, "a");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 110ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 399ms).source_id, "a");
+  EXPECT_EQ(p.observe(s, now + 400ms).source_id, "b");
+}
+TEST(AttentionPolicy, MinimumDurationCannotExceedConfirmationWindow) {
+  AttentionPolicy::Config c;
+  c.acquisition_minimum_duration = 1001ms;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.acquisition_minimum_duration = 0ms;
+  c.switch_minimum_duration = 1001ms;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.switch_minimum_duration = -1ms;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+}
+TEST(AttentionPolicy, AcquisitionTimeGateRestartsOnCandidateChange) {
+  AttentionPolicy::Config c;
+  c.acquisition_confirmations = 2;
+  c.acquisition_minimum_duration = 200ms;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("a", 0.9f), source("b", 0.8f)};
+  auto now = AttentionPolicy::Clock::now();
+  EXPECT_EQ(p.observe(s, now).reason, "acquisition_pending");
+  s.sources[1].activity_score = 0.99f;
+  EXPECT_EQ(p.observe(s, now + 100ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 200ms).reason, "acquisition_pending");
+  EXPECT_EQ(p.observe(s, now + 300ms).source_id, "b");
+}

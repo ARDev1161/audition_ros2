@@ -50,6 +50,10 @@ private:
     config.acquisition_confirmations = static_cast<std::uint32_t>(acquisition);
     config.acquisition_confirmation_window = std::chrono::milliseconds(
       declare_parameter<int>("acquisition_confirmation_window_ms", 1000));
+    config.acquisition_minimum_duration = std::chrono::milliseconds(
+      declare_parameter<int>("acquisition_minimum_duration_ms", 0));
+    config.switch_minimum_duration = std::chrono::milliseconds(
+      declare_parameter<int>("switch_minimum_duration_ms", 0));
     config.switch_confirmation_window = std::chrono::milliseconds(
       declare_parameter<int>("switch_confirmation_window_ms", 1000));
     config.maximum_angular_variance_rad2 = declare_parameter<double>(

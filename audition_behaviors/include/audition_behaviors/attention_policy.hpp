@@ -28,6 +28,10 @@ public:
     std::uint32_t acquisition_confirmations = 1;
     std::chrono::milliseconds acquisition_confirmation_window{1000};
     std::chrono::milliseconds switch_confirmation_window{1000};
+    // Optional minimum elapsed monotonic time for each confirmation run.
+    // A burst of snapshots alone cannot satisfy the time gate.
+    std::chrono::milliseconds acquisition_minimum_duration{0};
+    std::chrono::milliseconds switch_minimum_duration{0};
     // Zero disables the optional DOA uncertainty gate.
     double maximum_angular_variance_rad2 = 0.0;
     // Zero disables per-source last_seen age validation against the scene stamp.
@@ -64,6 +68,10 @@ public:
         config_.switch_confirmations == 0 ||
         config_.switch_confirmations > 100 ||
         config_.switch_confirmation_window.count() <= 0 ||
+        config_.acquisition_minimum_duration.count() < 0 ||
+        config_.acquisition_minimum_duration > config_.acquisition_confirmation_window ||
+        config_.switch_minimum_duration.count() < 0 ||
+        config_.switch_minimum_duration > config_.switch_confirmation_window ||
         !std::isfinite(config_.maximum_angular_variance_rad2) ||
         config_.maximum_angular_variance_rad2 < 0 ||
         config_.maximum_source_age.count() < 0 ||
@@ -247,7 +255,8 @@ public:
         acquisition_count_ = 1;
         // Keep the first bearing of this confirmation run as the anchor.
         acquisition_direction_ = best->direction_unit;
-      } else if (acquisition_count_ < config_.acquisition_confirmations) {
+      } else if (acquisition_count_ < config_.acquisition_confirmations ||
+          now - acquisition_since_ < config_.acquisition_minimum_duration) {
         ++acquisition_count_;
       }
       if (acquisition_count_ < config_.acquisition_confirmations) {
@@ -277,7 +286,8 @@ public:
       } else if (pending_count_ < config_.switch_confirmations) {
         ++pending_count_;
       }
-      if (pending_count_ >= config_.switch_confirmations) {
+      if (pending_count_ >= config_.switch_confirmations &&
+          now - pending_since_ >= config_.switch_minimum_duration) {
         chosen = best;
         clear_pending();
       }

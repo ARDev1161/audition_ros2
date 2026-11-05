@@ -995,3 +995,13 @@ confirmations. Rejected observations preserve the accepted watermark and do
 not accumulate evidence. Four GTests cover both confirmation paths, malformed
 stamps and default compatibility. See
 [M3aj distinct confirmation stamps](M3_ATTENTION_DISTINCT_CONFIRMATION_STAMPS.md).
+
+## M3ak: minimum elapsed confirmation duration (2026-11-05)
+
+Optional `acquisition_minimum_duration_ms` and `switch_minimum_duration_ms`
+(default 0) require both sufficient accepted observations and a minimum
+steady-clock elapsed duration before acquisition or switching. Durations
+must not exceed their respective confirmation windows. New evidence is
+required even after the elapsed time has passed; no timer auto-promotes a
+candidate. Four policy regressions cover both gates, reset and validation.
+See [M3ak confirmation duration](M3_ATTENTION_CONFIRMATION_DURATION.md).
