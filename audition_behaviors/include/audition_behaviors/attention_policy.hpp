@@ -41,6 +41,9 @@ public:
     std::uint32_t maximum_scene_sources = 0;
     // Optional per-record source identity byte limit, before hashing IDs.
     std::uint32_t maximum_source_id_bytes = 0;
+    // Aggregate source ID bytes in a scene (including duplicate/ineligible IDs).
+    // Zero disables the guard; this is not a DDS deserialization limit.
+    std::uint32_t maximum_total_source_id_bytes = 0;
   };
 
   explicit AttentionPolicy(Config config) : config_(config) {
@@ -51,6 +54,7 @@ public:
         config_.scene_timeout.count() <= 0 ||
         config_.maximum_scene_sources > 4096 ||
         config_.maximum_source_id_bytes > 4096 ||
+        config_.maximum_total_source_id_bytes > 1048576 ||
         config_.acquisition_confirmations == 0 ||
         config_.acquisition_confirmations > 100 ||
         config_.acquisition_confirmation_window.count() <= 0 ||
@@ -87,11 +91,22 @@ public:
     }
     // Reject oversized identity strings before constructing the duplicate-ID
     // sets. This is an admission limit, not a DDS deserialization bound.
-    if (config_.maximum_source_id_bytes > 0) {
+    if (config_.maximum_source_id_bytes > 0 ||
+        config_.maximum_total_source_id_bytes > 0) {
+      std::size_t remaining = config_.maximum_total_source_id_bytes;
       for (const auto & source : scene.sources) {
-        if (source.source_id.size() > config_.maximum_source_id_bytes) {
+        if (config_.maximum_source_id_bytes > 0 &&
+            source.source_id.size() > config_.maximum_source_id_bytes) {
           invalidate_target();
           return invalid(scene, "source_id_limit");
+        }
+        // Subtraction-based check avoids overflow even for pathological strings.
+        if (config_.maximum_total_source_id_bytes > 0) {
+          if (source.source_id.size() > remaining) {
+            invalidate_target();
+            return invalid(scene, "total_source_id_limit");
+          }
+          remaining -= source.source_id.size();
         }
       }
     }

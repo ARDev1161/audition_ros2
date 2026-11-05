@@ -1150,3 +1150,43 @@ TEST(AttentionPolicy, IdentityByteLimitIsOptionalAndValidated) {
   s.sources = {source("long-identity", 0.9f)};
   EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
 }
+
+TEST(AttentionPolicy, AggregateIdentityBudgetRejectsAndRecoversWithoutStampAdvance) {
+  AttentionPolicy::Config c;
+  c.maximum_total_source_id_bytes = 6;
+  c.require_advancing_scene_stamp = true;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.header.stamp.sec = 10;
+  s.sources = {source("abc", 0.9f), source("def", 0.8f)};
+  ASSERT_TRUE(p.observe(s, now).valid);
+  auto rejected = s;
+  rejected.header.stamp.sec = 100;
+  rejected.sources.push_back(source("x", 0.1f));
+  EXPECT_EQ(p.observe(rejected, now + 100ms).reason, "total_source_id_limit");
+  EXPECT_FALSE(p.expire(now + 200ms).valid);
+  s.header.stamp.sec = 11;
+  EXPECT_TRUE(p.observe(s, now + 300ms).valid);
+}
+TEST(AttentionPolicy, AggregateBudgetCountsDuplicatesAndIneligibleRecords) {
+  AttentionPolicy::Config c;
+  c.maximum_total_source_id_bytes = 5;
+  AttentionPolicy p(c);
+  auto s = scene();
+  auto now = AttentionPolicy::Clock::now();
+  s.sources = {source("abc", 0.9f), source("abc", 0.1f)};
+  EXPECT_EQ(p.observe(s, now).reason, "total_source_id_limit");
+  s.sources = {source("abc", 0.9f)};
+  EXPECT_TRUE(p.observe(s, now + 100ms).valid);
+}
+TEST(AttentionPolicy, AggregateBudgetIsOptionalAndValidated) {
+  AttentionPolicy::Config c;
+  c.maximum_total_source_id_bytes = 1048577;
+  EXPECT_THROW(AttentionPolicy p(c), std::invalid_argument);
+  c.maximum_total_source_id_bytes = 0;
+  AttentionPolicy p(c);
+  auto s = scene();
+  s.sources = {source("very-long-source-id", 0.9f)};
+  EXPECT_TRUE(p.observe(s, AttentionPolicy::Clock::now()).valid);
+}

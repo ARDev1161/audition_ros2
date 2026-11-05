@@ -1068,3 +1068,13 @@ quarantine reconciliation. Even ineligible records count. Rejection emits
 `source_id_limit`, invalidates the advisory and preserves the accepted stream
 watermark for recovery. This does not bound DDS deserialization. Three GTests
 cover rejection and recovery. See [M3ah ID admission](M3_ATTENTION_ID_ADMISSION.md).
+
+## M3ai: aggregate source identity byte budget (2026-11-05)
+
+Optional `maximum_total_source_id_bytes` (0=disabled, maximum 1048576) caps
+the total ID bytes across every scene record, including duplicates and invalid
+sources. Rejected scenes return `total_source_id_limit`, invalidate the
+advisory, and preserve the accepted watermark. The check precedes ID hashing
+and uses overflow-safe remaining-budget arithmetic. Three policy GTests cover
+boundary, recovery and default compatibility. This does not bound DDS
+transport/deserialization. See [M3ai aggregate ID budget](M3_ATTENTION_TOTAL_ID_BUDGET.md).

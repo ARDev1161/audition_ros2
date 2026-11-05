@@ -68,6 +68,11 @@ private:
       throw std::invalid_argument("maximum_source_id_bytes must be between 0 and 4096");
     }
     config.maximum_source_id_bytes = static_cast<std::uint32_t>(maximum_source_id_bytes);
+    const int total_id_bytes = declare_parameter<int>("maximum_total_source_id_bytes", 0);
+    if (total_id_bytes < 0 || total_id_bytes > 1048576) {
+      throw std::invalid_argument("maximum_total_source_id_bytes must be between 0 and 1048576");
+    }
+    config.maximum_total_source_id_bytes = static_cast<std::uint32_t>(total_id_bytes);
     config.require_advancing_scene_stamp = declare_parameter<bool>(
       "require_advancing_scene_stamp", false);
     return config;
