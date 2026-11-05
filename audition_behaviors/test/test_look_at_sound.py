@@ -3,6 +3,7 @@
 import importlib.util
 import pathlib
 import unittest
+from unittest.mock import patch
 
 from audition_msgs.msg import AttentionTarget
 
@@ -51,6 +52,22 @@ class FreshnessTest(unittest.TestCase):
         self.target.direction_unit.x = 1.0
         self.target.valid = False
         self.assertFalse(module.admissible_observation(self.target, "base_link"))
+
+    def test_admission_deadline_is_not_execution_deadline(self):
+        # A delayed action worker must not extend the accepted timeout.
+        class Request:
+            timeout_ms = 200
+        class Server:
+            reserved = False
+            max_timeout = 10000
+            sequence = 0
+            last_stamp = None
+            lock = __import__("threading").Lock()
+        server = Server()
+        with patch.object(module.time, "monotonic", return_value=10.0):
+            response = module.LookAtSoundServer.on_goal(server, Request())
+        self.assertEqual(response, module.GoalResponse.ACCEPT)
+        self.assertAlmostEqual(server.goal_deadline, 10.2)
 
     def test_stale(self):
         self.assertFalse(self.check(now=1.6))

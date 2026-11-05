@@ -54,3 +54,13 @@ for all replay publications and an advancing clock stamp for recovery.
 ## Validated watermark admission
 
 Only valid unit-vector bearings in the configured target frame can advance the action server's persistent observation watermark. An invalid or wrong-frame advisory (even with a very high scene generation or timestamp) cannot poison the watermark and block later legitimate acquisition. A ROS graph regression publishes a wrong-frame high-generation observation, then checks recovery using a normal source. This does not replace upstream TF2 replay checks or authenticate message publishers.
+
+## Admission-time deadline
+
+The timeout starts when the ActionServer **accepts** a goal, not when its
+execution callback eventually starts. The deadline is recorded with the
+accepted goal under the same lock as its ingress watermark. The worker checks
+expiration before attempting success, so a late valid observation cannot
+turn an already expired goal into a success. Cancellation remains available.
+A deterministic policy test freezes the admission clock to verify this
+contract; the existing ROS graph smoke verifies timeout abortion.

@@ -117,6 +117,8 @@ def main():
         advanced = node.publish_until(advancing_goal, GoalStatus.STATUS_SUCCEEDED)
         assert advanced.acquired and advanced.reason == "bearing_acquired"
 
+        # A goal cannot acquire after its admission-time deadline, even if
+        # a new valid observation arrives during worker scheduling.
         timeout_goal = node.start("missing-source", 300)
         assert timeout_goal.accepted
         timeout_result = node.await_future(timeout_goal.get_result_async(), 5)

@@ -57,6 +57,7 @@ class LookAtSoundServer(Node):
         self.goal_start_sequence = 0
         self.last_stamp = None
         self.goal_stamp = None
+        self.goal_deadline = 0.0
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, "attention/target_base", self.on_target, 10,
@@ -81,6 +82,7 @@ class LookAtSoundServer(Node):
             self.reserved = True
             self.goal_start_sequence = self.sequence
             self.goal_stamp = self.last_stamp
+            self.goal_deadline = time.monotonic() + request.timeout_ms / 1000.0
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
@@ -88,7 +90,8 @@ class LookAtSoundServer(Node):
 
     def execute(self, goal):
         result = LookAtSound.Result()
-        deadline = time.monotonic() + goal.request.timeout_ms / 1000.0
+        with self.lock:
+            deadline = self.goal_deadline
         try:
             while rclpy.ok():
                 if goal.is_cancel_requested:
@@ -102,16 +105,16 @@ class LookAtSoundServer(Node):
                     sequence = self.sequence
                     start_sequence = self.goal_start_sequence
                     start_stamp = self.goal_stamp
+                if now >= deadline:
+                    result.reason = "timeout"
+                    goal.abort()
+                    return result
                 if fresh_target(candidate, arrival, now, self.max_age,
                                 goal.request.source_id, self.frame, sequence, start_sequence) and newer_stamp(candidate, start_stamp):
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"
                     goal.succeed()
-                    return result
-                if now >= deadline:
-                    result.reason = "timeout"
-                    goal.abort()
                     return result
                 feedback = LookAtSound.Feedback()
                 feedback.state = "waiting_for_fresh_bearing"
