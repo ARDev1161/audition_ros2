@@ -1,10 +1,8 @@
 #include <audition_msgs/msg/attention_target.hpp>
-#include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <geometry_msgs/msg/transform_stamped.hpp>
 
 #include <cmath>
 #include <memory>

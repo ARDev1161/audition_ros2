@@ -3,6 +3,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     return LaunchDescription([
@@ -13,7 +14,7 @@ def generate_launch_description():
              namespace=LaunchConfiguration("audition_namespace"),
              parameters=[{
                  "target_frame": LaunchConfiguration("target_frame"),
-                 "maximum_age_ms": LaunchConfiguration("maximum_age_ms"),
+                 "maximum_age_ms": ParameterValue(LaunchConfiguration("maximum_age_ms"), value_type=int),
              }],
              output="screen"),
     ])
