@@ -25,6 +25,7 @@ jobs:
             ros-humble-geometry-msgs \
             ros-humble-tf2-ros \
             ros-humble-rclpy \
+            ros-humble-action-msgs \
             ros-humble-rclcpp \
             ros-humble-rclcpp-components \
             ros-humble-launch-ros
@@ -45,9 +46,10 @@ jobs:
           ros2 interface show audition_msgs/msg/AcousticScene
           ros2 interface show audition_msgs/msg/SourceAudioFrame
           ros2 interface show audition_msgs/msg/SemanticProgress
+          ros2 interface show audition_msgs/action/LookAtSound
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/attention_config.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/attention_config.py
 
       - name: Smoke M3 attention advisory over real ROS graph
         shell: bash

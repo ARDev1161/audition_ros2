@@ -1035,3 +1035,7 @@ its persistent watermark; invalid/failed TF observations cannot consume it.
 Timeout does not clear the watermark. Four GTests and a live ROS graph
 replay-after-expiry check cover this advisory-only protection. See
 [M3 TF bridge](M3_TF_BRIDGE.md).
+
+## M3 LookAtSound advisory acquisition (2026-11-05)
+
+The ROS 2 action server exposes bounded, cancellable bearing acquisition without controlling actuators. See [LookAtSound contract](M3_LOOK_AT_SOUND.md).
