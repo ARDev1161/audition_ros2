@@ -28,7 +28,7 @@ def run():
     client = ActionClient(node, LookAtSound, NS + "/look_at_sound")
     stamp = 100
     try:
-        assert client.wait_for_server(timeout_sec=25)
+        assert client.wait_for_server(timeout_sec=25), "LookAtSound action unavailable"
         until = time.monotonic() + 10
         while pub.get_subscription_count() == 0 and time.monotonic() < until:
             rclpy.spin_once(node, timeout_sec=0.05)
@@ -86,10 +86,10 @@ def run():
         # A fresh bounded sequence satisfies all three constraints.
         result = goal(2500)
         send()
-        send(delay=0.25)
-        send(delay=0.25)
+        send(delay=0.35)
+        send(delay=0.35)
         outcome = wait(node, result)
-        assert outcome.status == GoalStatus.STATUS_SUCCEEDED
+        assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("bounded recovery", outcome.status, outcome.result.reason)
         assert outcome.result.acquired
         print("PASS: launch-wired spacing, gap, window and bounded recovery")
         return 0

@@ -9,7 +9,7 @@ from audition_msgs.srv import GetSemanticStatus
 
 
 def status(node, client):
-    assert client.wait_for_service(timeout_sec=10), client.srv_name
+    assert client.service_is_ready(), "semantic status service disappeared: " + client.srv_name
     future = client.call_async(GetSemanticStatus.Request())
     rclpy.spin_until_future_complete(node, future, timeout_sec=10)
     assert future.done() and future.exception() is None
@@ -27,6 +27,7 @@ def main():
     try:
         client = node.create_client(
             GetSemanticStatus, "/audition/semantic_perception/get_semantic_status")
+        assert client.wait_for_service(timeout_sec=35), "semantic service startup timed out: " + client.srv_name
         deadline = time.monotonic() + 18
         while time.monotonic() < deadline:
             value = status(node, client)

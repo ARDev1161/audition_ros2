@@ -300,3 +300,15 @@ explicit revocation follow the same counter/reset rules as acquisition.
 This feedback describes advisory bearing acquisition only; it is not a
 physical turning-progress indicator. The pure policy regression covers
 formatting and the live ROS graph checks progress and generation reset.
+
+## CI startup and timing regressions (2026-11-06)
+
+The ROS graph cadence acceptance now uses a 350 ms inter-sample pause for
+its successful three-confirmation case, comfortably above the configured
+180 ms minimum spacing while remaining below the 750 ms maximum gap and
+900 ms total window. Failures include the actual action status and reason.
+The separate semantic epoch graph probe waits up to 35 seconds for its
+component service to appear **once** before its existing 18-second admission
+polling budget; previously its first 10-second service wait could abort
+while a composed ROS node was still starting. Neither adjustment relaxes
+runtime freshness, generation, or replay policies.
