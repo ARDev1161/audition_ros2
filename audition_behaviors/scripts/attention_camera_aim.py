@@ -20,7 +20,8 @@ def valid_stamp(msg):
 
 def angles(msg, frame, max_pan, max_tilt):
     """Return pan/tilt only for finite, normalized forward-facing bearings."""
-    if not msg.valid or msg.header.frame_id != frame or not msg.source_id or\n            len(msg.source_id.encode('utf-8')) > 256 or not valid_stamp(msg):
+    if (not msg.valid or msg.header.frame_id != frame or not msg.source_id or
+            len(msg.source_id.encode('utf-8')) > 256 or not valid_stamp(msg)):
         return None
     v = msg.direction_unit
     if not all(math.isfinite(x) for x in (v.x, v.y, v.z)):
@@ -80,7 +81,8 @@ class CameraAim(Node):
             self.emit(False, reason)
 
     def on_target(self, msg):
-        if (msg.header.frame_id != self.frame or not valid_stamp(msg) or\n                len(msg.source_id.encode('utf-8')) > 256):
+        if (msg.header.frame_id != self.frame or not valid_stamp(msg) or
+                len(msg.source_id.encode('utf-8')) > 256):
             return
         if self.watermark is not None:
             if key(msg) <= key(self.watermark):
