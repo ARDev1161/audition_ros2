@@ -198,3 +198,7 @@ authenticate publishers or imply robot motion safety.
 ## Bounded confirmation continuity (2026-11-06)
 
 Optional `maximum_confirmation_gap_ms` (0 disables, otherwise 1–10000 ms) limits the elapsed monotonic ingress time between consecutive counted bearings. When the gap exceeds this limit, the partial evidence run restarts at the next eligible bearing, even if the last cached bearing is still fresh. This prevents widely separated observations from being treated as one continuous confirmation streak. It does not infer sensor independence or actuator safety. Default 0 preserves existing behavior. Deterministic regression exercises a two-bearing streak, a long interruption, and three new consecutive bearings.
+
+## Bounded total confirmation window (2026-11-06)
+
+Optional `maximum_confirmation_window_ms` (0 disables; otherwise 1–10000 ms) caps the monotonic ingress-time span from the **first** counted observation to the newest one in a confirmation run. If exceeded, the newest observation becomes the first of a new run. This complements the adjacent `maximum_confirmation_gap_ms` gate: many individually short gaps cannot accumulate evidence indefinitely. The first-observation anchor and window reset on invalidation, goal admission, and evidence discontinuity. Default 0 preserves earlier behavior. Deterministic regression covers short adjacent gaps exceeding the total window, restart and recovery. This remains advisory-only; it does not authorize robot motion.

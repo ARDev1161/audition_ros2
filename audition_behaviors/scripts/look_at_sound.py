@@ -79,6 +79,7 @@ class LookAtSoundServer(Node):
         self.confirmations = self.declare_parameter("bearing_confirmations", 1).value
         self.confirmation_angle = self.declare_parameter("maximum_confirmation_jump_rad", 0.0).value
         self.confirmation_gap = self.declare_parameter("maximum_confirmation_gap_ms", 0).value / 1000.0
+        self.confirmation_window = self.declare_parameter("maximum_confirmation_window_ms", 0).value / 1000.0
         if (not self.frame or self.frame.startswith("/") or self.max_age <= 0 or self.max_timeout < 1
                 or not isinstance(self.max_azimuth, (int, float)) or not math.isfinite(self.max_azimuth)
                 or not 0.0 <= self.max_azimuth <= math.pi
@@ -89,7 +90,9 @@ class LookAtSoundServer(Node):
                 or not math.isfinite(self.confirmation_angle)
                 or not 0.0 <= self.confirmation_angle <= math.pi
                 or not math.isfinite(self.confirmation_gap)
-                or not 0.0 <= self.confirmation_gap <= 10.0):
+                or not 0.0 <= self.confirmation_gap <= 10.0
+                or not math.isfinite(self.confirmation_window)
+                or not 0.0 <= self.confirmation_window <= 10.0):
             raise ValueError("invalid LookAtSound parameters")
         self.lock = threading.Lock()
         self.latest = None
@@ -105,6 +108,7 @@ class LookAtSoundServer(Node):
         self.goal_evidence_count = 0
         self.goal_evidence_sequence = 0
         self.goal_evidence_arrival = None
+        self.goal_evidence_start_arrival = None
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, "attention/target_base", self.on_target, 10,
@@ -142,6 +146,7 @@ class LookAtSoundServer(Node):
                     self.goal_evidence_count = 0
                     self.goal_evidence_sequence = self.sequence
                     self.goal_evidence_arrival = None
+                    self.goal_evidence_start_arrival = None
                 return
             if not newer_stamp(msg, self.last_stamp) or not newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                 return
@@ -165,11 +170,17 @@ class LookAtSoundServer(Node):
                     newer_stamp(candidate, self.goal_stamp))
         if eligible and sequence > self.goal_evidence_sequence:
             # Long gaps must not bridge two separate confirmation streaks.
-            if (getattr(self, "confirmation_gap", 0.0) > 0.0
+            if ((getattr(self, "confirmation_gap", 0.0) > 0.0
                     and getattr(self, "goal_evidence_arrival", None) is not None
-                    and self.arrival - self.goal_evidence_arrival > self.confirmation_gap):
+                    and self.arrival - self.goal_evidence_arrival > self.confirmation_gap)
+                    or (getattr(self, "confirmation_window", 0.0) > 0.0
+                        and getattr(self, "goal_evidence_start_arrival", None) is not None
+                        and self.arrival - self.goal_evidence_start_arrival > self.confirmation_window)):
                 self.goal_evidence_count = 0
                 self.goal_evidence = None
+                self.goal_evidence_start_arrival = None
+            if self.goal_evidence_count == 0:
+                self.goal_evidence_start_arrival = self.arrival
             self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
                 self.goal_evidence_count, self.goal_evidence, candidate, self.confirmation_angle)
             self.goal_evidence_sequence = sequence
@@ -189,6 +200,7 @@ class LookAtSoundServer(Node):
             self.goal_evidence_count = 0
             self.goal_evidence_sequence = self.sequence
             self.goal_evidence_arrival = None
+            self.goal_evidence_start_arrival = None
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
