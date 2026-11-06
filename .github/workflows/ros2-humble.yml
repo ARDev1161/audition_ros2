@@ -144,6 +144,25 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M3 LookAtSound bounded confirmation cadence over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=118
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/cadence \
+            bearing_confirmations:=3 minimum_confirmation_spacing_ms:=180 \
+            maximum_confirmation_gap_ms:=750 maximum_confirmation_window_ms:=900 \
+            > /tmp/audition_cadence.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_cadence.py; then
+            cat /tmp/audition_cadence.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |

@@ -270,3 +270,21 @@ the tracker numbering to restart. The deterministic regression covers delayed
 older retirement, current-generation recovery, newer-generation retirement and
 scene restart. This remains a best-effort DDS provenance filter, not publisher
 authentication or a robot motion safety mechanism.
+
+
+## End-to-end bounded confirmation cadence (2026-11-06)
+
+The `m3_look_at_sound.launch.py` entry point now exposes all three existing
+server-side cadence policies as typed integer millisecond launch arguments:
+`minimum_confirmation_spacing_ms`, `maximum_confirmation_gap_ms`, and
+`maximum_confirmation_window_ms`. Each defaults to zero (disabled); each
+accepts 0–10000 ms, with server startup rejecting invalid values. This closes
+the gap where these policy knobs existed in the Python action server but could
+not be configured through the supported launch interface.
+
+Humble CI exercises the real ROS graph with three required confirmations,
+180 ms minimum spacing, 750 ms maximum adjacent gap, and 900 ms total window.
+The probe verifies that a burst, a broken streak, and a too-long total window
+cannot acquire a target, while a fresh correctly spaced streak succeeds.
+The test uses synthetic DDS bearings and never commands motion; it is not a
+claim of independent acoustic evidence or hardware timing accuracy.
