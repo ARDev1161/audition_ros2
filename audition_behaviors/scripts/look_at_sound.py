@@ -115,7 +115,11 @@ class LookAtSoundServer(Node):
             # A delayed DDS replay must not replace a newer accepted bearing.
             # Invalid advisories revoke the cached bearing without consuming
             # the watermark, allowing subsequent valid observations to recover.
-            # Foreign-frame DDS advisories cannot invalidate a base-frame bearing\n            # or advance its revocation watermark (even with a future epoch).\n            if msg.header.frame_id != self.frame:\n                return\n            if not admissible_observation(msg, self.frame, self.max_azimuth, self.max_elevation):
+            # Foreign-frame DDS advisories cannot invalidate a base-frame bearing
+            # or advance its revocation watermark (even with a future epoch).
+            if msg.header.frame_id != self.frame:
+                return
+            if not admissible_observation(msg, self.frame, self.max_azimuth, self.max_elevation):
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                     self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
