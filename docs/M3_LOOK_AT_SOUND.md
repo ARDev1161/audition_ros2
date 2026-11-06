@@ -248,3 +248,13 @@ the watermark or ingress sequence, so the current tracker continues normally.
 A newer `scene_generation` starts a new epoch and can admit a lower tracker
 generation. The deterministic unit regression covers delayed valid replay,
 normal continuation and a scene reset. This does not authenticate publishers.
+
+## Persistent tracker-generation fence after revocation (2026-11-06)
+
+A revoked cache no longer forgets the most recent source incarnation. The
+server retains the scene/source/generation fence across explicit invalidation,
+including invalidation from a newer tracker generation. Delayed valid DDS
+messages from an older generation cannot resurrect a cleared cache merely by
+carrying a later timestamp. Current-generation recovery remains possible and
+a new scene epoch permits generation numbers to restart. A deterministic
+regression checks both paths. This is not publisher authentication.

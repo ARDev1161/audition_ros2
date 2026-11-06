@@ -105,6 +105,9 @@ class LookAtSoundServer(Node):
         self.goal_start_sequence = 0
         self.last_stamp = None
         self.revoked_stamp = None
+        # Retain tracker identity across cache invalidation; a delayed older
+        # incarnation must not resurrect after latest has been cleared.
+        self.source_generation_fence = None
         self.goal_stamp = None
         self.goal_deadline = 0.0
         self.goal_evidence = None
@@ -156,6 +159,12 @@ class LookAtSoundServer(Node):
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                     self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
+                    if msg.source_id:
+                        old = getattr(self, 'source_generation_fence', None)
+                        if old is None or msg.scene_generation > old[0] or (msg.scene_generation == old[0] and msg.source_id != old[1]):
+                            self.source_generation_fence = (msg.scene_generation, msg.source_id, msg.source_generation)
+                        elif msg.scene_generation == old[0] and msg.source_id == old[1]:
+                            self.source_generation_fence = (old[0], old[1], max(old[2], msg.source_generation))
                     self.latest = None
                     # A newer revocation breaks the consecutive evidence run.
                     # Do not let observations on either side of it combine.
@@ -173,8 +182,13 @@ class LookAtSoundServer(Node):
                     and msg.source_id == cached.source_id
                     and msg.source_generation < cached.source_generation):
                 return
+            fence = getattr(self, 'source_generation_fence', None)
+            if (fence is not None and msg.scene_generation == fence[0]
+                    and msg.source_id == fence[1] and msg.source_generation < fence[2]):
+                return
             if not newer_stamp(msg, self.last_stamp) or not newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                 return
+            self.source_generation_fence = (msg.scene_generation, msg.source_id, msg.source_generation)
             self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.latest = msg
             self.sequence += 1

@@ -310,6 +310,60 @@ class FreshnessTest(unittest.TestCase):
         self.assertIs(server.latest, new_scene)
         self.assertEqual(server.sequence, 3)
 
+    def test_retired_tracker_cannot_resurrect_after_cache_revocation(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            source_generation_fence = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+
+        def bearing(stamp, generation, valid=True, scene=9):
+            msg = AttentionTarget()
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.scene_generation = scene
+            msg.source_id = "voice-a"
+            msg.source_generation = generation
+            msg.valid = valid
+            msg.direction_unit.x = 1.0
+            return msg
+
+        module.LookAtSoundServer.on_target(server, bearing(10, 3))
+        module.LookAtSoundServer.on_target(server, bearing(11, 3, False))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.source_generation_fence, (9, "voice-a", 3))
+        module.LookAtSoundServer.on_target(server, bearing(100, 2))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.last_stamp, (9, 10, 0))
+        self.assertEqual(server.sequence, 1)
+        module.LookAtSoundServer.on_target(server, bearing(12, 3))
+        self.assertIsNotNone(server.latest)
+        self.assertEqual(server.sequence, 2)
+        # A newer tracker invalidation fences out the older generation.
+        module.LookAtSoundServer.on_target(server, bearing(13, 4, False))
+        module.LookAtSoundServer.on_target(server, bearing(100, 3))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.source_generation_fence, (9, "voice-a", 4))
+        module.LookAtSoundServer.on_target(server, bearing(14, 4))
+        self.assertEqual(server.sequence, 3)
+        # A new scene epoch permits tracker generations to restart.
+        module.LookAtSoundServer.on_target(server, bearing(1, 1, scene=10))
+        self.assertEqual(server.source_generation_fence, (10, "voice-a", 1))
+        self.assertEqual(server.sequence, 4)
+
     def test_retired_source_generation_cannot_revoke_newer_tracker(self):
         import threading
 
