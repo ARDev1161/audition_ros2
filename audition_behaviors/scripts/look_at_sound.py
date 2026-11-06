@@ -186,7 +186,7 @@ class LookAtSoundServer(Node):
             # confirmation purposes. Advance the processed sequence so a
             # subsequent executor poll cannot count the same sample again.
             if (self.goal_evidence_count > 0
-                    and self.confirmation_spacing > 0.0
+                    and getattr(self, "confirmation_spacing", 0.0) > 0.0
                     and self.goal_evidence_arrival is not None
                     and self.arrival - self.goal_evidence_arrival < self.confirmation_spacing):
                 self.goal_evidence_sequence = sequence
