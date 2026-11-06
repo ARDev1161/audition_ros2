@@ -137,7 +137,8 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(server.sequence, 1)
         invalid = AttentionTarget()
         invalid.valid = False
-        invalid.header.stamp.sec = 1000
+        invalid.header.stamp.sec = 20
+        invalid.header.stamp.nanosec = 1
         module.LookAtSoundServer.on_target(server, invalid)
         self.assertIsNone(server.latest)
         self.assertEqual(server.last_stamp, (0, 20, 0))
