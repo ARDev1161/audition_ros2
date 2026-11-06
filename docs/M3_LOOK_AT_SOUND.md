@@ -230,3 +230,11 @@ may revoke the old cached bearing regardless of source identity. Empty source
 IDs retain conservative global invalidation semantics. Deterministic tests
 cover unrelated-source isolation, same-source revocation, recovery and a
 newer-epoch reset. This is not publisher authentication or motion safety.
+
+## Source-generation invalidation fence (2026-11-06)
+
+Within one scene epoch, a retired lower source generation cannot invalidate
+an active newer incarnation of the same source, regardless of the invalidation
+timestamp. Current or newer generations may still revoke, and newer scene
+epochs remain global resets. This is a DDS ordering guard, not publisher
+authentication or a physical speaker identity guarantee.
