@@ -194,3 +194,7 @@ out-of-sector observation could poison the revocation watermark and prevent
 normal acquisition. A deterministic regression covers sector rejection,
 non-unit and NaN vectors, recovery and explicit invalidation. This does not
 authenticate publishers or imply robot motion safety.
+
+## Bounded confirmation continuity (2026-11-06)
+
+Optional `maximum_confirmation_gap_ms` (0 disables, otherwise 1–10000 ms) limits the elapsed monotonic ingress time between consecutive counted bearings. When the gap exceeds this limit, the partial evidence run restarts at the next eligible bearing, even if the last cached bearing is still fresh. This prevents widely separated observations from being treated as one continuous confirmation streak. It does not infer sensor independence or actuator safety. Default 0 preserves existing behavior. Deterministic regression exercises a two-bearing streak, a long interruption, and three new consecutive bearings.
