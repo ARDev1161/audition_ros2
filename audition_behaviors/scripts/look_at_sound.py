@@ -147,6 +147,12 @@ class LookAtSoundServer(Node):
                         and msg.source_id and cached.source_id
                         and msg.source_id != cached.source_id):
                     return
+                # A retired tracker incarnation must not invalidate a newer
+                # incarnation of the same source in this scene.
+                if (cached is not None and msg.scene_generation == cached.scene_generation
+                        and msg.source_id == cached.source_id
+                        and msg.source_generation < cached.source_generation):
+                    return
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                     self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
