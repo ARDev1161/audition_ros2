@@ -118,6 +118,11 @@ class LookAtSoundServer(Node):
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp):
                     self.latest = None
+                    # A newer revocation breaks the consecutive evidence run.
+                    # Do not let observations on either side of it combine.
+                    self.goal_evidence = None
+                    self.goal_evidence_count = 0
+                    self.goal_evidence_sequence = self.sequence
                 return
             if not newer_stamp(msg, self.last_stamp):
                 return
