@@ -57,6 +57,21 @@ class FreshnessTest(unittest.TestCase):
         count, anchor = module.accumulate_bearing_evidence(2, first, second, 0.0)
         self.assertEqual(count, 1)
 
+    def test_confirmation_restarts_on_source_generation_change(self):
+        first = self.target
+        first.source_id = "tracked"
+        first.source_generation = 4
+        first.scene_generation = 8
+        second = AttentionTarget()
+        second.source_id = "tracked"
+        second.source_generation = 5
+        second.scene_generation = 8
+        second.header.frame_id = "base_link"
+        second.direction_unit.x = 1.0
+        count, anchor = module.accumulate_bearing_evidence(2, first, second, 0.0)
+        self.assertEqual(count, 1)
+        self.assertIs(anchor, second)
+
     def test_fresh(self):
         self.assertTrue(self.check())
         self.assertTrue(self.check(source="voice-a"))

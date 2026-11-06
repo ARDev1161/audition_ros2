@@ -114,3 +114,13 @@ The deadline remains measured from goal admission, including while gathering
 evidence. No physical motion is performed. A single ROS publisher can still
 fabricate multiple advancing observations: this is a stability filter, not
 source authentication or independent sensor validation.
+
+## Multi-observation ROS graph regression
+
+Humble CI now starts a dedicated action server in DDS domain 117 with three
+confirmations and a 0.2 rad angular limit. The live action client checks that
+repeated delivery of the same timestamp does not count as independent evidence,
+that a new source generation resets the evidence even if the source ID is
+unchanged, and that an angular jump restarts confirmation. The final goal
+succeeds only after three advancing, consistent observations. This validates
+ROS message transport and action outcomes, not microphone or actuator hardware.

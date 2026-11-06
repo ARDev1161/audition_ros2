@@ -58,6 +58,7 @@ def accumulate_bearing_evidence(count, previous, target, maximum_jump):
     if previous is None:
         return 1, target
     same = (previous.source_id == target.source_id
+            and previous.source_generation == target.source_generation
             and previous.scene_generation == target.scene_generation
             and previous.header.frame_id == target.header.frame_id)
     if same and maximum_jump > 0:
