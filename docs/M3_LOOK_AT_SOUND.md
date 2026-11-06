@@ -136,3 +136,17 @@ advisory does not advance the valid-stamp watermark, so later valid bearings
 can recover. A deterministic Python regression covers stale invalidation,
 newer revocation and recovery. This is an advisory safety boundary, not
 publisher authentication, independent sensor validation or actuator control.
+
+## Atomic revocation and confirmation evaluation (2026-11-06)
+
+The action worker now reads the cached target, its ingress sequence, and the
+confirmation counter under the **same lock** used by DDS admission and
+invalidation. Previously it could copy a valid bearing, release the lock,
+receive a newer invalidation, then reacquire the lock and count the revoked
+snapshot toward a successful action. This time-of-check/time-of-use race is
+closed: a revoked snapshot cannot contribute new confirmation evidence.
+Deadline eligibility is also checked inside the atomic evaluation; expiration
+still causes an aborted action, not success. Deterministic policy regressions
+cover a partially confirmed target revoked between worker polls, recovery
+requiring a full fresh streak, and expiration. The check does not authenticate
+publishers or guarantee that an actuator is safe to move.

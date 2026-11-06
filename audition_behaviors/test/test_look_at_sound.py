@@ -219,6 +219,98 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertIs(anchor, recovered)
 
+    def test_atomic_candidate_evaluation_after_revocation(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            max_age = 0.5
+            confirmation_angle = 0.2
+            confirmations = 3
+            latest = None
+            last_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_start_sequence = 0
+            goal_stamp = None
+            goal_deadline = 100.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+            evaluate_candidate_locked = module.LookAtSoundServer.evaluate_candidate_locked
+
+        server = Server()
+        with patch.object(module.time, "monotonic", return_value=10.0):
+            for stamp in (10, 11):
+                observation = AttentionTarget()
+                observation.valid = True
+                observation.source_id = "voice-a"
+                observation.header.frame_id = "base_link"
+                observation.header.stamp.sec = stamp
+                observation.direction_unit.x = 1.0
+                module.LookAtSoundServer.on_target(server, observation)
+                with server.lock:
+                    self.assertIsNone(server.evaluate_candidate_locked(10.1, "voice-a"))
+            self.assertEqual(server.goal_evidence_count, 2)
+            # This is the stale worker snapshot that used to be read before
+            # acquiring the lock, then counted after an invalidation callback.
+            old_candidate = server.latest
+            revoked = AttentionTarget()
+            revoked.header.stamp.sec = 12
+            module.LookAtSoundServer.on_target(server, revoked)
+            self.assertIsNone(server.latest)
+            with server.lock:
+                self.assertIsNone(server.evaluate_candidate_locked(10.1, "voice-a"))
+            self.assertEqual(server.goal_evidence_count, 0)
+            self.assertIsNotNone(old_candidate)
+            for stamp in (13, 14, 15):
+                observation = AttentionTarget()
+                observation.valid = True
+                observation.source_id = "voice-a"
+                observation.header.frame_id = "base_link"
+                observation.header.stamp.sec = stamp
+                observation.direction_unit.x = 1.0
+                module.LookAtSoundServer.on_target(server, observation)
+                with server.lock:
+                    result = server.evaluate_candidate_locked(10.1, "voice-a")
+                self.assertEqual(result is not None, stamp == 15)
+
+    def test_atomic_candidate_does_not_accept_expired_deadline(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            max_age = 0.5
+            confirmation_angle = 0.0
+            confirmations = 1
+            latest = None
+            last_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_start_sequence = 0
+            goal_stamp = None
+            goal_deadline = 10.05
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+            evaluate_candidate_locked = module.LookAtSoundServer.evaluate_candidate_locked
+
+        server = Server()
+        self.target.header.stamp.sec = 10
+        with patch.object(module.time, "monotonic", return_value=10.0):
+            module.LookAtSoundServer.on_target(server, self.target)
+        with server.lock:
+            self.assertIsNone(server.evaluate_candidate_locked(10.1, "voice-a"))
+            self.assertEqual(server.goal_evidence_count, 0)
+
     def test_admission_deadline_is_not_execution_deadline(self):
         # A delayed action worker must not extend the accepted timeout.
         class Request:

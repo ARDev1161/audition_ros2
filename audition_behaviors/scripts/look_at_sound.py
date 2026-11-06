@@ -131,6 +131,26 @@ class LookAtSoundServer(Node):
             self.sequence += 1
             self.arrival = time.monotonic()
 
+    def evaluate_candidate_locked(self, now, source):
+        """Atomically evaluate the live cache and update confirmation evidence.
+
+        Caller holds self.lock. Invalidation and ingress use the same lock,
+        so an old worker snapshot cannot resurrect revoked evidence.
+        """
+        candidate = self.latest
+        sequence = self.sequence
+        eligible = (now < self.goal_deadline and
+                    fresh_target(candidate, self.arrival, now, self.max_age,
+                                 source, self.frame, sequence, self.goal_start_sequence,
+                                 self.max_azimuth, self.max_elevation) and
+                    newer_stamp(candidate, self.goal_stamp))
+        if eligible and sequence > self.goal_evidence_sequence:
+            self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
+                self.goal_evidence_count, self.goal_evidence, candidate, self.confirmation_angle)
+            self.goal_evidence_sequence = sequence
+        confirmed = eligible and self.goal_evidence_count >= self.confirmations
+        return candidate if confirmed else None
+
     def on_goal(self, request):
         with self.lock:
             if self.reserved or request.timeout_ms < 1 or request.timeout_ms > self.max_timeout:
@@ -159,25 +179,12 @@ class LookAtSoundServer(Node):
                     return result
                 now = time.monotonic()
                 with self.lock:
-                    candidate = self.latest
-                    arrival = self.arrival
-                    sequence = self.sequence
-                    start_sequence = self.goal_start_sequence
-                    start_stamp = self.goal_stamp
+                    candidate = self.evaluate_candidate_locked(now, goal.request.source_id)
                 if now >= deadline:
                     result.reason = "timeout"
                     goal.abort()
                     return result
-                eligible = (fresh_target(candidate, arrival, now, self.max_age,
-                                goal.request.source_id, self.frame, sequence, start_sequence,
-                                self.max_azimuth, self.max_elevation) and newer_stamp(candidate, start_stamp))
-                with self.lock:
-                    if eligible and sequence > self.goal_evidence_sequence:
-                        self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
-                            self.goal_evidence_count, self.goal_evidence, candidate, self.confirmation_angle)
-                        self.goal_evidence_sequence = sequence
-                    confirmed = eligible and self.goal_evidence_count >= self.confirmations
-                if confirmed:
+                if candidate is not None:
                     result.acquired = True
                     result.target = candidate
                     result.reason = "bearing_acquired"
