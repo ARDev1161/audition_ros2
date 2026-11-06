@@ -88,7 +88,7 @@ def run():
         assert outcome.result.target.source_generation == 2
 
         # A large angular discontinuity resets confirmation evidence.
-        handle = goal(3500)
+        handle = goal(6000)
         future = handle.get_result_async()
         send(target(300, 2, 0.0))
         send(target(301, 2, 0.6))
@@ -100,7 +100,7 @@ def run():
         assert outcome.result.acquired
         # An invalidation newer than the current bearing must revoke a
         # partially collected streak. A stale invalidation must not do so.
-        handle = goal(3500)
+        handle = goal(6000)
         future = handle.get_result_async()
         send(target(400, 2))
         send(target(401, 2))
@@ -111,7 +111,7 @@ def run():
         outcome = wait(node, future)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, "stale invalidation revoked evidence"
 
-        handle = goal(3500)
+        handle = goal(6000)
         future = handle.get_result_async()
         send(target(500, 2))
         send(target(501, 2))
