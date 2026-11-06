@@ -170,6 +170,55 @@ class FreshnessTest(unittest.TestCase):
         self.assertIs(server.latest, recovery)
         self.assertEqual(server.sequence, 3)
 
+    def test_newer_invalidation_breaks_confirmation_streak(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+        self.target.header.stamp.sec = 10
+        module.LookAtSoundServer.on_target(server, self.target)
+        server.goal_evidence = self.target
+        server.goal_evidence_count = 2
+        server.goal_evidence_sequence = server.sequence
+
+        stale = AttentionTarget()
+        stale.header.stamp.sec = 9
+        module.LookAtSoundServer.on_target(server, stale)
+        self.assertEqual(server.goal_evidence_count, 2)
+        self.assertIs(server.latest, self.target)
+
+        revoked = AttentionTarget()
+        revoked.header.stamp.sec = 11
+        module.LookAtSoundServer.on_target(server, revoked)
+        self.assertIsNone(server.latest)
+        self.assertIsNone(server.goal_evidence)
+        self.assertEqual(server.goal_evidence_count, 0)
+        self.assertEqual(server.goal_evidence_sequence, 1)
+
+        recovered = AttentionTarget()
+        recovered.valid = True
+        recovered.header.frame_id = "base_link"
+        recovered.direction_unit.x = 1.0
+        recovered.header.stamp.sec = 12
+        module.LookAtSoundServer.on_target(server, recovered)
+        self.assertEqual(server.sequence, 2)
+        count, anchor = module.accumulate_bearing_evidence(
+            server.goal_evidence_count, server.goal_evidence, recovered, 0.2)
+        self.assertEqual(count, 1)
+        self.assertIs(anchor, recovered)
+
     def test_admission_deadline_is_not_execution_deadline(self):
         # A delayed action worker must not extend the accepted timeout.
         class Request:
