@@ -183,6 +183,9 @@ class LookAtSoundServer(Node):
                 self.goal_evidence_start_arrival = self.arrival
             self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
                 self.goal_evidence_count, self.goal_evidence, candidate, self.confirmation_angle)
+            # Identity/generation/angle discontinuities also start a new window.
+            if self.goal_evidence_count == 1:
+                self.goal_evidence_start_arrival = self.arrival
             self.goal_evidence_sequence = sequence
             self.goal_evidence_arrival = self.arrival
         confirmed = eligible and self.goal_evidence_count >= self.confirmations
