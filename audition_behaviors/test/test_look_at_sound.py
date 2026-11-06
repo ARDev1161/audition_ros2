@@ -364,6 +364,60 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(server.source_generation_fence, (10, "voice-a", 1))
         self.assertEqual(server.sequence, 4)
 
+    def test_stale_retirement_after_cache_clear_cannot_poison_recovery(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            source_generation_fence = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+
+        def target(stamp, generation, valid=True, scene=9):
+            msg = AttentionTarget()
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.scene_generation = scene
+            msg.source_id = "voice-a"
+            msg.source_generation = generation
+            msg.valid = valid
+            msg.direction_unit.x = 1.0
+            return msg
+
+        module.LookAtSoundServer.on_target(server, target(10, 4))
+        module.LookAtSoundServer.on_target(server, target(11, 4, False))
+        self.assertEqual(server.revoked_stamp, (9, 11, 0))
+        self.assertIsNone(server.latest)
+        # Late retirement of generation 3 has a later timestamp but cannot
+        # invalidate generation 4 or poison its recovery watermark.
+        module.LookAtSoundServer.on_target(server, target(100, 3, False))
+        self.assertEqual(server.revoked_stamp, (9, 11, 0))
+        self.assertEqual(server.source_generation_fence, (9, "voice-a", 4))
+        module.LookAtSoundServer.on_target(server, target(12, 4))
+        self.assertEqual(server.sequence, 2)
+        self.assertEqual(server.latest.source_generation, 4)
+        # A newer generation can still revoke; older generations cannot.
+        module.LookAtSoundServer.on_target(server, target(13, 5, False))
+        self.assertEqual(server.revoked_stamp, (9, 13, 0))
+        module.LookAtSoundServer.on_target(server, target(101, 4, False))
+        self.assertEqual(server.revoked_stamp, (9, 13, 0))
+        module.LookAtSoundServer.on_target(server, target(14, 5))
+        self.assertEqual(server.sequence, 3)
+        # A new scene permits the source generation numbering to restart.
+        module.LookAtSoundServer.on_target(server, target(1, 1, scene=10))
+        self.assertEqual(server.sequence, 4)
+
     def test_retired_source_generation_cannot_revoke_newer_tracker(self):
         import threading
 

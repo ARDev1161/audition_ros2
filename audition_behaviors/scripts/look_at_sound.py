@@ -142,6 +142,15 @@ class LookAtSoundServer(Node):
                     msg, self.frame, self.max_azimuth, self.max_elevation):
                 return
             if not msg.valid:
+                # The cache may already have been cleared by a newer tracker.
+                # Preserve its generation fence: a late retirement from the
+                # older incarnation must not advance the global revocation
+                # watermark and suppress the current incarnation's recovery.
+                fence = getattr(self, 'source_generation_fence', None)
+                if (fence is not None and msg.scene_generation == fence[0]
+                        and msg.source_id == fence[1]
+                        and msg.source_generation < fence[2]):
+                    return
                 # A source-specific invalidation cannot revoke a different
                 # source in the same scene. A newer scene epoch is a global
                 # reset and must still revoke the old cached observation.

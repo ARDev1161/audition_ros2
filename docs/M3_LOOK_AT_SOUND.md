@@ -258,3 +258,15 @@ messages from an older generation cannot resurrect a cleared cache merely by
 carrying a later timestamp. Current-generation recovery remains possible and
 a new scene epoch permits generation numbers to restart. A deterministic
 regression checks both paths. This is not publisher authentication.
+
+## Revocation fence after cache retirement (2026-11-06)
+
+A stale `valid=false` retirement from an older `source_generation` cannot
+advance the revocation watermark after the current source's cached bearing has
+already been cleared. The server checks the retained source-generation fence
+before handling retirement, including when `latest` is absent. A retirement
+for the current or newer tracker remains effective; a newer scene epoch allows
+the tracker numbering to restart. The deterministic regression covers delayed
+older retirement, current-generation recovery, newer-generation retirement and
+scene restart. This remains a best-effort DDS provenance filter, not publisher
+authentication or a robot motion safety mechanism.
