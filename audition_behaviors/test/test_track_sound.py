@@ -69,6 +69,40 @@ class Policy(unittest.TestCase):
         self.send(target(12))
         self.assertEqual(self.state.sequence, 2)
 
+    def test_malformed_retirement_cannot_poison_watermark(self):
+        self.send(target(10))
+        invalid = target(1000, valid=False)
+        invalid.header.stamp.nanosec = 1000000000
+        self.send(invalid)
+        self.assertIsNotNone(self.state.latest)
+        self.send(target(11))
+        self.assertEqual(self.state.sequence, 2)
+
+        invalid = target(1000, valid=False)
+        invalid.header.stamp.sec = 0
+        self.send(invalid)
+        self.send(target(12))
+        self.assertEqual(self.state.sequence, 3)
+
+        invalid = target(1000, valid=False)
+        invalid.source_id = 'x' * 257
+        self.send(invalid)
+        self.send(target(13))
+        self.assertEqual(self.state.sequence, 4)
+
+    def test_identity_budget_and_stamp(self):
+        self.assertTrue(module.valid_identity('a' * 256))
+        self.assertFalse(module.valid_identity('a' * 257))
+        self.assertFalse(module.valid_identity('é' * 129))
+        self.assertFalse(module.valid_identity(''))
+        self.assertFalse(module.valid_stamp(target(0)))
+        negative = target(1)
+        negative.header.stamp.sec = -1
+        self.assertFalse(module.valid_stamp(negative))
+        overflow = target(1)
+        overflow.header.stamp.nanosec = 1000000000
+        self.assertFalse(module.valid_stamp(overflow))
+
     def test_stamp_and_source_filter(self):
         self.assertFalse(module.valid_bearing(target(0), 'base_link'))
         self.assertFalse(module.admit(target(10), target(11, generation=0), 'base_link', 'a'))

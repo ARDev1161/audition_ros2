@@ -42,3 +42,16 @@ validate physical localization or command robot motion.
 Run the same graph test locally after `colcon build` and sourcing the
 workspace by starting the namespaced launch and executing the script with
 `ROS_DOMAIN_ID=119` in both terminals.
+
+## Strict advisory admission (M3 follow-up)
+
+The TrackSound server rejects invalid ROS timestamps (zero, negative seconds
+or nanoseconds outside the canonical [0, 1e9) range) **before** updating its
+persistent watermark, including for `valid=false` retirement advisories.
+This prevents malformed future-dated invalidations from suppressing later
+legitimate observations. Nonempty source identities are limited to 256 UTF-8
+bytes for both incoming advisories and requested action source filters;
+oversized goal identities are rejected at admission rather than silently
+timing out. Empty source IDs remain valid only for explicit retirement
+advisories and unfiltered action requests. Unit and live ROS graph regressions
+cover malformed retirement, oversized IDs and subsequent recovery.

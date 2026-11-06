@@ -13,12 +13,23 @@ from audition_msgs.action import TrackSound
 from audition_msgs.msg import AttentionTarget
 
 
+MAX_SOURCE_ID_BYTES = 256
+
+
+def valid_identity(source):
+    return bool(source) and len(source.encode('utf-8')) <= MAX_SOURCE_ID_BYTES
+
+
+def valid_stamp(msg):
+    return (msg.header.stamp.sec >= 0
+            and 0 <= msg.header.stamp.nanosec < 1000000000
+            and (msg.header.stamp.sec != 0 or msg.header.stamp.nanosec != 0))
+
+
 def valid_bearing(msg, frame):
-    if not msg.valid or msg.header.frame_id != frame or not msg.source_id:
+    if not msg.valid or msg.header.frame_id != frame or not valid_identity(msg.source_id):
         return False
-    if msg.header.stamp.sec < 0 or msg.header.stamp.nanosec >= 1000000000:
-        return False
-    if msg.header.stamp.sec == 0 and msg.header.stamp.nanosec == 0:
+    if not valid_stamp(msg):
         return False
     v = msg.direction_unit
     return (all(math.isfinite(x) for x in (v.x, v.y, v.z))
@@ -68,7 +79,9 @@ class TrackSoundServer(Node):
 
     def on_target(self, msg):
         with self.lock:
-            if msg.header.frame_id != self.frame:
+            if msg.header.frame_id != self.frame or not valid_stamp(msg):
+                return
+            if msg.source_id and not valid_identity(msg.source_id):
                 return
             if self.watermark is not None and stamp_key(msg) <= stamp_key(self.watermark):
                 return
@@ -93,7 +106,8 @@ class TrackSoundServer(Node):
 
     def on_goal(self, request):
         with self.lock:
-            if self.reserved or not 1 <= request.timeout_ms <= self.max_timeout:
+            if (self.reserved or not 1 <= request.timeout_ms <= self.max_timeout
+                    or (request.source_id and not valid_identity(request.source_id))):
                 return GoalResponse.REJECT
             self.reserved = True
             self.start_sequence = self.sequence

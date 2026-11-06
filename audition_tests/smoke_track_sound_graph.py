@@ -110,6 +110,19 @@ def main():
         assert canceled.status == GoalStatus.STATUS_CANCELED
         assert canceled.result.reason == "canceled"
         assert not start("", 0).accepted, "zero timeout accepted"
+        assert not start("x" * 257, 500).accepted, "oversized source ID accepted"
+        # A malformed invalidation with a far-future stamp must not poison
+        # subsequent valid source observations.
+        poisoned = target(valid=False, stamp_override=999999)
+        poisoned.header.stamp.nanosec = 1000000000
+        publish(poisoned)
+        feedback.clear()
+        recovery = start("tracked", 1200)
+        assert recovery.accepted
+        publish(target(generation=2))
+        recovered = await_future(node, recovery.get_result_async(), 5)
+        assert recovered.status == GoalStatus.STATUS_SUCCEEDED
+        assert recovered.result.updates == 1
         print("PASS: TrackSound DDS source filter, replay, revocation, feedback, timeout and cancellation")
         return 0
     except Exception as exc:
