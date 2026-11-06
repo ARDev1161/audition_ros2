@@ -80,9 +80,18 @@ def run():
         # restarts the count even when the source ID remains identical.
         handle = goal(6000)
         future = handle.get_result_async()
+        # Synchronize on the server's actual evidence acknowledgement before
+        # advancing the stamp. DDS delivery alone is not worker consumption.
+        def await_progress(expected, timeout=3.0):
+            deadline = time.monotonic() + timeout
+            while expected not in feedback_states and time.monotonic() < deadline:
+                rclpy.spin_once(node, timeout_sec=0.05)
+            assert expected in feedback_states, ("no confirmation progress", expected, feedback_states)
+
         send(target(200, 1))
+        await_progress("confirming_bearing:1/3")
         send(target(201, 1))
-        assert "confirming_bearing:2/3" in feedback_states, ("no confirmation progress", feedback_states)
+        await_progress("confirming_bearing:2/3")
         send(target(202, 2))
         assert not future.done(), "source generation transition reused prior evidence"
         assert feedback_states[-1] == "confirming_bearing:1/3", ("generation reset progress", feedback_states[-3:])
