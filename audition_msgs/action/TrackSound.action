@@ -1,0 +1,11 @@
+# Advisory continuous bearing tracking; never commands robot motion.
+string source_id
+uint32 timeout_ms
+---
+bool tracked
+uint32 updates
+string reason
+---
+audition_msgs/AttentionTarget target
+uint32 updates
+string state

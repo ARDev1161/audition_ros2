@@ -18,11 +18,13 @@ ament_target_dependencies(attention_tf_bridge rclcpp audition_msgs tf2 tf2_ros g
 install(TARGETS attention_manager attention_tf_bridge DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(PROGRAMS scripts/look_at_sound.py DESTINATION lib/${PROJECT_NAME} RENAME look_at_sound)
+install(PROGRAMS scripts/track_sound.py DESTINATION lib/${PROJECT_NAME} RENAME track_sound)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(look_at_sound_policy_test test/test_look_at_sound.py)
+  ament_add_pytest_test(track_sound_policy_test test/test_track_sound.py)
   ament_add_gtest(attention_tf_replay_fence_test test/test_attention_tf_replay_fence.cpp)
   target_compile_features(attention_tf_replay_fence_test PUBLIC cxx_std_17)
   target_include_directories(attention_tf_replay_fence_test PRIVATE include)

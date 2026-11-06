@@ -18,6 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/AcousticScene.msg"
   "msg/AttentionTarget.msg"
   "action/LookAtSound.action"
+  "action/TrackSound.action"
   "msg/LocalizedSource.msg"
   "msg/LocalizedSourceArray.msg"
   "msg/Transcript.msg"
