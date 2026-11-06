@@ -124,3 +124,15 @@ that a new source generation resets the evidence even if the source ID is
 unchanged, and that an angular jump restarts confirmation. The final goal
 succeeds only after three advancing, consistent observations. This validates
 ROS message transport and action outcomes, not microphone or actuator hardware.
+
+## Confirmation revocation fence (2026-11-06)
+
+A newer invalid or wrong-frame advisory revokes both the cached bearing and
+any partially accumulated multi-observation confirmation run. Subsequent
+valid bearings must start a new run; observations on opposite sides of a
+revocation cannot jointly satisfy `bearing_confirmations`. Stale or
+unstamped invalidations do not revoke the cache or evidence. The invalid
+advisory does not advance the valid-stamp watermark, so later valid bearings
+can recover. A deterministic Python regression covers stale invalidation,
+newer revocation and recovery. This is an advisory safety boundary, not
+publisher authentication, independent sensor validation or actuator control.
