@@ -238,3 +238,13 @@ an active newer incarnation of the same source, regardless of the invalidation
 timestamp. Current or newer generations may still revoke, and newer scene
 epochs remain global resets. This is a DDS ordering guard, not publisher
 authentication or a physical speaker identity guarantee.
+
+## Valid bearing tracker-generation rollback fence (2026-11-06)
+
+A valid, higher-stamped DDS observation from an older `source_generation`
+can no longer replace the cached bearing from a newer incarnation of the
+same `source_id` within the same scene. Rejected observations do not advance
+the watermark or ingress sequence, so the current tracker continues normally.
+A newer `scene_generation` starts a new epoch and can admit a lower tracker
+generation. The deterministic unit regression covers delayed valid replay,
+normal continuation and a scene reset. This does not authenticate publishers.

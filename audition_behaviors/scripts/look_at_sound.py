@@ -165,6 +165,14 @@ class LookAtSoundServer(Node):
                     self.goal_evidence_arrival = None
                     self.goal_evidence_start_arrival = None
                 return
+            # A delayed valid observation from an older tracker incarnation
+            # must not replace the current incarnation merely because its
+            # timestamp is later. A newer scene epoch starts a new identity.
+            cached = self.latest
+            if (cached is not None and msg.scene_generation == cached.scene_generation
+                    and msg.source_id == cached.source_id
+                    and msg.source_generation < cached.source_generation):
+                return
             if not newer_stamp(msg, self.last_stamp) or not newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                 return
             self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)

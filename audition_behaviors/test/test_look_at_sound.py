@@ -267,6 +267,49 @@ class FreshnessTest(unittest.TestCase):
         self.assertIsNone(server.latest)
         self.assertEqual(server.revoked_stamp, (8, 1, 0))
 
+    def test_retired_generation_valid_replay_cannot_replace_live_tracker(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+
+        server = Server()
+
+        def bearing(stamp, generation, scene=9):
+            msg = AttentionTarget()
+            msg.valid = True
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.source_id = "voice-a"
+            msg.source_generation = generation
+            msg.scene_generation = scene
+            msg.direction_unit.x = 1.0
+            return msg
+
+        current = bearing(10, 3)
+        module.LookAtSoundServer.on_target(server, current)
+        stale = bearing(100, 2)
+        module.LookAtSoundServer.on_target(server, stale)
+        self.assertIs(server.latest, current)
+        self.assertEqual(server.last_stamp, (9, 10, 0))
+        self.assertEqual(server.sequence, 1)
+        advancing = bearing(11, 3)
+        module.LookAtSoundServer.on_target(server, advancing)
+        self.assertIs(server.latest, advancing)
+        self.assertEqual(server.sequence, 2)
+        new_scene = bearing(1, 1, scene=10)
+        module.LookAtSoundServer.on_target(server, new_scene)
+        self.assertIs(server.latest, new_scene)
+        self.assertEqual(server.sequence, 3)
+
     def test_retired_source_generation_cannot_revoke_newer_tracker(self):
         import threading
 
