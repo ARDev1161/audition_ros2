@@ -123,7 +123,7 @@ def run():
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED
         assert outcome.result.acquired
         assert outcome.result.target.header.stamp.sec == 505
-                print("PASS: replay rejection, generation reset, angular continuity, revocation fencing")
+        print("PASS: replay rejection, generation reset, angular continuity, revocation fencing")
         return 0
     except Exception as exc:
         print("FAIL: LookAtSound confirmation graph:", repr(exc), file=sys.stderr)
