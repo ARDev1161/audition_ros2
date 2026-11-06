@@ -1146,3 +1146,9 @@ visuals. No motion or costmap commands are issued. Launch with
 the namespaced marker topic in RViz. Pure policy and live DDS smoke tests
 exercise retirement, replay, expiry, and recovery. This does not replace
 hardware bearing-accuracy evaluation.
+
+## M3 camera aim proposal adapter (2026-11-06)
+
+Optional, fail-closed pan/tilt *proposals* from TF2-transformed bearings,
+without publishing any camera/robot actuator commands. See
+[M3 camera aim proposals](M3_CAMERA_AIM.md). Hardware safety gates remain open.

@@ -1047,3 +1047,8 @@ launch/action regression for both azimuth and elevation exclusion and
 in-sector recovery. Finite-vector and monotonic arrival validation are
 covered by deterministic Python policy tests. See
 [M3 LookAtSound](M3_LOOK_AT_SOUND.md).
+
+## M3 camera aim advisory (2026-11-06)
+
+The opt-in ROS adapter emits validated, expiring camera pan/tilt proposals;
+no motion or camera hardware is driven. See [M3 camera aim](M3_CAMERA_AIM.md).
