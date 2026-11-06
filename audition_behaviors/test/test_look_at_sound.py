@@ -137,6 +137,7 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(server.sequence, 1)
         invalid = AttentionTarget()
         invalid.valid = False
+        invalid.header.frame_id = "base_link"
         invalid.header.stamp.sec = 20
         invalid.header.stamp.nanosec = 1
         module.LookAtSoundServer.on_target(server, invalid)
@@ -153,11 +154,13 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(server.sequence, 2)
         stale_invalid = AttentionTarget()
         stale_invalid.valid = False
+        stale_invalid.header.frame_id = "base_link"
         stale_invalid.header.stamp.sec = 19
         module.LookAtSoundServer.on_target(server, stale_invalid)
         self.assertIs(server.latest, newer)
         current_invalid = AttentionTarget()
         current_invalid.valid = False
+        current_invalid.header.frame_id = "base_link"
         current_invalid.header.stamp.sec = 22
         module.LookAtSoundServer.on_target(server, current_invalid)
         self.assertIsNone(server.latest)
@@ -214,6 +217,47 @@ class FreshnessTest(unittest.TestCase):
         module.LookAtSoundServer.on_target(server, observation(105, False))
         self.assertEqual(server.latest.header.stamp.sec, 106)
 
+    def test_foreign_frame_high_generation_cannot_poison_revocation(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+        valid = AttentionTarget()
+        valid.valid = True
+        valid.header.frame_id = "base_link"
+        valid.header.stamp.sec = 10
+        valid.direction_unit.x = 1.0
+        module.LookAtSoundServer.on_target(server, valid)
+        poisoned = AttentionTarget()
+        poisoned.valid = False
+        poisoned.header.frame_id = "map"
+        poisoned.scene_generation = 999999
+        poisoned.header.stamp.sec = 999999
+        module.LookAtSoundServer.on_target(server, poisoned)
+        self.assertIs(server.latest, valid)
+        self.assertIsNone(server.revoked_stamp)
+        recovered = AttentionTarget()
+        recovered.valid = True
+        recovered.header.frame_id = "base_link"
+        recovered.header.stamp.sec = 11
+        recovered.direction_unit.x = 1.0
+        module.LookAtSoundServer.on_target(server, recovered)
+        self.assertIs(server.latest, recovered)
+        self.assertEqual(server.sequence, 2)
+
     def test_newer_invalidation_breaks_confirmation_streak(self):
         import threading
 
@@ -238,12 +282,14 @@ class FreshnessTest(unittest.TestCase):
         server.goal_evidence_sequence = server.sequence
 
         stale = AttentionTarget()
+        stale.header.frame_id = "base_link"
         stale.header.stamp.sec = 9
         module.LookAtSoundServer.on_target(server, stale)
         self.assertEqual(server.goal_evidence_count, 2)
         self.assertIs(server.latest, self.target)
 
         revoked = AttentionTarget()
+        revoked.header.frame_id = "base_link"
         revoked.header.stamp.sec = 11
         module.LookAtSoundServer.on_target(server, revoked)
         self.assertIsNone(server.latest)
@@ -304,6 +350,7 @@ class FreshnessTest(unittest.TestCase):
             # acquiring the lock, then counted after an invalidation callback.
             old_candidate = server.latest
             revoked = AttentionTarget()
+        revoked.header.frame_id = "base_link"
             revoked.header.stamp.sec = 12
             module.LookAtSoundServer.on_target(server, revoked)
             self.assertIsNone(server.latest)

@@ -173,3 +173,13 @@ newer valid observation restores acquisition. This closes delayed-DDS
 resurrection of revoked observations, without requiring ROS clock comparisons
 or claiming publisher authentication. Pure policy and live DDS graph
 regressions cover delayed valid replay and recovery.
+
+## Foreign-frame revocation isolation (2026-11-06)
+
+A wrong-frame advisory is ignored before either the valid or revocation
+watermark is evaluated. Previously a `map`-frame invalid advisory with an
+arbitrarily high scene generation could permanently poison the revocation
+watermark of a `base_link` LookAtSound server. Only advisories explicitly
+in the configured target frame may revoke its cache or confirmation evidence.
+The ROS graph poison/recovery smoke and deterministic regression cover this.
+This is frame consistency, not DDS publisher authentication.
