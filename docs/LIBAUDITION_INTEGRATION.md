@@ -1132,3 +1132,17 @@ replay-after-expiry check cover this advisory-only protection. See
 ## M3 LookAtSound advisory acquisition (2026-11-05)
 
 An opt-in cancellable ROS 2 action returns a validated fresh TF2 bearing, not a robot motion result. See [LookAtSound contract](M3_LOOK_AT_SOUND.md).
+
+## M3 RViz bearing-ray visualizer (2026-11-06)
+
+An optional `attention_bearing_ray` ROS 2 node renders a finite unit bearing
+from `attention/target_base` as a `visualization_msgs/Marker` ARROW on
+`attention/bearing_marker`. The configured ray length is **illustrative**, not
+an estimated source range. The arrow is removed on explicit invalidation or
+steady-clock expiry, and replay/regressed source incarnations cannot restore
+stale markers. The marker ID is constant to replace, rather than accumulate,
+visuals. No motion or costmap commands are issued. Launch with
+`ros2 launch audition_bringup m3_attention_bearing_ray.launch.py` and select
+the namespaced marker topic in RViz. Pure policy and live DDS smoke tests
+exercise retirement, replay, expiry, and recovery. This does not replace
+hardware bearing-accuracy evaluation.
