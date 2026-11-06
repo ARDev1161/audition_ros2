@@ -202,3 +202,17 @@ Optional `maximum_confirmation_gap_ms` (0 disables, otherwise 1–10000 ms) limi
 ## Bounded total confirmation window (2026-11-06)
 
 Optional `maximum_confirmation_window_ms` (0 disables; otherwise 1–10000 ms) caps the monotonic ingress-time span from the **first** counted observation to the newest one in a confirmation run. If exceeded, the newest observation becomes the first of a new run. This complements the adjacent `maximum_confirmation_gap_ms` gate: many individually short gaps cannot accumulate evidence indefinitely. The first-observation anchor and window reset on invalidation, goal admission, and evidence discontinuity. Default 0 preserves earlier behavior. Deterministic regression covers short adjacent gaps exceeding the total window, restart and recovery. This remains advisory-only; it does not authorize robot motion.
+
+
+### Minimum independent confirmation spacing
+
+`minimum_confirmation_spacing_ms` (default `0`, disabled; accepted `0–10000`)
+requires successive accepted bearing confirmations to be separated by at
+least the configured monotonic arrival-time interval. Closely spaced DDS
+updates do not advance the confirmation count, even when their timestamps
+and sequence numbers differ. This prevents a burst of nearly identical
+observations from satisfying a multi-confirmation goal. The last **counted**
+observation remains the spacing reference; skipped samples do not extend it.
+The existing maximum gap and total window constraints still apply. This is
+an observation-cadence policy, not a claim of independent sensor evidence or
+physical localization confidence. The default preserves existing behavior.

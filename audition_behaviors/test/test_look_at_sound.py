@@ -530,6 +530,60 @@ class FreshnessTest(unittest.TestCase):
         self.assertIsNotNone(deliver(14, 11.0))
         self.assertEqual(server.goal_evidence_count, 3)
 
+    def test_minimum_confirmation_spacing_rejects_bursts(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            max_age = 0.5
+            confirmation_angle = 0.0
+            confirmation_gap = 0.0
+            confirmation_window = 0.0
+            confirmation_spacing = 0.2
+            confirmations = 3
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_start_sequence = 0
+            goal_stamp = None
+            goal_deadline = 100.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+            goal_evidence_arrival = None
+            goal_evidence_start_arrival = None
+            evaluate_candidate_locked = module.LookAtSoundServer.evaluate_candidate_locked
+
+        server = Server()
+
+        def deliver(stamp, arrival):
+            msg = AttentionTarget()
+            msg.valid = True
+            msg.source_id = "voice-a"
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.direction_unit.x = 1.0
+            with patch.object(module.time, "monotonic", return_value=arrival):
+                module.LookAtSoundServer.on_target(server, msg)
+            with server.lock:
+                return server.evaluate_candidate_locked(arrival + 0.01, "voice-a")
+
+        self.assertIsNone(deliver(10, 10.0))
+        self.assertIsNone(deliver(11, 10.05))
+        self.assertIsNone(deliver(12, 10.10))
+        self.assertEqual(server.goal_evidence_count, 1)
+        self.assertIsNone(deliver(13, 10.21))
+        self.assertEqual(server.goal_evidence_count, 2)
+        self.assertIsNone(deliver(14, 10.25))
+        self.assertEqual(server.goal_evidence_count, 2)
+        self.assertIsNotNone(deliver(15, 10.42))
+        self.assertEqual(server.goal_evidence_count, 3)
+
     def test_atomic_candidate_does_not_accept_expired_deadline(self):
         import threading
 

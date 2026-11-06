@@ -80,6 +80,7 @@ class LookAtSoundServer(Node):
         self.confirmation_angle = self.declare_parameter("maximum_confirmation_jump_rad", 0.0).value
         self.confirmation_gap = self.declare_parameter("maximum_confirmation_gap_ms", 0).value / 1000.0
         self.confirmation_window = self.declare_parameter("maximum_confirmation_window_ms", 0).value / 1000.0
+        self.confirmation_spacing = self.declare_parameter("minimum_confirmation_spacing_ms", 0).value / 1000.0
         if (not self.frame or self.frame.startswith("/") or self.max_age <= 0 or self.max_timeout < 1
                 or not isinstance(self.max_azimuth, (int, float)) or not math.isfinite(self.max_azimuth)
                 or not 0.0 <= self.max_azimuth <= math.pi
@@ -92,7 +93,9 @@ class LookAtSoundServer(Node):
                 or not math.isfinite(self.confirmation_gap)
                 or not 0.0 <= self.confirmation_gap <= 10.0
                 or not math.isfinite(self.confirmation_window)
-                or not 0.0 <= self.confirmation_window <= 10.0):
+                or not 0.0 <= self.confirmation_window <= 10.0
+                or not math.isfinite(self.confirmation_spacing)
+                or not 0.0 <= self.confirmation_spacing <= 10.0):
             raise ValueError("invalid LookAtSound parameters")
         self.lock = threading.Lock()
         self.latest = None
@@ -179,6 +182,15 @@ class LookAtSoundServer(Node):
                 self.goal_evidence_count = 0
                 self.goal_evidence = None
                 self.goal_evidence_start_arrival = None
+            # A burst of closely spaced DDS updates is one observation for
+            # confirmation purposes. Advance the processed sequence so a
+            # subsequent executor poll cannot count the same sample again.
+            if (self.goal_evidence_count > 0
+                    and self.confirmation_spacing > 0.0
+                    and self.goal_evidence_arrival is not None
+                    and self.arrival - self.goal_evidence_arrival < self.confirmation_spacing):
+                self.goal_evidence_sequence = sequence
+                return None
             if self.goal_evidence_count == 0:
                 self.goal_evidence_start_arrival = self.arrival
             self.goal_evidence_count, self.goal_evidence = accumulate_bearing_evidence(
