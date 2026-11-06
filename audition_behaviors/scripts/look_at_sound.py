@@ -139,6 +139,14 @@ class LookAtSoundServer(Node):
                     msg, self.frame, self.max_azimuth, self.max_elevation):
                 return
             if not msg.valid:
+                # A source-specific invalidation cannot revoke a different
+                # source in the same scene. A newer scene epoch is a global
+                # reset and must still revoke the old cached observation.
+                cached = self.latest
+                if (cached is not None and msg.scene_generation == cached.scene_generation
+                        and msg.source_id and cached.source_id
+                        and msg.source_id != cached.source_id):
+                    return
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                     self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)

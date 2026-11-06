@@ -216,3 +216,17 @@ observation remains the spacing reference; skipped samples do not extend it.
 The existing maximum gap and total window constraints still apply. This is
 an observation-cadence policy, not a claim of independent sensor evidence or
 physical localization confidence. The default preserves existing behavior.
+
+
+## Source-scoped revocation of cached bearings (2026-11-06)
+
+An explicit invalidation for source B in the **same scene generation** no
+longer erases a currently cached valid bearing for source A, nor its partial
+confirmation evidence. This also prevents an unrelated source's high-stamped
+invalidation from advancing the revocation watermark and blocking legitimate
+later observations of A. An invalidation for the cached source still revokes
+normally. A newer scene generation is treated as a global epoch change and
+may revoke the old cached bearing regardless of source identity. Empty source
+IDs retain conservative global invalidation semantics. Deterministic tests
+cover unrelated-source isolation, same-source revocation, recovery and a
+newer-epoch reset. This is not publisher authentication or motion safety.

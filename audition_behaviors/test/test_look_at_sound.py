@@ -217,6 +217,56 @@ class FreshnessTest(unittest.TestCase):
         module.LookAtSoundServer.on_target(server, observation(105, False))
         self.assertEqual(server.latest.header.stamp.sec, 106)
 
+    def test_other_source_invalidation_preserves_current_bearing(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+
+        def observation(stamp, source, generation=7, valid=True):
+            msg = AttentionTarget()
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.scene_generation = generation
+            msg.source_id = source
+            msg.valid = valid
+            msg.direction_unit.x = 1.0
+            return msg
+
+        active = observation(10, "speaker-a")
+        module.LookAtSoundServer.on_target(server, active)
+        server.goal_evidence = active
+        server.goal_evidence_count = 2
+        server.goal_evidence_sequence = server.sequence
+        module.LookAtSoundServer.on_target(server, observation(100, "speaker-b", valid=False))
+        self.assertIs(server.latest, active)
+        self.assertIsNone(server.revoked_stamp)
+        self.assertEqual(server.goal_evidence_count, 2)
+        module.LookAtSoundServer.on_target(server, observation(11, "speaker-a"))
+        self.assertEqual(server.sequence, 2)
+        module.LookAtSoundServer.on_target(server, observation(12, "speaker-a", valid=False))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.revoked_stamp, (7, 12, 0))
+        module.LookAtSoundServer.on_target(server, observation(13, "speaker-a"))
+        self.assertEqual(server.sequence, 3)
+        # A newer scene epoch is a global reset even when the source differs.
+        module.LookAtSoundServer.on_target(server, observation(1, "speaker-b", generation=8, valid=False))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.revoked_stamp, (8, 1, 0))
+
     def test_foreign_frame_high_generation_cannot_poison_revocation(self):
         import threading
 
