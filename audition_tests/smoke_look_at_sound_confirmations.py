@@ -56,9 +56,13 @@ def run():
             return handle
 
         def send(observation, repeats=3):
+            # Keep each observation visible to the action worker's 50 ms
+            # polling loop. DDS publish completion is not an acknowledgement
+            # that the action worker has counted that observation.
             for _ in range(repeats):
                 pub.publish(observation)
-                rclpy.spin_once(node, timeout_sec=0.09)
+                rclpy.spin_once(node, timeout_sec=0.12)
+            time.sleep(0.12)
 
         # Repeated DDS publications of one stamped observation count once.
         handle = goal(900)
@@ -69,7 +73,7 @@ def run():
 
         # Advancing stamps are necessary, but a changed source generation
         # restarts the count even when the source ID remains identical.
-        handle = goal(3500)
+        handle = goal(6000)
         future = handle.get_result_async()
         send(target(200, 1))
         send(target(201, 1))
