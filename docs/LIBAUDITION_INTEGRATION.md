@@ -1152,3 +1152,10 @@ hardware bearing-accuracy evaluation.
 Optional, fail-closed pan/tilt *proposals* from TF2-transformed bearings,
 without publishing any camera/robot actuator commands. See
 [M3 camera aim proposals](M3_CAMERA_AIM.md). Hardware safety gates remain open.
+
+
+## M3 camera admission policy
+
+See [M3 camera admission](M3_CAMERA_ADMISSION.md). This opt-in ROS-side
+advisory gate requires short-lived external enable heartbeats; it never drives
+hardware and does not duplicate libaudition algorithms.
