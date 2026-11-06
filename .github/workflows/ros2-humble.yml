@@ -164,6 +164,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M3 TrackSound live DDS/action tracking and cancellation
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=119
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_track_sound.launch.py \
+            audition_namespace:=robot_ci/track \
+            > /tmp/audition_track_sound.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_track_sound_graph.py; then
+            cat /tmp/audition_track_sound.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |

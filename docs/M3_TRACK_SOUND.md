@@ -27,3 +27,18 @@ range or 3-D position. The source must be transformed to `target_frame` by
 the existing TF2 bridge. Tests cover stamp replay, generation transitions,
 revocation and invalid geometry; real-array tracking accuracy and physical
 motion admission remain future M3 hardware gates.
+
+## Live ROS 2 action acceptance
+
+The Humble CI starts `m3_track_sound.launch.py` in a separate process and
+runs `audition_tests/smoke_track_sound_graph.py` on an isolated DDS domain.
+The test checks single-goal admission, source filtering, no pre-goal cache
+replay, strictly advancing evidence, generation regression, invalid frames,
+explicit retirement and subsequent new-generation recovery. It also checks
+feedback counts, timeout without fresh observations, cancellation and invalid
+goal rejection. The test publishes synthetic unit bearings and does **not**
+validate physical localization or command robot motion.
+
+Run the same graph test locally after `colcon build` and sourcing the
+workspace by starting the namespaced launch and executing the script with
+`ROS_DOMAIN_ID=119` in both terminals.
