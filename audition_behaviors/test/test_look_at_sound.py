@@ -350,7 +350,7 @@ class FreshnessTest(unittest.TestCase):
             # acquiring the lock, then counted after an invalidation callback.
             old_candidate = server.latest
             revoked = AttentionTarget()
-        revoked.header.frame_id = "base_link"
+            revoked.header.frame_id = "base_link"
             revoked.header.stamp.sec = 12
             module.LookAtSoundServer.on_target(server, revoked)
             self.assertIsNone(server.latest)
