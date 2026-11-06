@@ -94,7 +94,36 @@ def run():
         outcome = wait(node, future)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED
         assert outcome.result.acquired
-        print("PASS: replay rejection, generation reset, angular continuity")
+        # An invalidation newer than the current bearing must revoke a
+        # partially collected streak. A stale invalidation must not do so.
+        handle = goal(3500)
+        future = handle.get_result_async()
+        send(target(400, 2))
+        send(target(401, 2))
+        stale = target(399, 2)
+        stale.valid = False
+        send(stale)
+        send(target(402, 2))
+        outcome = wait(node, future)
+        assert outcome.status == GoalStatus.STATUS_SUCCEEDED, "stale invalidation revoked evidence"
+
+        handle = goal(3500)
+        future = handle.get_result_async()
+        send(target(500, 2))
+        send(target(501, 2))
+        revoked = target(502, 2)
+        revoked.valid = False
+        send(revoked)
+        send(target(503, 2))
+        assert not future.done(), "revoked evidence survived invalidation"
+        send(target(504, 2))
+        assert not future.done(), "two post-revocation observations are insufficient"
+        send(target(505, 2))
+        outcome = wait(node, future)
+        assert outcome.status == GoalStatus.STATUS_SUCCEEDED
+        assert outcome.result.acquired
+        assert outcome.result.target.header.stamp.sec == 505
+                print("PASS: replay rejection, generation reset, angular continuity, revocation fencing")
         return 0
     except Exception as exc:
         print("FAIL: LookAtSound confirmation graph:", repr(exc), file=sys.stderr)

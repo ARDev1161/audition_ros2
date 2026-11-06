@@ -150,3 +150,13 @@ still causes an aborted action, not success. Deterministic policy regressions
 cover a partially confirmed target revoked between worker polls, recovery
 requiring a full fresh streak, and expiration. The check does not authenticate
 publishers or guarantee that an actuator is safe to move.
+
+## Live DDS revocation acceptance
+
+The multi-confirmation Humble ROS graph probe also tests both sides of the
+invalidation boundary: an out-of-order invalid advisory must not erase two
+previous confirmations, whereas a newer invalid advisory must erase the
+partial streak. After the newer invalidation, three advancing, consistent
+bearings are required before the action succeeds. This is a live DDS/action
+regression for advisory cache semantics; it does not verify authenticated
+publishers, real microphones or actuator safety.
