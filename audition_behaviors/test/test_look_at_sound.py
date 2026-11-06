@@ -258,6 +258,66 @@ class FreshnessTest(unittest.TestCase):
         self.assertIs(server.latest, recovered)
         self.assertEqual(server.sequence, 2)
 
+    def test_rejected_valid_bearings_do_not_revoke_or_poison_watermarks(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.5
+            max_elevation = 0.5
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+
+        def bearing(stamp, x=1.0, y=0.0, valid=True):
+            msg = AttentionTarget()
+            msg.valid = valid
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.direction_unit.x = x
+            msg.direction_unit.y = y
+            return msg
+
+        first = bearing(10)
+        module.LookAtSoundServer.on_target(server, first)
+        server.goal_evidence = first
+        server.goal_evidence_count = 2
+        server.goal_evidence_sequence = server.sequence
+
+        # A syntactically valid out-of-sector observation must not revoke
+        # a good cache, even if it carries a far-future timestamp.
+        module.LookAtSoundServer.on_target(server, bearing(9999, 0.0, 1.0))
+        module.LookAtSoundServer.on_target(server, bearing(9998, 0.5, 0.0))
+        module.LookAtSoundServer.on_target(server, bearing(9997, float("nan")))
+        self.assertIs(server.latest, first)
+        self.assertIsNone(server.revoked_stamp)
+        self.assertEqual(server.goal_evidence_count, 2)
+        self.assertEqual(server.sequence, 1)
+
+        second = bearing(11)
+        module.LookAtSoundServer.on_target(server, second)
+        self.assertIs(server.latest, second)
+        self.assertEqual(server.sequence, 2)
+
+        # Explicit invalidation still revokes, and delayed valid replay
+        # cannot restore the invalidated observation.
+        module.LookAtSoundServer.on_target(server, bearing(13, valid=False))
+        self.assertIsNone(server.latest)
+        self.assertEqual(server.revoked_stamp, (0, 13, 0))
+        self.assertEqual(server.goal_evidence_count, 0)
+        module.LookAtSoundServer.on_target(server, bearing(12))
+        self.assertIsNone(server.latest)
+        module.LookAtSoundServer.on_target(server, bearing(14))
+        self.assertEqual(server.sequence, 3)
+
     def test_newer_invalidation_breaks_confirmation_streak(self):
         import threading
 

@@ -183,3 +183,14 @@ watermark of a `base_link` LookAtSound server. Only advisories explicitly
 in the configured target frame may revoke its cache or confirmation evidence.
 The ROS graph poison/recovery smoke and deterministic regression cover this.
 This is frame consistency, not DDS publisher authentication.
+
+## Explicit revocation versus rejected bearings (2026-11-06)
+
+Only a same-frame advisory with `valid=false` can revoke cached acquisition
+and confirmation evidence. A `valid=true` advisory rejected because its unit
+vector is malformed, non-finite or outside the configured angular sector is
+ignored without advancing either watermark. Otherwise a future-stamped
+out-of-sector observation could poison the revocation watermark and prevent
+normal acquisition. A deterministic regression covers sector rejection,
+non-unit and NaN vectors, recovery and explicit invalidation. This does not
+authenticate publishers or imply robot motion safety.

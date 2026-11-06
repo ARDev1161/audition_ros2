@@ -119,7 +119,15 @@ class LookAtSoundServer(Node):
             # or advance its revocation watermark (even with a future epoch).
             if msg.header.frame_id != self.frame:
                 return
-            if not admissible_observation(msg, self.frame, self.max_azimuth, self.max_elevation):
+            # A valid but unusable bearing (outside the configured sector,
+            # non-unit, or non-finite) is not a source-retirement signal.
+            # Only an explicit valid=false advisory may revoke evidence.
+            # Otherwise a high-stamped rejected bearing could permanently
+            # poison the revocation watermark and block later good targets.
+            if msg.valid and not admissible_observation(
+                    msg, self.frame, self.max_azimuth, self.max_elevation):
+                return
+            if not msg.valid:
                 # Ignore stale invalidations arriving after newer valid DDS data.
                 if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                     self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
