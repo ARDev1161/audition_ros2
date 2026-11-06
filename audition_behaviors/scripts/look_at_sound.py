@@ -95,6 +95,7 @@ class LookAtSoundServer(Node):
         self.sequence = 0
         self.goal_start_sequence = 0
         self.last_stamp = None
+        self.revoked_stamp = None
         self.goal_stamp = None
         self.goal_deadline = 0.0
         self.goal_evidence = None
@@ -116,7 +117,8 @@ class LookAtSoundServer(Node):
             # the watermark, allowing subsequent valid observations to recover.
             if not admissible_observation(msg, self.frame, self.max_azimuth, self.max_elevation):
                 # Ignore stale invalidations arriving after newer valid DDS data.
-                if newer_stamp(msg, self.last_stamp):
+                if newer_stamp(msg, self.last_stamp) and newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
+                    self.revoked_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
                     self.latest = None
                     # A newer revocation breaks the consecutive evidence run.
                     # Do not let observations on either side of it combine.
@@ -124,7 +126,7 @@ class LookAtSoundServer(Node):
                     self.goal_evidence_count = 0
                     self.goal_evidence_sequence = self.sequence
                 return
-            if not newer_stamp(msg, self.last_stamp):
+            if not newer_stamp(msg, self.last_stamp) or not newer_stamp(msg, getattr(self, 'revoked_stamp', None)):
                 return
             self.last_stamp = (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
             self.latest = msg

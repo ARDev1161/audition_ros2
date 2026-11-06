@@ -160,3 +160,16 @@ partial streak. After the newer invalidation, three advancing, consistent
 bearings are required before the action succeeds. This is a live DDS/action
 regression for advisory cache semantics; it does not verify authenticated
 publishers, real microphones or actuator safety.
+
+## Revocation timestamp watermark (2026-11-06)
+
+A newer invalidation now advances a separate **revocation watermark**, even
+though it does not advance the valid-observation watermark. Previously a
+valid DDS message delayed behind a newer invalidation could be accepted and
+repopulate the cache because only the last *valid* stamp was checked. A valid
+bearing must now advance past both watermarks; an invalidation must advance
+past both to revoke. Equal-stamp valid replay is rejected, and a strictly
+newer valid observation restores acquisition. This closes delayed-DDS
+resurrection of revoked observations, without requiring ROS clock comparisons
+or claiming publisher authentication. Pure policy and live DDS graph
+regressions cover delayed valid replay and recovery.

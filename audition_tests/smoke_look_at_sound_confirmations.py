@@ -118,6 +118,11 @@ def run():
         revoked = target(502, 2)
         revoked.valid = False
         send(revoked)
+        # Delayed valid data older than the invalidation must not be
+        # admitted or count as post-revocation evidence.
+        send(target(501, 2))
+        send(target(502, 2))
+        assert not future.done(), "revoked observation replay was admitted"
         send(target(503, 2))
         assert not future.done(), "revoked evidence survived invalidation"
         send(target(504, 2))

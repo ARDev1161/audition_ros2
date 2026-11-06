@@ -165,10 +165,53 @@ class FreshnessTest(unittest.TestCase):
         recovery.valid = True
         recovery.header.frame_id = "base_link"
         recovery.direction_unit.x = 1.0
-        recovery.header.stamp.sec = 22
+        recovery.header.stamp.sec = 23
         module.LookAtSoundServer.on_target(server, recovery)
         self.assertIs(server.latest, recovery)
         self.assertEqual(server.sequence, 3)
+
+    def test_revocation_watermark_rejects_delayed_valid_replay(self):
+        import threading
+
+        class Server:
+            lock = threading.Lock()
+            frame = "base_link"
+            max_azimuth = 0.0
+            max_elevation = 0.0
+            latest = None
+            last_stamp = None
+            revoked_stamp = None
+            sequence = 0
+            arrival = 0.0
+            goal_evidence = None
+            goal_evidence_count = 0
+            goal_evidence_sequence = 0
+
+        server = Server()
+        def observation(stamp, valid=True):
+            msg = AttentionTarget()
+            msg.valid = valid
+            msg.source_id = "voice-a"
+            msg.header.frame_id = "base_link"
+            msg.header.stamp.sec = stamp
+            msg.direction_unit.x = 1.0
+            return msg
+
+        module.LookAtSoundServer.on_target(server, observation(100))
+        module.LookAtSoundServer.on_target(server, observation(105, False))
+        self.assertEqual(server.revoked_stamp, (0, 105, 0))
+        self.assertIsNone(server.latest)
+        module.LookAtSoundServer.on_target(server, observation(103))
+        module.LookAtSoundServer.on_target(server, observation(105))
+        self.assertIsNone(server.latest, "delayed valid data resurrected revoked bearing")
+        self.assertEqual(server.sequence, 1)
+        module.LookAtSoundServer.on_target(server, observation(104, False))
+        self.assertEqual(server.revoked_stamp, (0, 105, 0))
+        module.LookAtSoundServer.on_target(server, observation(106))
+        self.assertEqual(server.sequence, 2)
+        self.assertEqual(server.latest.header.stamp.sec, 106)
+        module.LookAtSoundServer.on_target(server, observation(105, False))
+        self.assertEqual(server.latest.header.stamp.sec, 106)
 
     def test_newer_invalidation_breaks_confirmation_streak(self):
         import threading
