@@ -288,3 +288,15 @@ The probe verifies that a burst, a broken streak, and a too-long total window
 cannot acquire a target, while a fresh correctly spaced streak succeeds.
 The test uses synthetic DDS bearings and never commands motion; it is not a
 claim of independent acoustic evidence or hardware timing accuracy.
+
+## Action feedback confirmation progress (2026-11-06)
+
+The existing `LookAtSound.Feedback.state` field now reports
+`waiting_for_fresh_bearing` before the first counted observation and
+`confirming_bearing:N/M` while collecting `M` required confirmations.
+`N` is the current **counted** evidence (not DDS message count): replay,
+minimum-spacing rejection, generation changes, angular discontinuity and
+explicit revocation follow the same counter/reset rules as acquisition.
+This feedback describes advisory bearing acquisition only; it is not a
+physical turning-progress indicator. The pure policy regression covers
+formatting and the live ROS graph checks progress and generation reset.

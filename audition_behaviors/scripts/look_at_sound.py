@@ -68,6 +68,13 @@ def accumulate_bearing_evidence(count, previous, target, maximum_jump):
     return (min(100, count + 1), previous) if same else (1, target)
 
 
+def acquisition_feedback_state(count, required):
+    """Stable advisory progress; never claims physical motion."""
+    if count <= 0:
+        return "waiting_for_fresh_bearing"
+    return "confirming_bearing:{}/{}".format(min(count, required), required)
+
+
 class LookAtSoundServer(Node):
     def __init__(self):
         super().__init__("look_at_sound")
@@ -290,7 +297,9 @@ class LookAtSoundServer(Node):
                     goal.succeed()
                     return result
                 feedback = LookAtSound.Feedback()
-                feedback.state = "waiting_for_fresh_bearing"
+                with self.lock:
+                    evidence_count = self.goal_evidence_count
+                feedback.state = acquisition_feedback_state(evidence_count, self.confirmations)
                 goal.publish_feedback(feedback)
                 time.sleep(min(0.05, max(0.0, deadline - now)))
             result.reason = "shutdown"

@@ -47,11 +47,16 @@ def run():
             rclpy.spin_once(node, timeout_sec=0.05)
         assert pub.get_subscription_count() > 0
 
+        feedback_states = []
+
+        def feedback_callback(msg):
+            feedback_states.append(msg.feedback.state)
+
         def goal(timeout_ms):
             request = LookAtSound.Goal()
             request.source_id = "tracked"
             request.timeout_ms = timeout_ms
-            handle = wait(node, client.send_goal_async(request))
+            handle = wait(node, client.send_goal_async(request, feedback_callback=feedback_callback))
             assert handle.accepted
             return handle
 
@@ -77,8 +82,10 @@ def run():
         future = handle.get_result_async()
         send(target(200, 1))
         send(target(201, 1))
+        assert "confirming_bearing:2/3" in feedback_states, ("no confirmation progress", feedback_states)
         send(target(202, 2))
         assert not future.done(), "source generation transition reused prior evidence"
+        assert feedback_states[-1] == "confirming_bearing:1/3", ("generation reset progress", feedback_states[-3:])
         send(target(203, 2))
         assert not future.done(), "only two observations of new generation"
         send(target(204, 2))

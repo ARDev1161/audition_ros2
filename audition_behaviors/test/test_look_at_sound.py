@@ -25,6 +25,12 @@ class FreshnessTest(unittest.TestCase):
     def check(self, now=1.1, arrival=1.0, source="", frame="base_link"):
         return module.fresh_target(self.target, arrival, now, 0.5, source, frame)
 
+    def test_feedback_confirmation_progress(self):
+        self.assertEqual(module.acquisition_feedback_state(0, 3), "waiting_for_fresh_bearing")
+        self.assertEqual(module.acquisition_feedback_state(1, 3), "confirming_bearing:1/3")
+        self.assertEqual(module.acquisition_feedback_state(2, 3), "confirming_bearing:2/3")
+        self.assertEqual(module.acquisition_feedback_state(9, 3), "confirming_bearing:3/3")
+
     def test_confirmation_evidence(self):
         first = self.target
         second = AttentionTarget()
