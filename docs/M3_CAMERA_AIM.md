@@ -30,3 +30,14 @@ Deterministic geometry/policy tests and a live DDS graph smoke test cover
 axis signs, angular limits, replay, retirement, recovery and expiry. Actual
 camera kinematics, motor safety and hardware pointing accuracy remain
 **untested** and are not part of this advisory milestone.
+
+## M3 camera proposal admission hardening (2026-11-07)
+
+Source IDs are limited to 256 UTF-8 bytes before replay watermark
+mutation, including invalidation messages. An oversized ID is ignored and
+cannot suppress later legitimate observations. Tests also enforce generated
+ROS 2 `Vector3` float field types (integer assignments are rejected by
+Humble's Python message setters), and verify that a foreign source cannot
+retire the active proposal. The live DDS graph test injects an oversized
+high-stamp identity before a valid observation. This is application-level
+admission, not a DDS transport memory limit.

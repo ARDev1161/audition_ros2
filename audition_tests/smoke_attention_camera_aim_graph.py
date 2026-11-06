@@ -36,6 +36,11 @@ def main():
             while len(seen) < count and time.monotonic() < end:
                 rclpy.spin_once(node, timeout_sec=0.05)
             assert len(seen) >= count, ('missing proposal', count, len(seen))
+        # Oversized identities must not consume the watermark.
+        send(999, source='oversized' * 40)
+        for _ in range(4):
+            rclpy.spin_once(node, timeout_sec=0.05)
+        assert not seen, 'oversized source identity accepted'
         send(10, x=math.sqrt(0.5), y=math.sqrt(0.5))
         wait_for(1)
         assert seen[-1].valid and abs(seen[-1].pan_rad - math.pi / 4) < 0.01

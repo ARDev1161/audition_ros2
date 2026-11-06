@@ -19,9 +19,9 @@ def target(stamp, x=1.0, y=0.0, z=0.0, valid=True, source='a', generation=1, sce
     msg.scene_generation = scene
     msg.header.frame_id = 'base_link'
     msg.header.stamp.sec = stamp
-    msg.direction_unit.x = x
-    msg.direction_unit.y = y
-    msg.direction_unit.z = z
+    msg.direction_unit.x = float(x)
+    msg.direction_unit.y = float(y)
+    msg.direction_unit.z = float(z)
     return msg
 
 
@@ -83,6 +83,20 @@ class AimTests(unittest.TestCase):
         self.assertFalse(self.state.publisher.messages[-1].valid)
         self.send(target(11))
         self.assertTrue(self.state.publisher.messages[-1].valid)
+
+    def test_bounded_source_id_and_recovery(self):
+        self.send(target(10, source='a' * 257))
+        self.assertFalse(self.state.active)
+        self.assertIsNone(self.state.watermark)
+        self.send(target(11, source='a' * 256))
+        self.assertTrue(self.state.active)
+        self.assertEqual(self.state.publisher.messages[-1].source_id, 'a' * 256)
+
+    def test_foreign_retirement_cannot_revoke_active(self):
+        self.send(target(10, source='a'))
+        self.send(target(11, valid=False, source='b'))
+        self.assertTrue(self.state.active)
+        self.assertEqual(len(self.state.publisher.messages), 1)
 
     def test_expiry_once(self):
         self.send(target(10))
