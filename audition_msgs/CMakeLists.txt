@@ -20,6 +20,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CameraAimProposal.msg"
   "action/LookAtSound.action"
   "action/TrackSound.action"
+  "msg/BearingIntersectionCandidate.msg"
+  "msg/BearingIntersectionCandidateArray.msg"
   "msg/LocalizedSource.msg"
   "msg/LocalizedSourceArray.msg"
   "msg/Transcript.msg"
