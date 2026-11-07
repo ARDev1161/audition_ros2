@@ -276,3 +276,27 @@ A successful cross-check includes the audit file's SHA-256 for reproducible
 review; it **does not authenticate** who collected the metadata, verify
 the claimed physical subject or sensor geometry, or clear M4 acceptance.
 `physical_validation_claim` and `nav2_admission` remain false.
+
+### Independence of sessions, scenes and physical emitters
+
+A cross-checked acquisition manifest now supplies a separate
+`acquisition_provenance_audit.independence_summary` report. It counts distinct
+`session_id`, `scene_id`, and `subject_id` on **observable held-out
+trials** overall and within each declared stratum. Trials with unknowable
+ground truth are shown as excluded and never increase those counts.
+Different recording SHA-256s can belong to the same scene, while multiple
+events from one immutable recording must agree on their acquisition
+`session_id`; inconsistent session attribution is a hard input error.
+
+The CLI adds a distinct `insufficient_acquisition_groups:<stratum>:<field>`
+diagnostic blocker for any observable stratum with fewer than five claimed
+groups along **any** of these three dimensions. A five-recording sample
+obtained during five sessions in the *same room* is therefore still blocked
+for scene diversity. These group counts are conservative *minimum-data*
+checks, not statistical independence proofs: duplicate rooms under new
+identifiers, mutually dependent speakers, calibration drift and spurious
+metadata can still exist. Passing them never changes
+`independently_authenticated: false`,
+`physical_localization_accepted: false` or `nav2_admission: false`.
+This metadata audit does not replace an external physical truth collection,
+predeclared performance thresholds or the later M4 field acceptance.
