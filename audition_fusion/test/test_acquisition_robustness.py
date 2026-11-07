@@ -76,7 +76,10 @@ class AcquisitionRobustnessTests(unittest.TestCase):
             self.assertEqual(stats["paired_accuracy_delta"], 1.0)
             self.assertEqual(stats["leave_one_group_out_accuracy_range"], [1.0, 1.0])
             self.assertEqual(stats["leave_one_group_out_false_pair_range"], [-1.0, -1.0])
-        self.assertTrue(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
+        # Positive conditional LOO is not external proof of a field domain.
+        # The CLI must reject promotion when dataset origin is unverified.
+        self.assertIn("data_domain_unverified", report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
         self.assertFalse(report["safety_diagnostic"]["physical_localization_accepted"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
