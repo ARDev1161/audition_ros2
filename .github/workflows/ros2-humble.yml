@@ -94,6 +94,10 @@ jobs:
           comparison = report['paired_comparison']
           assert comparison['candidate'] == 'temporal_fusion'
           assert comparison['positive_gain_validated'] is False
+          clusters = report['clustered_comparison']
+          assert clusters['physical_validation_claim'] is False
+          assert clusters['recording_independence_only'] is True
+          assert clusters['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
           instant = comparison['baseline_comparisons']['instant_fusion']
           assert instant['observable_trials'] == 3
           assert instant['candidate_false_pairs'] == 0
