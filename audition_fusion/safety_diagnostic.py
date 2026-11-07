@@ -63,6 +63,7 @@ def provenance_blockers(manifest):
     if not isinstance(manifest, dict) or set(manifest) != {"trials"} or not isinstance(manifest["trials"], list):
         return ["provenance_manifest_missing_or_invalid"]
     seen = set()
+    recording_sessions = {}
     splits = {"recording_sha256": {}, "session_id": {}, "scene_id": {}, "subject_id": {}}
     problems = []
     for row in manifest["trials"]:
@@ -88,6 +89,14 @@ def provenance_blockers(manifest):
             previous = groups.setdefault(value, split)
             if previous != split:
                 problems.append("provenance_split_leak:" + field)
+        # One immutable recording cannot originate from two acquisition
+        # sessions. Subjects may legitimately differ within a recording.
+        digest, session = row["recording_sha256"], row["session_id"]
+        if (isinstance(digest, str) and isinstance(session, str)
+                and len(digest) == 64 and session.strip()):
+            existing = recording_sessions.setdefault(digest, session)
+            if existing != session:
+                problems.append("provenance_recording_session_conflict")
     if not seen:
         problems.append("provenance_no_trials")
     return sorted(set(problems))
