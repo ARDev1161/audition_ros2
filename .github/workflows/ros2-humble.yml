@@ -93,6 +93,43 @@ jobs:
           assert report['physical_validation_claim'] is False
           PY
 
+      - name: M4 simulator export ingestion and verified artifact hashes
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_simulation_import.py' -v
+          python3 - <<'PY'
+          import hashlib, json, pathlib, tempfile, subprocess, sys
+          with tempfile.TemporaryDirectory() as work:
+              root=pathlib.Path(work)
+              recording=root/'capture.dat'
+              recording.write_bytes(b'Synthetic contract artifact, not audio')
+              sha=hashlib.sha256(recording.read_bytes()).hexdigest()
+              candidate={"audio_id":"s1","radar_id":"r1"}
+              trial={"trial_id":"one","stratum":"smoke",
+                     "truth_source":"simulator_authoritative",
+                     "truth":{"observable":True,"pair":candidate},
+                     "predictions":{name:{"decision":"pair","pair":candidate}
+                                    for name in ("audio_only","radar_only",
+                                                 "instant_fusion","temporal_fusion")}}
+              export={"format":"audition.simulation-export.v1",
+                      "domain":"simulation","dataset_id":"synthetic-cli-test",
+                      "scenarios":[{"scenario_id":"s","split":"held_out",
+                                    "recording":"capture.dat",
+                                    "recording_sha256":sha,"trials":[trial]}]}
+              source=root/'export.json'
+              source.write_text(json.dumps(export),encoding='utf-8')
+              manifest=root/'manifest.json'
+              subprocess.run([sys.executable,
+                  'audition_fusion/benchmarks/import_simulation_export.py',
+                  str(source),'--artifacts-root',str(root),'--out',str(manifest)],
+                  check=True)
+              report=subprocess.check_output([sys.executable,
+                  'audition_fusion/benchmarks/evaluate_field_manifest.py',
+                  str(manifest)])
+              result=json.loads(report)
+              assert result["strategies"]["temporal_fusion"]["tp"] == 1
+              assert result["physical_validation_claim"] is False
+          PY
+
       - name: M4 adverse conditional geometry audit (known blind spots)
         run: |
           python3 audition_fusion/benchmarks/conditional_geometry_adversarial.py
