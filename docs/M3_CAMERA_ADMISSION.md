@@ -35,3 +35,6 @@ retirement, malformed identity, frame and angle bounds. Hardware validation
 remains outside this milestone.
 
 An explicit retirement from a foreign source or older tracker generation is ignored while a different active aim exists; it cannot poison the replay watermark. This is a ROS policy gate, not a cryptographic authentication mechanism.
+
+Live ROS 2 DDS acceptance additionally verifies default-deny, explicit supervisor
+revocation, replay rejection and heartbeat expiry on the real node graph.

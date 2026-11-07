@@ -217,6 +217,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M3 camera admission authorization and fail-closed lifecycle over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=122
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_attention_camera_admission.launch.py \
+            audition_namespace:=robot_ci/admission authorization_timeout_ms:=500 \
+            > /tmp/audition_camera_admission.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_camera_admission_graph.py; then
+            cat /tmp/audition_camera_admission.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |
