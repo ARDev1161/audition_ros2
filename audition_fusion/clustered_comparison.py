@@ -27,6 +27,8 @@ def _stats(items):
 
 
 def _add(values):
+    if not values:
+        return (0, 0, 0)
     return tuple(sum(x) for x in zip(*values))
 
 
