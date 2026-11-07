@@ -11,6 +11,8 @@ def generate_launch_description():
         DeclareLaunchArgument('audition_namespace', default_value='audition'),
         DeclareLaunchArgument('world_frame', default_value='odom'),
         DeclareLaunchArgument('pose_type', default_value='odometry'),
+        DeclareLaunchArgument('require_tf_consistency', default_value='false'),
+        DeclareLaunchArgument('microphone_frame', default_value='microphone_array'),
         Node(
             package='audition_fusion',
             executable='pose_evidence_node',
@@ -18,6 +20,8 @@ def generate_launch_description():
             parameters=[{
                 'world_frame': LaunchConfiguration('world_frame'),
                 'pose_type': LaunchConfiguration('pose_type'),
+                'require_tf_consistency': ParameterValue(LaunchConfiguration('require_tf_consistency'), value_type=bool),
+                'microphone_frame': LaunchConfiguration('microphone_frame'),
                 'maximum_pose_age_ms': 500,
                 'maximum_pose_skew_ms': 50,
                 'pose_buffer_capacity': 32,
