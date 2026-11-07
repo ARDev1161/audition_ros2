@@ -92,9 +92,20 @@ def run():
         await_progress("confirming_bearing:1/3")
         send(target(201, 1))
         await_progress("confirming_bearing:2/3")
+        before_generation = len(feedback_states)
         send(target(202, 2))
+        # The action worker consumes DDS asynchronously. Wait for a *new*
+        # acknowledgement rather than testing the most recent callback
+        # immediately after publishing.
+        deadline = time.monotonic() + 3.0
+        while (not any(state == "confirming_bearing:1/3"
+                       for state in feedback_states[before_generation:])
+               and time.monotonic() < deadline):
+            rclpy.spin_once(node, timeout_sec=0.05)
         assert not future.done(), "source generation transition reused prior evidence"
-        assert feedback_states[-1] == "confirming_bearing:1/3", ("generation reset progress", feedback_states[-3:])
+        assert any(state == "confirming_bearing:1/3"
+                   for state in feedback_states[before_generation:]), (
+                       "generation reset progress", feedback_states[before_generation:])
         send(target(203, 2))
         assert not future.done(), "only two observations of new generation"
         send(target(204, 2))
