@@ -9,7 +9,8 @@ import json
 import pathlib
 
 from safety_diagnostic import provenance_blockers
-from acquisition_independence import summarize
+from acquisition_independence import summarize, paired_group_sensitivity
+from field_evaluation import validate
 
 MAX_AUDIT_BYTES = 4 * 1024 * 1024
 
@@ -63,6 +64,8 @@ def audit_acquisition_provenance(path, dataset):
         "crosscheck_passed": True,
         "trial_count": len(expected),
         "independence_summary": summarize(dataset, metadata["trials"]),
+        "paired_group_sensitivity": paired_group_sensitivity(
+            validate(dataset), metadata["trials"]),
         "provenance_file_name": pathlib.Path(path).name,
         "provenance_sha256": hashlib.sha256(raw).hexdigest(),
         "independently_authenticated": False,
