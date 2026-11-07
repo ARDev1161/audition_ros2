@@ -24,6 +24,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RadarTrackArray.msg"
   "msg/RadarObservation.msg"
   "msg/RadarObservationArray.msg"
+  "msg/RadarAudioCandidate.msg"
+  "msg/RadarAudioCandidateArray.msg"
   "msg/VisualBearingObservation.msg"
   "msg/VisualBearingObservationArray.msg"
   "msg/AudioVisualPairHypothesis.msg"
