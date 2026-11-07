@@ -60,6 +60,7 @@ jobs:
       - name: M4 reproducible adverse AV association benchmark (diagnostic only)
         run: |
           python3 audition_fusion/benchmarks/av_association_benchmark.py
+          python3 -m unittest discover -s audition_fusion/test -p 'test_av_groundtruth.py' -v
 
       - name: Validate launch Python syntax
         run: |
