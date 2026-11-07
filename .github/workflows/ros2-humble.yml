@@ -239,6 +239,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M4 timestamped TF2 three-view diagnostic candidates over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=123
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_bearing_candidates.launch.py \
+            audition_namespace:=robot_ci/m4 world_frame:=odom \
+            > /tmp/audition_m4_candidates.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_bearing_candidates.py; then
+            cat /tmp/audition_m4_candidates.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |
