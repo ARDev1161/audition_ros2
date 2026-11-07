@@ -325,6 +325,8 @@ def test_m4_av_visual_and_pair_contracts_round_trip():
     pair.audio_source_generation = 4
     pair.visual_track_generation = 7
     pair.unique_match = False
+    pair.supporting_synchronized_observations = 2
+    pair.temporally_confirmed = False
     pair.angle_difference_rad = 0.1
     pair.normalized_residual = 1.5
     pairs = AudioVisualPairHypothesisArray()
@@ -334,4 +336,6 @@ def test_m4_av_visual_and_pair_contracts_round_trip():
     back = deserialize_message(serialize_message(pairs), AudioVisualPairHypothesisArray)
     assert len(back.hypotheses) == 1
     assert not back.hypotheses[0].unique_match
+    assert back.hypotheses[0].supporting_synchronized_observations == 2
+    assert not back.hypotheses[0].temporally_confirmed
     assert back.hypotheses[0].normalized_residual == pytest.approx(1.5)

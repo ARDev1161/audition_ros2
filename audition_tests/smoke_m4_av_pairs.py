@@ -113,6 +113,18 @@ def main():
         first=find(lambda m:len(m.hypotheses)==1 and
                    m.hypotheses[0].visual_track_id=='face-a')
         assert first.hypotheses[0].unique_match, 'single reciprocal pair not unique'
+        assert first.hypotheses[0].supporting_synchronized_observations == 1
+        assert not first.hypotheses[0].temporally_confirmed
+
+        for seq in [2, 3]:
+            stamp=node.get_clock().now().to_msg()
+            prepare_tf(stamp)
+            acoustic.publish(audio_msg(seq, stamp))
+            visual.publish(vision_msg(seq, stamp, ['face-a']))
+            current=find(lambda m: any(
+                p.visual_track_id == 'face-a' and
+                p.supporting_synchronized_observations == seq for p in m.hypotheses))
+            assert current.hypotheses[0].temporally_confirmed == (seq == 3)
         assert first.audio_scene_session_id==AUDIO_EPOCH
         assert first.vision_session_id==VISION_EPOCH
         assert first.hypotheses[0].sensor_baseline_m<.1
@@ -124,6 +136,7 @@ def main():
         visual.publish(vision_msg(2,stamp,['face-a','face-b'],local_yaw=-math.pi/2))
         ambiguous=find(lambda m:len(m.hypotheses)==2)
         assert not any(p.unique_match for p in ambiguous.hypotheses), 'ambiguity concealed'
+        assert not any(p.temporally_confirmed for p in ambiguous.hypotheses), 'stale confirmation'
 
         stamp=node.get_clock().now().to_msg()
         visual.publish(vision_msg(3,stamp,[]))

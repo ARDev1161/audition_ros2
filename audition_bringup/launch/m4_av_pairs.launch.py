@@ -15,6 +15,9 @@ def generate_launch_description():
         DeclareLaunchArgument('maximum_sensor_separation_m',default_value='0.2'),
         DeclareLaunchArgument('maximum_pair_angle_rad',default_value='0.30'),
         DeclareLaunchArgument('minimum_assumed_range_m',default_value='1.0'),
+        DeclareLaunchArgument('minimum_pair_confirmations',default_value='3'),
+        DeclareLaunchArgument('minimum_pair_spacing_ms',default_value='100'),
+        DeclareLaunchArgument('maximum_pair_gap_ms',default_value='600'),
         Node(package='audition_fusion',executable='av_pair_node',
              namespace=LaunchConfiguration('audition_namespace'),
              parameters=[{
@@ -24,6 +27,9 @@ def generate_launch_description():
                  'maximum_sensor_separation_m':ParameterValue(LaunchConfiguration('maximum_sensor_separation_m'),value_type=float),
                  'maximum_pair_angle_rad':ParameterValue(LaunchConfiguration('maximum_pair_angle_rad'),value_type=float),
                  'minimum_assumed_range_m':ParameterValue(LaunchConfiguration('minimum_assumed_range_m'),value_type=float),
+                 'minimum_pair_confirmations':ParameterValue(LaunchConfiguration('minimum_pair_confirmations'),value_type=int),
+                 'minimum_pair_spacing_ms':ParameterValue(LaunchConfiguration('minimum_pair_spacing_ms'),value_type=int),
+                 'maximum_pair_gap_ms':ParameterValue(LaunchConfiguration('maximum_pair_gap_ms'),value_type=int),
              }],
              output='screen'),
     ])
