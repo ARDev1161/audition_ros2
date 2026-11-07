@@ -106,6 +106,39 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                       report["safety_diagnostic"]["blockers"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
+    def test_all_splits_cannot_launder_development_only_adverse_coverage(self):
+        # Even with --all-splits, required adverse conditions need held-out
+        # observable truth, not a development-only sample.
+        source = dict(self.dataset["trials"][0])
+        source["trial_id"] = "development-only-reflection"
+        source["stratum"] = "reflection"
+        source["split"] = "development"
+        source["recording_sha256"] = "e" * 64
+        self.dataset["trials"].append(source)
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--all-splits", "--required-stratum", "reflection",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn("required_stratum_missing_or_unobservable:reflection",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertEqual(report["required_strata_held_out_coverage"]["reflection"],
+                         {"observable_positive": 0, "observable_negative": 0,
+                          "unobservable": 0})
+
+    def test_required_stratum_with_unknown_truth_only_is_not_covered(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "occluded",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn("required_stratum_missing_or_unobservable:occluded",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertEqual(report["required_strata_held_out_coverage"]["occluded"]["unobservable"], 1)
+
     def test_invalid_required_stratum_is_input_error(self):
         cmd = [sys.executable, str(SCRIPT), str(self.manifest),
                "--required-stratum", " bad ", "--require-diagnostic-eligibility"]

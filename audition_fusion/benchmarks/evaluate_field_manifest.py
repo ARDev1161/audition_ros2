@@ -69,16 +69,37 @@ def main(argv=None):
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
         if args.required_stratum:
-            observed = report["paired_comparison"]["per_stratum"]
+            # Coverage must always be measured on held-out independent truth,
+            # even when --all-splits is used to print development diagnostics.
+            # Otherwise development-only examples could satisfy a required
+            # adverse condition and silently launder it into acceptance.
+            held_out_coverage = {}
+            for trial in data["trials"]:
+                if trial["split"] != "held_out":
+                    continue
+                entry = held_out_coverage.setdefault(trial["stratum"], {
+                    "observable_positive": 0, "observable_negative": 0,
+                    "unobservable": 0})
+                if not trial["truth"]["observable"]:
+                    entry["unobservable"] += 1
+                elif trial["truth"]["pair"] is None:
+                    entry["observable_negative"] += 1
+                else:
+                    entry["observable_positive"] += 1
             missing = set()
             for name in args.required_stratum:
                 if not name or name.strip() != name or len(name) > 128:
                     raise ValueError("invalid required stratum name")
-                if name not in observed or not any(
-                        counts["observable_trials"] > 0
-                        for counts in observed[name].values()):
+                counts = held_out_coverage.get(name)
+                if counts is None or not (counts["observable_positive"]
+                                          + counts["observable_negative"]):
                     missing.add(name)
             report["required_strata"] = sorted(set(args.required_stratum))
+            report["required_strata_held_out_coverage"] = {
+                name: held_out_coverage.get(name, {
+                    "observable_positive": 0, "observable_negative": 0,
+                    "unobservable": 0})
+                for name in report["required_strata"]}
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

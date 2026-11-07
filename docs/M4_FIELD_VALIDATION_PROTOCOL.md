@@ -499,3 +499,9 @@ A missing stratum or one without observable independent truth adds
 `--require-diagnostic-eligibility` then exits 3 while preserving the JSON
 report. Invalid names are rejected as input errors (exit 2). This is a
 coverage gate, not evidence of physical localization or Nav2 admission.
+
+Required-stratum coverage is always computed from **held-out** independently
+observable truth, even with `--all-splits`. The JSON report now includes
+`required_strata_held_out_coverage` with positive, negative, and unknown
+truth counts. Development-only and unknown-truth-only adverse conditions
+remain blocked. These counts do not establish provenance authenticity.
