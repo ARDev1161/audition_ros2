@@ -53,12 +53,12 @@ def main():
         m.pose.covariance = cov
         poses.publish(m)
 
-    def scene(stamp):
+    def scene(stamp, *, sequence=1, session=SESSION):
         m = AcousticSourceArray()
         m.header.frame_id = 'microphone_array'
         m.header.stamp = stamp
-        m.scene_session_id = SESSION
-        m.sequence_number = 1
+        m.scene_session_id = session
+        m.sequence_number = sequence
         s = AcousticSource()
         s.header = m.header
         s.source_id = 'sound'
@@ -93,13 +93,33 @@ def main():
         pose(stamp)
         wait_counter('accepted_pose_samples', accepted + 1)
         matched = int(counters()['matching_bearings'])
-        scene(stamp)
+        scene(stamp, sequence=2)
         wait_counter('matching_bearings', matched + 1)
+
+        # A replay cannot inflate the matches, even with a good pose.
+        replays = int(counters()['replayed_scenes'])
+        scene(stamp, sequence=2)
+        wait_counter('replayed_scenes', replays + 1)
+        assert int(counters()['matching_bearings']) == matched + 1
+
+        # New scene incarnation must revoke the previous pose buffer.
+        restarts = int(counters()['session_restarts'])
+        missing = int(counters()['unmatched_bearings'])
+        scene(node.get_clock().now().to_msg(), sequence=1, session='cd' * 16)
+        wait_counter('session_restarts', restarts + 1)
+        wait_counter('unmatched_bearings', missing + 1)
+        assert int(counters()['buffered_pose_samples']) == 0
+
+        # Replayed former incarnation remains permanently inadmissible
+        # within bounded retirement history.
+        replays = int(counters()['replayed_scenes'])
+        scene(node.get_clock().now().to_msg(), sequence=3)
+        wait_counter('replayed_scenes', replays + 1)
 
         # Check the diagnostic contract: nothing is a localized source.
         assert counters()['world_frame'] == 'odom'
-        assert int(counters()['buffered_pose_samples']) >= 1
-        print('PASS: DDS pose ingestion, invalid frame refusal, missing pose, timestamp match')
+        assert int(counters()['buffered_pose_samples']) == 0
+        print('PASS: DDS pose admission, replay/session fencing and revoked pose evidence')
         return 0
     except Exception as exc:
         print('FAIL: pose evidence DDS smoke:', repr(exc), file=sys.stderr)
