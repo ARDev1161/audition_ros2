@@ -27,6 +27,18 @@ def reject_constant(value):
     raise ValueError("invalid nonfinite JSON number: " + value)
 
 
+def apply_diagnostic_blockers(report, reasons):
+    """Keep all diagnostic verdict fields consistent after external audits."""
+    safety = report["safety_diagnostic"]
+    safety["blockers"] = sorted(set(safety["blockers"]) | set(reasons))
+    eligible = not safety["blockers"]
+    safety["diagnostic_promotion_eligible"] = eligible
+    safety["no_observed_safety_regression"] = eligible
+    # Never upgrade diagnostic evidence to physical or navigation admission.
+    safety["physical_localization_accepted"] = False
+    safety["nav2_admission"] = False
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=pathlib.Path)
@@ -58,15 +70,9 @@ def main(argv=None):
         # manifest must not launder simulated observations into field evidence.
         # Conversely an unverified domain cannot be promoted as field evidence.
         if report["data_domain"] == "simulation":
-            report["safety_diagnostic"]["blockers"] = sorted(set(
-                report["safety_diagnostic"]["blockers"]) |
-                {"simulation_only_evidence"})
-            report["safety_diagnostic"]["diagnostic_promotion_eligible"] = False
+            apply_diagnostic_blockers(report, {"simulation_only_evidence"})
         else:
-            report["safety_diagnostic"]["blockers"] = sorted(set(
-                report["safety_diagnostic"]["blockers"]) |
-                {"data_domain_unverified"})
-            report["safety_diagnostic"]["diagnostic_promotion_eligible"] = False
+            apply_diagnostic_blockers(report, {"data_domain_unverified"})
         if (args.recording_index is None) != (args.recordings_root is None):
             raise ValueError("--recording-index and --recordings-root must both be supplied")
         if args.recording_index is not None:
@@ -79,10 +85,7 @@ def main(argv=None):
                 "origin_authenticated": False,
                 "physical_validation_claim": False,
             }
-            safety = report["safety_diagnostic"]
-            safety["blockers"] = sorted(set(safety["blockers"]) |
-                                        {"recording_bytes_not_verified"})
-            safety["diagnostic_promotion_eligible"] = False
+            apply_diagnostic_blockers(report, {"recording_bytes_not_verified"})
         if args.acquisition_provenance is not None:
             audit = audit_acquisition_provenance(args.acquisition_provenance, data)
             report["acquisition_provenance_audit"] = audit
@@ -90,9 +93,7 @@ def main(argv=None):
             new_blockers += group_robustness_blockers(
                 audit["paired_group_sensitivity"])
             if new_blockers:
-                safety = report["safety_diagnostic"]
-                safety["blockers"] = sorted(set(safety["blockers"]) | set(new_blockers))
-                safety["diagnostic_promotion_eligible"] = False
+                apply_diagnostic_blockers(report, new_blockers)
         else:
             report["acquisition_provenance_audit"] = {
                 "status": "not_provided",
@@ -103,10 +104,7 @@ def main(argv=None):
             # The standalone evaluator can still diagnose synthetic fixtures,
             # but a CLI score without external collection metadata is never
             # eligible even for diagnostic promotion.
-            safety = report["safety_diagnostic"]
-            safety["blockers"] = sorted(set(safety["blockers"]) |
-                                        {"acquisition_provenance_not_supplied"})
-            safety["diagnostic_promotion_eligible"] = False
+            apply_diagnostic_blockers(report, {"acquisition_provenance_not_supplied"})
         report["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
         report["manifest_name"] = args.manifest.name
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))

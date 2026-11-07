@@ -453,3 +453,14 @@ observable ground truth, development data inclusion, or failure to show a
 pooled gain against a baseline. A clean observable subset must not turn this
 flag true while its evidence gate fails. This flag is still diagnostic only;
 `physical_localization_accepted` and `nav2_admission` remain false.
+
+
+### Consistent CLI diagnostic verdicts
+
+Every additional CLI-level blocker (unverified data domain, simulation-only
+lineage, absent recording bytes, missing acquisition metadata or acquisition
+group regression) now updates **both** `diagnostic_promotion_eligible` and
+`no_observed_safety_regression` to false. The standalone in-memory scorer
+may still report a clean synthetic comparison, but the full CLI must not
+claim clean safety evidence when its external audits fail or are absent.
+Neither field authorizes physical localization or Nav2 admission.

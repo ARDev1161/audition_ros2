@@ -66,6 +66,7 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(cli.returncode, 0, cli.stderr)
         report = json.loads(cli.stdout)
         self.assertIn("data_domain_unverified", report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["no_observed_safety_regression"])
         self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
@@ -87,6 +88,7 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(report["data_domain"], "simulation")
         self.assertTrue(report["acquisition_provenance_audit"]["crosscheck_passed"])
         self.assertIn("simulation_only_evidence", report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["no_observed_safety_regression"])
         self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
         self.assertFalse(report["safety_diagnostic"]["physical_localization_accepted"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
@@ -99,6 +101,7 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
         self.assertIn("acquisition_provenance_not_supplied",
                       report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["no_observed_safety_regression"])
 
     def test_missing_extra_or_mutated_trial_rejected(self):
         variants = [
