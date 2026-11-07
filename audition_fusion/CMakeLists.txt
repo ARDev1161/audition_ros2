@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(audition_fusion VERSION 0.1.0)
 find_package(ament_cmake REQUIRED)
+install(PROGRAMS scripts/av_pair_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME av_pair_node)
 install(PROGRAMS scripts/bearing_candidate_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME bearing_candidate_node)
 install(FILES geometry.py association.py av_matching.py DESTINATION lib/${PROJECT_NAME})
