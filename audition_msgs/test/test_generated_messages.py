@@ -372,3 +372,28 @@ def test_m4_radar_sensor_and_diagnostic_contracts_round_trip():
     assert returned.header.frame_id == "odom"
     assert returned.observations[0].radar_track_id == "radar-7"
     assert returned.observations[0].conditional_position_covariance_m2[8] == pytest.approx(.16)
+
+
+def test_m4_radar_audio_candidates_are_diagnostic_and_serializable():
+    from audition_msgs.msg import RadarAudioCandidate, RadarAudioCandidateArray
+    pair = RadarAudioCandidate()
+    pair.audio_source_id = "sound"
+    pair.audio_source_generation = 2
+    pair.radar_track_id = "radar-object"
+    pair.radar_track_generation = 3
+    pair.radar_range_along_audio_ray_m = 3.2
+    pair.unique_match = True
+    pair.supporting_synchronized_observations = 3
+    pair.temporally_correlated = True
+    arr = RadarAudioCandidateArray()
+    arr.header.frame_id = "odom"
+    arr.audio_scene_session_id = "a"*32
+    arr.radar_session_id = "e"*32
+    arr.sequence_number = 7
+    arr.candidates = [pair]
+    restored = deserialize_message(serialize_message(arr), RadarAudioCandidateArray)
+    assert restored.sequence_number == 7
+    assert restored.candidates[0].radar_track_id == "radar-object"
+    assert restored.candidates[0].temporally_correlated
+    assert restored.candidates[0].radar_range_along_audio_ray_m == pytest.approx(3.2)
+    assert not hasattr(restored.candidates[0], "localized_position")
