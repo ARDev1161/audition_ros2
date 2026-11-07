@@ -44,6 +44,45 @@ jobs:
           assert 'recording_bytes_not_verified' in safety['blockers']
           assert 'data_domain_unverified' in safety['blockers']
           PY
+      - name: Enforce strict fail-closed CLI exit codes and preserve blocker report
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          import tempfile
+
+          script = 'audition_fusion/benchmarks/evaluate_field_manifest.py'
+          fixture = 'audition_fusion/test/fixtures/m4_field_contract_example.json'
+          baseline = subprocess.run([sys.executable, script, fixture],
+                                    text=True, capture_output=True)
+          assert baseline.returncode == 0, baseline.stderr
+          strict = subprocess.run([sys.executable, script, fixture,
+                                   '--require-diagnostic-eligibility'],
+                                  text=True, capture_output=True)
+          assert strict.returncode == 3, (strict.returncode, strict.stderr)
+          report = json.loads(strict.stdout)
+          assert json.loads(baseline.stdout) == report
+          assert not report['safety_diagnostic']['diagnostic_promotion_eligible']
+          assert not report['safety_diagnostic']['no_observed_safety_regression']
+          assert not report['safety_diagnostic']['nav2_admission']
+          assert 'M4 diagnostic eligibility blocked:' in strict.stderr
+          for blocker in ('acquisition_provenance_not_supplied',
+                          'recording_bytes_not_verified', 'data_domain_unverified'):
+              assert blocker in report['safety_diagnostic']['blockers']
+              assert blocker in strict.stderr
+          with tempfile.TemporaryDirectory() as directory:
+              invalid = pathlib.Path(directory) / 'malformed.json'
+              invalid.write_text('{"trials": [], "trials": []}', encoding='utf-8')
+              rejected = subprocess.run([sys.executable, script, str(invalid),
+                                         '--require-diagnostic-eligibility'],
+                                        text=True, capture_output=True)
+              assert rejected.returncode == 2, rejected.stderr
+              assert rejected.stdout == ''
+              assert 'Invalid M4 evaluation input:' in rejected.stderr
+          PY
 
   humble:
     runs-on: ubuntu-22.04
