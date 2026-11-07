@@ -1,0 +1,35 @@
+# Process ownership/liveness only; not proof of audio quality.
+---
+bool running
+bool owned_process_present
+string active_profile
+string last_good_profile
+uint64 reload_epoch
+string fault
+# Last sampled ROS graph health; false while offline or after a missed check.
+bool graph_healthy
+uint32 graph_miss_count
+# Capture PCM watchdog is enforced only for live ALSA profiles.
+# WAV replay may legitimately reach EOF; its PCM is observed, not enforced.
+bool audio_watchdog_enabled
+bool audio_healthy
+uint32 audio_miss_count
+uint64 accepted_audio_frames
+# 0 if no accepted PCM in this supervised activation.
+uint64 last_audio_age_ms
+# Spatial source-local PCM progress, enforced only for live mono ALSA
+# while raw capture PCM is fresh. ODAS and WAV are observation-only.
+bool source_watchdog_enabled
+bool source_healthy
+uint32 source_miss_count
+uint64 accepted_source_frames
+# 0 before the first accepted source PCM.
+uint64 last_source_age_ms
+# Semantic ingress acknowledgement: emitted only after admission and
+# successful worker submission, NOT proof of completed classification/ASR.
+# Enforcement only for live mono ALSA with fresh upstream source/raw PCM.
+bool semantic_watchdog_enabled
+bool semantic_healthy
+uint32 semantic_miss_count
+uint64 accepted_semantic_frames
+uint64 last_semantic_age_ms

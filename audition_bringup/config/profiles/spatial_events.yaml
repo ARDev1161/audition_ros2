@@ -1,0 +1,16 @@
+# NOT runnable until measured microphone coordinates are configured.
+schema_version: 1
+name: spatial_events
+capture:
+  kind: alsa
+  device: "" # pass device:=hw:<card>,<device>
+  frame_id: microphone_array
+  channels: 6
+  sample_rate_hz: 16000
+  frames_per_message: 160
+spatial:
+  backend: odas
+  config: ../respeaker_usb_v2.yaml # intentionally geometry_calibrated: false
+semantic:
+  classifier_backend: disabled # set yamnet + model files explicitly to classify
+  speech_enabled: false

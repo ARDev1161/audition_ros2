@@ -1,0 +1,8 @@
+# Rebuild the semantic classifier/VAD/ASR workers from the CURRENT immutable parameters.
+# This is not a full capture/spatial/scene pipeline reconfiguration.
+# dry_run constructs candidate workers, then discards them without changing state.
+bool dry_run
+---
+bool success
+string message
+uint64 reload_epoch

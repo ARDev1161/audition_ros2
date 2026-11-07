@@ -1,0 +1,296 @@
+"""Generated ROS 2 interface smoke/serialization checks (not semantic validation)."""
+
+import pytest
+from rclpy.serialization import deserialize_message, serialize_message
+
+from audition_msgs.srv import GetCapabilities, GetCaptureStatus, GetSemanticStatus, GetPipelineStatus
+
+from audition_msgs.msg import (
+    AcousticEvent,
+    AcousticScene,
+    AcousticSource,
+    AcousticSourceArray,
+    AudioFrame,
+    LocalizedSource,
+    LocalizedSourceArray,
+    SoundClassification,
+    SourceAudioFrame,
+    SemanticProgress,
+    Transcript,
+)
+
+
+def test_capture_frame_round_trip():
+    msg = AudioFrame()
+    msg.header.frame_id = "microphone_array"
+    msg.header.stamp.sec = 17
+    msg.capture_session_id = "0123456789abcdef0123456789abcdef"
+    msg.sequence_number = 29
+    msg.sample_rate_hz = 16000
+    msg.channel_count = 2
+    msg.frame_count = 2
+    msg.layout = AudioFrame.INTERLEAVED
+    msg.channel_indices = [1, 2]
+    msg.pcm = [0.25, -0.5, 0.125, -0.25]
+    restored = deserialize_message(serialize_message(msg), AudioFrame)
+    assert restored.header.stamp.sec == 17
+    assert restored.capture_session_id == msg.capture_session_id
+    assert restored.header.frame_id == "microphone_array"
+    assert list(restored.channel_indices) == [1, 2]
+    assert list(restored.pcm) == pytest.approx([0.25, -0.5, 0.125, -0.25])
+
+
+def test_source_identity_and_scene_round_trip():
+    source = AcousticSource()
+    source.header.frame_id = "microphone_array"
+    source.source_id = "sensor-A/session-4/007"
+    source.source_generation = 4
+    source.spatial_track_id = "odas-2"
+    source.has_direction = True
+    source.direction_unit.x = 1.0
+    source.has_range = False
+    source.has_position = False
+
+    snapshot = AcousticSourceArray()
+    snapshot.generation = 4
+    snapshot.scene_session_id = "0123456789abcdef0123456789abcdef"
+    snapshot.sources = [source]
+    back = deserialize_message(serialize_message(snapshot), AcousticSourceArray)
+    assert back.scene_session_id == snapshot.scene_session_id
+    assert back.sources[0].source_id == source.source_id
+    assert back.sources[0].source_generation == 4
+    assert not back.sources[0].has_range
+    assert not back.sources[0].has_position
+
+    evt = AcousticEvent()
+    evt.source_id = source.source_id
+    evt.source_generation = 4
+    evt.event_id = "evt-7"
+    evt.transition = AcousticEvent.STARTED
+    evt.score_kind = AcousticEvent.UNCALIBRATED_SCORE
+    scene = AcousticScene()
+    scene.generation = 4
+    scene.sources = [source]
+    scene.active_events = [evt]
+    scene_back = deserialize_message(serialize_message(scene), AcousticScene)
+    assert scene_back.sources[0].source_generation == scene_back.generation
+    assert scene_back.active_events[0].event_id == "evt-7"
+    assert AcousticEvent.ENDED != AcousticEvent.CANCELLED
+
+
+def test_semantic_message_generation_and_score_types():
+    cls = SoundClassification()
+    cls.source_id = "sensor-1/7"
+    cls.source_generation = 12
+    cls.class_label = "speech"
+    cls.score_kind = SoundClassification.UNCALIBRATED_SCORE
+    cls.score = 0.7
+    result = deserialize_message(serialize_message(cls), SoundClassification)
+    assert result.source_generation == 12
+    assert result.score_kind == SoundClassification.UNCALIBRATED_SCORE
+    assert SoundClassification.UNCALIBRATED_SCORE != SoundClassification.CALIBRATED_PROBABILITY
+
+    audio = SourceAudioFrame()
+    audio.source_id = cls.source_id
+    audio.source_generation = cls.source_generation
+    audio.sample_rate_hz = 16000
+    audio.frame_count = 2
+    audio.pcm = [0.0, 0.1]
+    audio_back = deserialize_message(serialize_message(audio), SourceAudioFrame)
+    assert audio_back.source_generation == result.source_generation
+
+    transcript = Transcript()
+    transcript.source_generation = result.source_generation
+    transcript.is_final = True
+    transcript.text = "hello"
+    transcript_back = deserialize_message(serialize_message(transcript), Transcript)
+    assert transcript_back.is_final
+    assert transcript_back.text == "hello"
+
+
+def test_semantic_progress_round_trip():
+    progress = SemanticProgress()
+    progress.spatial_session_id = "a" * 32
+    progress.source_id = "mono"
+    progress.source_generation = 3
+    progress.sequence_number = 41
+    progress.frame_count = 160
+    restored = deserialize_message(serialize_message(progress), SemanticProgress)
+    assert restored.spatial_session_id == progress.spatial_session_id
+    assert restored.source_id == "mono"
+    assert restored.source_generation == 3
+    assert restored.sequence_number == 41
+    assert restored.frame_count == 160
+
+
+def test_localized_source_is_separate_from_bearing():
+    result = LocalizedSource()
+    result.source_id = "sensor-A/session-4/007"
+    result.source_generation = 4
+    result.header.frame_id = "map"
+    result.position.x = 2.0
+    result.covariance = [0.0] * 9
+    result.localization_method = "test_fixture"
+    frame = LocalizedSourceArray()
+    frame.generation = 4
+    frame.sources = [result]
+    back = deserialize_message(serialize_message(frame), LocalizedSourceArray)
+    assert back.sources[0].localization_method == "test_fixture"
+    assert back.sources[0].header.frame_id == "map"
+
+
+def test_capabilities_service_contract():
+    response = GetCapabilities.Response()
+    response.profile_name = "replay_ci"
+    response.spatial_backend = "mono"
+    response.classifier_backend = "disabled"
+    response.compiled_classifiers = ["disabled"]
+    response.runtime_reconfiguration_supported = False
+    restored = deserialize_message(serialize_message(response), GetCapabilities.Response)
+    assert restored.profile_name == "replay_ci"
+    assert restored.spatial_backend == "mono"
+    assert list(restored.compiled_classifiers) == ["disabled"]
+    assert not restored.runtime_reconfiguration_supported
+
+
+def test_semantic_status_service_round_trip():
+    response = GetSemanticStatus.Response()
+    response.have_stream = True
+    response.source_generation = 7
+    response.frame_id = "robot_a_mic"
+    response.admitted_sources = 2
+    response.accepted_audio_frames = 31
+    response.dropped_audio_frames = 4
+    response.out_of_order_audio_frames = 3
+    response.stream_resets = 3
+    response.scene_session_id = "0123456789abcdef0123456789abcdef"
+    response.scene_session_resets = 2
+    response.classifier_active = True
+    response.classifier_completed_windows = 7
+    response.classifier_discarded_results = 2
+    response.classifier_last_completion_age_ms = 1234
+    response.speech_active = True
+    response.asr_completed_segments = 3
+    response.asr_empty_segments = 1
+    response.asr_discarded_results = 2
+    response.asr_last_completion_age_ms = 4321
+    response.inference_poll_failures = 1
+    response.classifier_active_sources = 3
+    response.classifier_queued_sources = 1
+    response.classifier_inferencing_sources = 1
+    response.classifier_dropped_windows_active = 7
+    response.classifier_has_inference_timing = True
+    response.classifier_max_last_inference_ms = 34.5
+    response.classifier_has_queue_wait_timing = True
+    response.classifier_max_last_queue_wait_ms = 12.25
+    response.asr_queued_segments = 2
+    response.asr_buffered_results = 1
+    response.asr_retired_generations = 3
+    response.asr_completed_segments_native = 8
+    response.asr_dropped_segments_native = 4
+    response.asr_evicted_results_native = 2
+    response.asr_worker_error = True
+    back = deserialize_message(serialize_message(response), GetSemanticStatus.Response)
+    assert back.have_stream and back.source_generation == 7
+    assert back.frame_id == "robot_a_mic"
+    assert back.admitted_sources == 2
+    assert back.dropped_audio_frames == 4
+    assert back.out_of_order_audio_frames == 3
+    assert back.stream_resets == 3
+    assert back.scene_session_id == response.scene_session_id
+    assert back.scene_session_resets == 2
+    assert back.classifier_active and back.speech_active
+    assert back.classifier_completed_windows == 7
+    assert back.classifier_discarded_results == 2
+    assert back.classifier_last_completion_age_ms == 1234
+    assert back.asr_completed_segments == 3
+    assert back.asr_empty_segments == 1
+    assert back.asr_discarded_results == 2
+    assert back.asr_last_completion_age_ms == 4321
+    assert back.inference_poll_failures == 1
+    assert back.classifier_active_sources == 3
+    assert back.classifier_queued_sources == 1
+    assert back.classifier_inferencing_sources == 1
+    assert back.classifier_dropped_windows_active == 7
+    assert back.classifier_has_inference_timing
+    assert back.classifier_max_last_inference_ms == pytest.approx(34.5)
+    assert back.classifier_has_queue_wait_timing
+    assert back.classifier_max_last_queue_wait_ms == pytest.approx(12.25)
+    assert back.asr_queued_segments == 2
+    assert back.asr_buffered_results == 1
+    assert back.asr_retired_generations == 3
+    assert back.asr_completed_segments_native == 8
+    assert back.asr_dropped_segments_native == 4
+    assert back.asr_evicted_results_native == 2
+    assert back.asr_worker_error
+
+
+def test_capture_status_service_round_trip():
+    response = GetCaptureStatus.Response()
+    response.connected = False
+    response.terminal_failure = True
+    response.reconnect_attempts = 4
+    response.reconnect_failures = 4
+    response.next_retry_delay_ms = 800
+    response.last_error = "ENODEV"
+    back = deserialize_message(serialize_message(response), GetCaptureStatus.Response)
+    assert not back.connected
+    assert back.terminal_failure
+    assert back.reconnect_attempts == 4
+    assert back.next_retry_delay_ms == 800
+    assert back.last_error == "ENODEV"
+
+
+def test_pipeline_status_graph_watchdog_round_trip():
+    response = GetPipelineStatus.Response()
+    response.running = True
+    response.graph_healthy = False
+    response.graph_miss_count = 3
+    response.last_good_profile = "replay_ci"
+    response.audio_watchdog_enabled = True
+    response.audio_healthy = False
+    response.audio_miss_count = 2
+    response.accepted_audio_frames = 12
+    response.last_audio_age_ms = 6200
+    response.source_watchdog_enabled = True
+    response.source_healthy = False
+    response.source_miss_count = 3
+    response.accepted_source_frames = 15
+    response.last_source_age_ms = 9000
+    response.semantic_watchdog_enabled = True
+    response.semantic_healthy = False
+    response.semantic_miss_count = 4
+    response.accepted_semantic_frames = 10
+    response.last_semantic_age_ms = 11000
+    back = deserialize_message(serialize_message(response), GetPipelineStatus.Response)
+    assert back.running and not back.graph_healthy
+    assert back.graph_miss_count == 3
+    assert back.last_good_profile == "replay_ci"
+    assert back.audio_watchdog_enabled and not back.audio_healthy
+    assert back.audio_miss_count == 2
+    assert back.accepted_audio_frames == 12
+    assert back.last_audio_age_ms == 6200
+    assert back.source_watchdog_enabled and not back.source_healthy
+    assert back.source_miss_count == 3
+    assert back.accepted_source_frames == 15
+    assert back.last_source_age_ms == 9000
+    assert back.semantic_watchdog_enabled and not back.semantic_healthy
+    assert back.semantic_miss_count == 4
+    assert back.accepted_semantic_frames == 10
+    assert back.last_semantic_age_ms == 11000
+
+
+def test_attention_target_round_trip():
+    from audition_msgs.msg import AttentionTarget
+    target = AttentionTarget()
+    target.header.frame_id = "microphone_array"
+    target.valid = True
+    target.source_id = "track-1"
+    target.source_generation = 7
+    target.scene_generation = 7
+    target.direction_unit.x = 1.0
+    target.priority = 0.8
+    restored = deserialize_message(serialize_message(target), AttentionTarget)
+    assert restored.valid and restored.source_id == "track-1"
+    assert restored.source_generation == restored.scene_generation == 7
+    assert restored.header.frame_id == "microphone_array"

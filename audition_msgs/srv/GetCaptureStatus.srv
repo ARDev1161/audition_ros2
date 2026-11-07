@@ -1,0 +1,16 @@
+# Read-only live ALSA capture status. Counters are monotonic since node startup.
+---
+bool connected
+bool terminal_failure
+uint64 published_frames
+uint64 last_sequence_number
+uint64 xrun_recoveries
+uint64 fatal_errors
+uint64 stall_reconnects
+uint64 reconnect_attempts
+uint64 reconnect_successes
+uint64 reconnect_failures
+uint32 consecutive_failures
+uint32 next_retry_delay_ms
+string last_error
+string note

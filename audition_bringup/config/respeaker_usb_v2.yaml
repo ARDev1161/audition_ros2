@@ -1,0 +1,28 @@
+# Example device profile, NOT a completed/calibrated microphone geometry.
+# libaudition documents a 6-channel USB stream with microphones in the
+# four zero-based positions [1, 2, 3, 4].
+# Verify actual USB capture format, device index, geometry and rotation first.
+audio_capture:
+  ros__parameters:
+    device: ""                 # REQUIRED: choose ALSA device on the robot
+    frame_id: "microphone_array"
+    sample_rate_hz: 16000
+    channel_count: 6
+    layout: "interleaved"
+    stamp_source: "ros_time"   # initial time policy; do not mix with monotonic
+    publish_raw_audio: true
+
+spatial_perception:
+  ros__parameters:
+    backend: "disabled" # switch to odas ONLY after calibration and ODAS-enabled build
+    input_channel_indices: [1, 2, 3, 4]
+    geometry_calibrated: false # fail closed until physical positions are supplied
+    microphone_positions_m: [] # intentionally empty; never assume coordinates
+    microphone_frame: "microphone_array"
+    sample_rate_hz: 16000
+    odas_hop_frames: 128
+    odas_frame_size: 256
+    max_tracks: 4
+    enable_separation: true
+    respeaker_angular_profile: false  # enable only when profile is physically appropriate
+    source_timeout_ms: 1000   # suggested initial value; tune from recordings

@@ -1,0 +1,17 @@
+# FOR CI AND SYNTHETIC TESTS ONLY — NOT A CALIBRATION OF ANY PHYSICAL DEVICE.
+# Matches the declared synthetic 6-channel layout of upstream libaudition
+# tests/integration/offline_pipeline_runner.cpp at pinned revision.
+"/**/spatial_perception":
+  ros__parameters:
+    backend: odas
+    geometry_calibrated: true
+    microphone_frame: microphone_array
+    input_channel_indices: [1, 2, 3, 4]
+    microphone_positions_m: [-0.032, 0.0, 0.0, 0.0, -0.032, 0.0,
+                             0.032, 0.0, 0.0, 0.0, 0.032, 0.0]
+    sample_rate_hz: 16000
+    odas_hop_frames: 128
+    odas_frame_size: 256
+    max_tracks: 4
+    enable_separation: true
+    respeaker_angular_profile: true

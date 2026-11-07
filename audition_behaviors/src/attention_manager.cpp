@@ -1,0 +1,104 @@
+#include "audition_behaviors/attention_policy.hpp"
+#include "audition_behaviors/attention_publication_gate.hpp"
+
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
+
+#include <rclcpp/rclcpp.hpp>
+
+namespace audition_behaviors {
+class AttentionManager final : public rclcpp::Node {
+public:
+  AttentionManager() : Node("attention_manager"),
+    policy_(configure()) {
+    publisher_ = create_publisher<audition_msgs::msg::AttentionTarget>(
+      "attention/target", rclcpp::QoS(10).reliable());
+    subscription_ = create_subscription<audition_msgs::msg::AcousticScene>(
+      "scene", rclcpp::QoS(10).reliable(),
+      [this](const audition_msgs::msg::AcousticScene & scene) {
+        auto target = policy_.observe(scene, AttentionPolicy::Clock::now());
+        publisher_->publish(target);
+        publication_gate_.on_scene_published(target.valid);
+      });
+    timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
+      auto target = policy_.expire(AttentionPolicy::Clock::now());
+      if (publication_gate_.should_publish_timer(target.valid)) {
+        publisher_->publish(target);
+        publication_gate_.on_timer_published(target.valid);
+      }
+    });
+  }
+private:
+  AttentionPolicy::Config configure() {
+    AttentionPolicy::Config config;
+    config.minimum_activity = declare_parameter<double>("minimum_activity", 0.3);
+    config.switch_margin = declare_parameter<double>("switch_margin", 0.15);
+    config.scene_timeout = std::chrono::milliseconds(
+      declare_parameter<int>("scene_timeout_ms", 1500));
+    const int confirmations = declare_parameter<int>("switch_confirmations", 1);
+    if (confirmations <= 0 || confirmations > 100) {
+      throw std::invalid_argument("switch_confirmations must be between 1 and 100");
+    }
+    config.switch_confirmations = static_cast<std::uint32_t>(confirmations);
+    const int acquisition = declare_parameter<int>("acquisition_confirmations", 1);
+    if (acquisition <= 0 || acquisition > 100) {
+      throw std::invalid_argument("acquisition_confirmations must be between 1 and 100");
+    }
+    config.acquisition_confirmations = static_cast<std::uint32_t>(acquisition);
+    config.acquisition_confirmation_window = std::chrono::milliseconds(
+      declare_parameter<int>("acquisition_confirmation_window_ms", 1000));
+    config.acquisition_minimum_duration = std::chrono::milliseconds(
+      declare_parameter<int>("acquisition_minimum_duration_ms", 0));
+    config.switch_minimum_duration = std::chrono::milliseconds(
+      declare_parameter<int>("switch_minimum_duration_ms", 0));
+    config.switch_confirmation_window = std::chrono::milliseconds(
+      declare_parameter<int>("switch_confirmation_window_ms", 1000));
+    config.maximum_angular_variance_rad2 = declare_parameter<double>(
+      "maximum_angular_variance_rad2", 0.0);
+    config.maximum_source_age = std::chrono::milliseconds(
+      declare_parameter<int>("maximum_source_age_ms", 0));
+    config.maximum_direction_jump_rad = declare_parameter<double>(
+      "maximum_direction_jump_rad", 0.0);
+    const int maximum_scene_sources = declare_parameter<int>("maximum_scene_sources", 0);
+    if (maximum_scene_sources < 0 || maximum_scene_sources > 4096) {
+      throw std::invalid_argument("maximum_scene_sources must be between 0 and 4096");
+    }
+    config.maximum_scene_sources = static_cast<std::uint32_t>(maximum_scene_sources);
+    const int maximum_source_id_bytes = declare_parameter<int>("maximum_source_id_bytes", 0);
+    if (maximum_source_id_bytes < 0 || maximum_source_id_bytes > 4096) {
+      throw std::invalid_argument("maximum_source_id_bytes must be between 0 and 4096");
+    }
+    config.maximum_source_id_bytes = static_cast<std::uint32_t>(maximum_source_id_bytes);
+    const int total_id_bytes = declare_parameter<int>("maximum_total_source_id_bytes", 0);
+    if (total_id_bytes < 0 || total_id_bytes > 1048576) {
+      throw std::invalid_argument("maximum_total_source_id_bytes must be between 0 and 1048576");
+    }
+    config.maximum_total_source_id_bytes = static_cast<std::uint32_t>(total_id_bytes);
+    config.require_distinct_confirmation_stamp = declare_parameter<bool>(
+      "require_distinct_confirmation_stamp", false);
+    config.require_advancing_scene_stamp = declare_parameter<bool>(
+      "require_advancing_scene_stamp", false);
+    return config;
+  }
+  AttentionPolicy policy_;
+  AttentionPublicationGate publication_gate_;
+  rclcpp::Subscription<audition_msgs::msg::AcousticScene>::SharedPtr subscription_;
+  rclcpp::Publisher<audition_msgs::msg::AttentionTarget>::SharedPtr publisher_;
+  rclcpp::TimerBase::SharedPtr timer_;
+};
+}  // namespace audition_behaviors
+
+int main(int argc, char ** argv) {
+  rclcpp::init(argc, argv);
+  try {
+    rclcpp::spin(std::make_shared<audition_behaviors::AttentionManager>());
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(rclcpp::get_logger("attention_manager"), "%s", e.what());
+    rclcpp::shutdown();
+    return 1;
+  }
+  rclcpp::shutdown();
+  return 0;
+}

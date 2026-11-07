@@ -1,0 +1,13 @@
+flowchart TB
+    CAP["audio_capture"] -->|Multichannel PCM| SP["spatial_perception"]
+    SP -->|Separated audio per source| SEM["semantic_perception"]
+    SP -->|Sources and bearings| SC["acoustic_scene"]
+    SEM -->|Classes, events, transcripts| SC
+    SC --> ATT["attention_manager"]
+    SC --> FUS["multimodal_fusion"]
+    SC --> MEM["acoustic_memory"]
+    CAM["OAK-D / Radar / TF2"] --> FUS
+    FUS -->|Validated 3D positions| COST["Nav2 costmap plugin"]
+    FUS --> ATT
+    ATT -->|Actions| NAV["Nav2"]
+    COST --> NAV

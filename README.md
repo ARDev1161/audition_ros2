@@ -2,12 +2,107 @@
 
 ROS 2 integration and robot-facing acoustic perception built on [libaudition](https://github.com/ARDev1161/libaudition).
 
-**Status:** documentation and architecture planning; no ROS 2 implementation is claimed by this repository yet.
+**Status:** M0 interfaces, M1 WAV/ALSA capture and opt-in ODAS, and M2 YAMNet, Sherpa VAD + whisper.cpp adapters a strict no-ODAS mono route and opt-in validated M2c startup profiles are implemented. CI checks deterministic transport and native integration, **not model accuracy or physical ReSpeaker calibration**. Attention, fusion and navigation are future work.
 
-## Design documents
+## Interaction overview
 
+```mermaid
+flowchart TB
+    CAP["audio_capture"] -->|Multichannel PCM| SP["spatial_perception"]
+    SP -->|Separated audio per source| SEM["semantic_perception"]
+    SP -->|Sources and bearings| SC["acoustic_scene"]
+    SEM -->|Classes, events, transcripts| SC
+    SC --> ATT["attention_manager"]
+    SC --> FUS["multimodal_fusion"]
+    SC --> MEM["acoustic_memory"]
+    CAM["OAK-D / Radar / TF2"] --> FUS
+    FUS -->|Validated 3D positions| COST["Nav2 costmap plugin"]
+    FUS --> ATT
+    ATT -->|Actions| NAV["Nav2"]
+    COST --> NAV
+```
+
+[Static SVG version](docs/images/acoustic_interaction_flow.svg)
+
+The M1 perception path has three ROS nodes: `audio_capture`, `spatial_perception`, and `acoustic_scene`. M2 adds `semantic_perception`; later components add attention, fusion and memory. A Nav2 costmap layer is a plugin, not an additional ROS node.
+
+[Editable Mermaid diagram](docs/diagrams/acoustic_interaction_flow.mmd) · [Node responsibilities and interaction contracts](docs/ROS2_ARCHITECTURE.md)
+
+## Documentation
+
+The canonical Sphinx documentation, roadmap and user configuration guide live in the [independent `documentation` branch](https://github.com/ARDev1161/audition_ros2/tree/documentation). It is an orphan branch without ROS sources or code history.
+
+
+- [libaudition integration and user configuration](docs/LIBAUDITION_INTEGRATION.md) — backend selection, proposed YAML presets, exposed ROS features and runtime configuration rules.
+- [Node architecture and interaction contracts](docs/ROS2_ARCHITECTURE.md) — how many nodes, who owns data, internal/public topics, process isolation, QoS and lifecycle.
+- [M0 implementation notes](docs/M0_IMPLEMENTATION.md) — implemented messages, example ReSpeaker profile, build and pending gates.
 - [Engineering roadmap](docs/ROADMAP.md) — near-term ROS 2 integration, future capabilities, dependencies, explicit non-goals, validation gates, and safety boundaries.
 - [Human spatial hearing and robot perception](docs/HUMAN_SPATIAL_HEARING.md) — how biological hearing uses acoustic cues, motion, vision, and prior knowledge; what is worth reproducing in robotics and where engineering alternatives are preferable.
+
+## Experimental M1 WAV replay
+
+With ROS 2 Humble installed:
+
+```bash
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install --cmake-args -DBUILD_TESTING=ON
+source install/setup.bash
+ros2 launch audition_bringup m1_wav_pipeline.launch.py wav_path:=/absolute/path/to/audio.wav
+# New sourced shell:
+ros2 topic echo /audition/scene audition_msgs/msg/AcousticScene --once
+```
+
+Only uncompressed PCM16 and normalized float32 RIFF/WAV are currently supported. The spatial backend is explicitly **disabled**: it produces empty source observations, not fake DOA measurements. This runs transport and scene-adapter plumbing rather than a functional source localization pipeline.
+
+An optional `spatial_backend:=odas` mode is available with an ODAS-enabled libaudition CMake installation and separately calibrated array YAML. See [M1 implementation and native ODAS setup](docs/M1_IMPLEMENTATION.md).
+
+## Experimental M2 semantic perception
+
+Build/install libaudition with `LIBAUDITION_WITH_YAMNET=ON`, then enable `AUDITION_ROS2_WITH_SEMANTIC=ON` and `AUDITION_ROS2_WITH_YAMNET=ON` during the ROS build. Copy [the fail-closed M2 YAML template](audition_bringup/config/semantic_m2.yaml) to a user configuration file and provide a compatible **waveform-input YAMNet ONNX model**, its **521-class label map**, and `classifier_backend: yamnet`.
+
+```bash
+ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+  wav_path:=/path/to/six-channel.wav \
+  spatial_backend:=odas \
+  spatial_config:=/path/to/calibrated_microphones.yaml \
+  semantic_config:=/path/to/semantic_yamnet.yaml
+```
+
+When spatial separation is available, ROS 2 exposes `/audition/classifications`, `/audition/events` and `/audition/scene`. The inference worker is provided by libaudition and receives per-source mono 16 kHz PCM. Threshold hysteresis and event transitions are also provided by libaudition, not reimplemented here. The default YAML disables inference; no model weights are bundled. The independent mono route is available with `spatial_backend:=mono` for one-channel 16 kHz capture and never fabricates direction.
+
+See the [M2 implementation guide](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/M2_IMPLEMENTATION.md).
+
+### Optional Russian speech recognition
+
+Build `libaudition` with `LIBAUDITION_WITH_SHERPA=ON` and
+`LIBAUDITION_WITH_WHISPERCPP=ON` (compatible installed whisper.cpp), and
+build this ROS package with `AUDITION_ROS2_WITH_SEMANTIC=ON` and
+`AUDITION_ROS2_WITH_SPEECH=ON`. Copy
+[`semantic_m2.yaml`](audition_bringup/config/semantic_m2.yaml) and set
+`speech_enabled: true`, `speech_vad_model`, `speech_asr_model`, and
+`speech_language: ru`. Use the same M2 launch command with
+`semantic_config:=/path/to/your.yaml`.
+
+The speech adapter is part of `semantic_perception` (not a fifth ROS node).
+Native `PerSourceSpeechRuntime` owns VAD segmentation and an asynchronous
+Whisper ASR worker. The canonical `acoustic_scene` republishes accepted final
+results to `/audition/transcripts`. No models are distributed, no transcripts
+are fabricated when disabled, and a source ID is **not** a speaker identity.
+
+See the [Sphinx speech setup and limitations](https://github.com/ARDev1161/audition_ros2/blob/documentation/docs/SPEECH_ASR.md).
+For one-microphone speech without ODAS, use:
+```bash
+ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+  wav_path:=/absolute/path/to/mono-16k.wav spatial_backend:=mono \
+  semantic_config:=/absolute/path/to/speech.yaml
+# Or live ALSA: m2_alsa_pipeline.launch.py device:=hw:1,0 \
+#   channel_count:=1 sample_rate_hz:=16000 spatial_backend:=mono
+```
+The mono router publishes one capture-stream source (not a speaker), with no
+direction, range or position. Its source generation advances on capture
+sequence loss, clock regression, excessive timestamp gaps or device-frame
+change. Invalid formats fail closed; there is no implicit resampling or
+downmixing. Real hardware and Russian recognition accuracy remain untested.
 
 ## Intended boundaries
 
@@ -18,3 +113,162 @@ ROS 2 integration and robot-facing acoustic perception built on [libaudition](ht
 The presence of an acoustic event or an estimated direction does not establish a physical obstacle or a metric source position. See both design documents before implementing navigation integration.
 
 Target baseline for initial design: ROS 2 Humble and Nav2, with cross-distribution compatibility considered where practical. Hardware-specific accuracy, latency, and reliability are **not yet validated**.
+
+
+## M2c validated startup profiles (opt-in)
+
+For model-free mono replay:
+
+~~~bash
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/absolute/path/to/mono-16k.wav
+ros2 service call /audition/semantic_perception/get_capabilities \
+  audition_msgs/srv/GetCapabilities "{}"
+~~~
+
+Built-in profiles: mono_speech, replay_ci, spatial_events and robot_full.
+The ODAS profiles deliberately fail until real microphone geometry is
+provided; no model is automatically downloaded or enabled. The typed
+capability service reports compiled/active semantic stages. Semantic ROS
+parameters are startup-only and rejected on hot update to avoid stale native
+workers. See [M2c configuration, validation and limitations](docs/M2_PROFILE_CONFIGURATION.md).
+
+## M2d: multiple sensors / robots
+
+
+## M2d: multi-instance ROS namespace isolation (implemented 2026-11-02)
+
+All M1/M2 WAV/ALSA launch files and M2c profiles accept
+`audition_namespace` (default `audition`). M2c accepts `frame_id`
+override and validates relative namespaces before launching. A non-default
+namespace cannot reuse the built-in `microphone_array` frame; provide a
+unique frame for each robot/sensor. For ODAS, the measured geometry YAML
+must specify the same `microphone_frame`.
+
+~~~bash
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/data/mic_a.wav \
+  audition_namespace:=robot_a/audition frame_id:=robot_a_mic
+ros2 launch audition_bringup m2_profile.launch.py \
+  profile:=replay_ci wav_path:=/data/mic_b.wav \
+  audition_namespace:=robot_b/audition frame_id:=robot_b_mic
+ros2 service call /robot_a/audition/semantic_perception/get_capabilities \
+  audition_msgs/srv/GetCapabilities "{}"
+ros2 topic echo /robot_b/audition/scene
+~~~
+
+Capture, spatial/mono, scene and semantic components share the selected
+namespace. All public and internal topics and the typed capability service
+are scoped to it; no global `/audition` topic is intentionally created.
+Source IDs and generations are local to one namespace. Cross-robot consumers
+must key observations by (namespace, source_id, generation), not source_id
+alone. Legacy M1/M2 launch files accept these arguments but do not perform
+M2c preflight; operators must supply distinct TF frames and ALSA devices.
+
+Humble CI starts two simultaneous mono graphs on one DDS domain with 440Hz
+and 880Hz WAVs, validates PCM, canonical scene frames and independent
+capability services, and rejects unexpected global /audition topics.
+This is graph isolation, not physical ODAS calibration, a fleet registry
+or transactional model reload. Runtime semantic parameters remain immutable.
+
+### Live ALSA recovery (experimental)
+
+`m1_alsa_pipeline.launch.py` supports `stall_timeout_ms:=2000` and
+`max_reconnect_attempts:=0` (unlimited bounded-backoff retries). Unexpected
+read failure/stall reopens the same device; a sequence gap fences old
+mono/ODAS sources. Inspect `/audition/audio_capture/get_capture_status`
+(`audition_msgs/srv/GetCaptureStatus`). The virtual ALSA CI test does not
+replace physical ReSpeaker unplug/replug validation.
+
+### Semantic generation fencing (M2g)
+
+The semantic node now requires canonical source admission before inference.
+Old/unknown/retired source PCM is dropped; classifier and ASR workers are
+invalidated on a new spatial generation. Inspect the namespaced
+`semantic_perception/get_semantic_status` service for admission/drop/reset
+counters. See [M2g contract](docs/M2_SEMANTIC_EPOCH_FENCING.md).
+This does not yet provide transactional pipeline reload.
+
+
+### M2h semantic worker restart
+
+The semantic node supports a same-configuration, fail-closed worker restart
+with a dry-run option, rollback on model construction failure, and source
+snapshot/PCM re-admission fencing. Call
+`/audition/semantic_perception/reload_workers` with
+`audition_msgs/srv/ReloadSemanticWorkers`. This is **not** full cross-node
+`ReloadPipeline` or live parameter/model switching.
+See [M2h documentation](docs/M2_SEMANTIC_WORKER_RELOAD.md).
+
+
+## M2i: canonical source snapshot ordering (2026-11-02)
+
+The public `<namespace>/sources` stream now carries a nonzero, strictly
+increasing `AcousticSourceArray.sequence_number` assigned by `acoustic_scene`
+on **every** publication, including timer-driven LOST/ENDED and event updates.
+The internal spatial input may leave this field at zero. Semantic admission
+rejects duplicate, out-of-order and zero-sequence canonical snapshots
+atomically, including replays of older ACTIVE states after retirement and
+stale snapshots from a previous generation. This is a per-process ordering
+token, not a persistent source ID or a capture timestamp.
+
+Do not use `header.stamp` as a transport ordering key: capture and timer
+updates may have different timestamp origins, and DDS may reorder messages.
+A restarted scene publisher resets its sequence; restart the semantic node
+together with it, or implement an explicit scene-session handshake in a
+future release. This change does not authenticate arbitrary DDS publishers.
+
+The existing `GetSemanticStatus` service reports `last_source_sequence`.
+Humble unit tests cover duplicated, reordered and cross-generation snapshots;
+ROS graph smoke injects a zero-sequence canonical snapshot and checks that
+live admission remains intact. This is ordering hardening, **not** the
+cross-node transactional `ReloadPipeline`.
+
+### M2j: acoustic scene process restart fencing
+
+Canonical `/sources` now carries a per-process `scene_session_id` alongside
+its ordered sequence. Semantic workers reset and re-admit on a fresh scene
+incarnation, including when the scene's sequence/generation starts over.
+Old scene sessions cannot reclaim admission. Inspect
+`/audition/semantic_perception/get_semantic_status` for the active session
+and restart count. This is **not** full cross-node `ReloadPipeline` or
+publisher authentication; see [M2j details](docs/M2_SCENE_SESSION_HANDSHAKE.md).
+
+
+### M2k semantic PCM continuity
+
+Per-source sequence and capture-time high-water marks reject duplicated,
+reordered or backwards-time source PCM before YAMNet/VAD/ASR. A namespaced
+`GetSemanticStatus.out_of_order_audio_frames` counter exposes these drops.
+See [M2k PCM continuity](docs/M2_PCM_CONTINUITY.md) for tests and limits.
+This does not implement cross-node transactional reload or DDS authentication.
+
+### M2l capture process restart protection
+
+Raw `AudioFrame` now carries a per-process `capture_session_id`.
+Mono and ODAS detect a replaced capture publisher even when sequence and
+timestamp appear continuous, reset generations, and reject replay from
+retired sessions. ALSA reconnect keeps its original ID; existing XRUN
+sequence-gap fencing remains. A capture-free Humble ROS graph regression
+checks session handoff and old-session rejection.
+See [M2l capture session handshake](docs/M2_CAPTURE_SESSION_HANDSHAKE.md).
+This is not full cross-node transactional reload or DDS authentication.
+
+### M2n capture sequence ordering
+
+Raw capture frames are now rejected on duplicate or decreasing sequence
+numbers **within the same capture incarnation**, before they can spuriously
+reset mono/ODAS source generations. Real forward gaps still reset the
+pipeline; ODAS overflow and backend failures retain the capture high-water
+mark. Inspect `GetIngressStatus.replayed_frames` for ODAS replay drops.
+See [M2n ordering contract](docs/M2_CAPTURE_SEQUENCE_ORDERING.md).
+
+
+### M2o supervised pipeline profile switching
+
+An opt-in, process-owning supervisor validates a new M2c profile, stops the
+old graph, starts the candidate, checks ROS graph readiness and restarts the
+old profile if activation fails. It is a **bounded stop/start with failback**,
+not zero-downtime atomic model/ODAS reconfiguration. See
+[supervisor contract](docs/M2_PIPELINE_SUPERVISOR.md). Never run it alongside
+an independently launched pipeline in the same namespace.

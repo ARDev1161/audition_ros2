@@ -1,0 +1,118 @@
+# Read-only, namespaced semantic admission and generation diagnostics.
+---
+bool have_stream
+uint64 source_generation
+string frame_id
+uint32 admitted_sources
+uint64 accepted_audio_frames
+uint64 dropped_audio_frames
+# Subset of dropped_audio_frames: duplicate/reordered sequence or backwards capture time.
+uint64 out_of_order_audio_frames
+uint64 rejected_source_snapshots
+uint64 stream_resets
+
+# Local semantic-worker restart, NOT the upstream spatial source generation.
+uint64 reload_epoch
+uint64 reload_successes
+uint64 reload_failures
+bool reload_pending
+
+# Last accepted canonical /sources sequence (0 before first admission).
+uint64 last_source_sequence
+
+# Current canonical acoustic_scene incarnation and accepted restarts.
+string scene_session_id
+uint64 scene_session_resets
+
+# M2u: completed inference telemetry, not PCM admission or model accuracy.
+# Ages are zero before first completion; silence can legitimately yield no results.
+bool classifier_active
+bool speech_active
+uint64 classifier_completed_windows
+uint64 classifier_discarded_results
+uint64 classifier_last_completion_age_ms
+uint64 asr_completed_segments
+uint64 asr_empty_segments
+uint64 asr_discarded_results
+uint64 asr_last_completion_age_ms
+uint64 inference_poll_failures
+
+# M2v: sampled native worker workload; not per-job deadlines or watchdog health.
+# Classifier states count currently active sources, NOT individual queued jobs.
+uint32 classifier_active_sources
+uint32 classifier_waiting_sources
+uint32 classifier_collecting_sources
+uint32 classifier_queued_sources
+uint32 classifier_inferencing_sources
+uint32 classifier_classified_sources
+uint32 classifier_error_sources
+uint64 classifier_dropped_windows_active
+bool classifier_has_inference_timing
+float64 classifier_max_last_inference_ms
+bool classifier_has_queue_wait_timing
+float64 classifier_max_last_queue_wait_ms
+# ASR queue excludes the currently running job; result mailbox is separate.
+uint64 asr_queued_segments
+uint64 asr_buffered_results
+uint64 asr_retired_generations
+uint64 asr_completed_segments_native
+uint64 asr_dropped_segments_native
+uint64 asr_evicted_results_native
+bool asr_worker_error
+
+# M2w: YAMNet state residency observed at status polls (10s queued / 30s inferencing).
+# Not individual native job deadlines; no automatic restart. Zero when disabled.
+uint32 classifier_overdue_queued_sources
+uint32 classifier_overdue_inferencing_sources
+uint64 classifier_max_queued_state_age_ms
+uint64 classifier_max_inferencing_state_age_ms
+
+# M2x: autonomous native workload sampling independent of status requests.
+bool classifier_has_workload_sample
+uint64 classifier_workload_samples
+uint64 classifier_workload_sample_failures
+uint64 classifier_last_workload_sample_age_ms
+
+# M2y: last sampled workload is valid for the current worker/source incarnation.
+# False before first sample, after native status errors, source retirement/reset or reload.
+bool classifier_workload_sample_valid
+
+# M2z: startup-only observer settings, in milliseconds.
+uint64 classifier_workload_sample_period_ms
+uint64 classifier_queued_threshold_ms
+uint64 classifier_inference_threshold_ms
+
+# M3a: independent ASR backlog sampling, not active-job runtime or speech watchdog.
+bool asr_has_workload_sample
+bool asr_workload_sample_valid
+uint64 asr_workload_samples
+uint64 asr_workload_sample_failures
+uint64 asr_last_workload_sample_age_ms
+uint64 asr_peak_queued_segments
+uint64 asr_peak_buffered_results
+
+# M3b: sampled uninterrupted nonempty ASR backlog, not individual job latency.
+# Pressure: >=4 pending segments continuously nonempty for >=10 seconds.
+# No auto-restart; false when sample invalid or no pending segments.
+uint64 asr_queue_nonempty_age_ms
+uint64 asr_mailbox_nonempty_age_ms
+bool asr_sustained_queue_pressure
+
+# M3c: freshness-gated pressure evidence. A stalled sampler cannot create pressure.
+# Fresh means last success within 3000 ms; pressure also needs >=2 contiguous samples.
+bool asr_workload_sample_fresh
+uint64 asr_contiguous_queue_samples
+
+# M3e: native cumulative ASR loss counter deltas between successful samples.
+# First sample / after failure establishes a baseline; no fabricated loss.
+# Totals count observed increments only and reset with worker/stream generation.
+uint64 asr_last_dropped_delta
+uint64 asr_last_evicted_delta
+uint64 asr_observed_dropped_delta_total
+uint64 asr_observed_evicted_delta_total
+bool asr_loss_on_last_sample
+
+# M3g: validated startup-only ASR pressure settings (not automatic recovery).
+uint64 asr_pressure_minimum_segments
+uint64 asr_pressure_minimum_age_ms
+uint64 asr_observation_max_sample_age_ms

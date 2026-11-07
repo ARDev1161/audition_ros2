@@ -1,0 +1,16 @@
+# Read-only counters for one spatial_perception component instance.
+# Monotonic counters since node startup; generation fences downstream results.
+---
+string backend
+uint64 generation
+uint64 accepted_frames
+uint64 rejected_frames
+# Subset of rejected_frames: same-session duplicate/reordered capture sequences.
+uint64 replayed_frames
+uint64 overflow_drops
+uint64 discontinuity_resets
+uint64 backend_resets
+uint64 staged_hops
+uint64 processed_hops
+uint32 buffered_frames
+string note

@@ -1,0 +1,483 @@
+name: ROS 2 Humble CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+
+jobs:
+  humble:
+    runs-on: ubuntu-22.04
+    container: ros:humble-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libasound2-dev \
+            python3-colcon-common-extensions \
+            python3-pytest \
+            python3-yaml \
+            ros-humble-ament-cmake-pytest \
+            ros-humble-ament-cmake-gtest \
+            ros-humble-rosidl-default-generators \
+            ros-humble-geometry-msgs \
+            ros-humble-visualization-msgs \
+            ros-humble-tf2-ros \
+            ros-humble-rclpy \
+            ros-humble-action-msgs \
+            ros-humble-rclcpp \
+            ros-humble-rclcpp-components \
+            ros-humble-launch-ros
+      - name: Build all packages
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          colcon build --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=ON -DAUDITION_ROS2_WITH_ALSA=ON
+      - name: Run ROS message and WAV parser tests
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
+          ros2 interface show audition_msgs/msg/AcousticScene
+          ros2 interface show audition_msgs/msg/SourceAudioFrame
+          ros2 interface show audition_msgs/msg/SemanticProgress
+          ros2 interface show audition_msgs/action/LookAtSound
+          ros2 interface show audition_msgs/action/TrackSound
+          ros2 interface show audition_msgs/msg/CameraAimProposal
+      - name: Validate launch Python syntax
+        run: |
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/m3_track_sound.launch.py audition_bringup/launch/m3_attention_bearing_ray.launch.py audition_bringup/launch/m3_attention_camera_aim.launch.py audition_bringup/launch/m3_attention_camera_admission.launch.py audition_bringup/launch/attention_config.py
+
+      - name: Smoke M3 attention advisory over real ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=112
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cat > /tmp/audition_attention_ci.yaml <<'YAML'
+          /**/attention_manager:
+            ros__parameters:
+              scene_timeout_ms: 500
+          YAML
+          ros2 launch audition_bringup m3_attention.launch.py \
+            audition_namespace:=robot_ci/audition \
+            attention_parameters:=/tmp/audition_attention_ci.yaml \
+            > /tmp/audition_attention_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_graph.py; then
+            cat /tmp/audition_attention_launch.log
+            exit 1
+          fi
+
+      - name: Smoke M3 timestamped TF2 advisory bridge over real ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=114
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_attention_tf.launch.py \
+            audition_namespace:=robot_ci/tf target_frame:=base_link \
+            > /tmp/audition_tf_bridge.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_tf_graph.py; then
+            cat /tmp/audition_tf_bridge.log
+            exit 1
+          fi
+
+      - name: Smoke M3 LookAtSound cancellation and acquisition over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=115
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/look \
+            > /tmp/audition_look_at_sound.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_graph.py; then
+            cat /tmp/audition_look_at_sound.log
+            exit 1
+          fi
+
+      - name: Smoke M3 LookAtSound angular sector over real ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=116
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/sector \
+            maximum_abs_azimuth_rad:=0.5 maximum_abs_elevation_rad:=0.5 \
+            > /tmp/audition_sector.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_sector.py; then
+            cat /tmp/audition_sector.log
+            exit 1
+          fi
+
+      - name: Smoke M3 LookAtSound independent bearing confirmations over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=117
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/confirm \
+            bearing_confirmations:=3 maximum_confirmation_jump_rad:=0.2 \
+            > /tmp/audition_confirmation.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_confirmations.py; then
+            cat /tmp/audition_confirmation.log
+            exit 1
+          fi
+
+      - name: Smoke M3 LookAtSound bounded confirmation cadence over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=118
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_look_at_sound.launch.py \
+            audition_namespace:=robot_ci/cadence \
+            bearing_confirmations:=3 minimum_confirmation_spacing_ms:=180 \
+            maximum_confirmation_gap_ms:=750 maximum_confirmation_window_ms:=900 \
+            > /tmp/audition_cadence.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_look_at_sound_cadence.py; then
+            cat /tmp/audition_cadence.log
+            exit 1
+          fi
+
+      - name: Smoke M3 TrackSound live DDS/action tracking and cancellation
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=119
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_track_sound.launch.py \
+            audition_namespace:=robot_ci/track \
+            > /tmp/audition_track_sound.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_track_sound_graph.py; then
+            cat /tmp/audition_track_sound.log
+            exit 1
+          fi
+
+      - name: Smoke M3 RViz bearing ray lifecycle over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=120
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_attention_bearing_ray.launch.py \
+            audition_namespace:=robot_ci/ray \
+            > /tmp/audition_ray.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_bearing_ray_graph.py; then
+            cat /tmp/audition_ray.log
+            exit 1
+          fi
+
+      - name: Smoke M3 camera aim advisory over real ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=121
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_attention_camera_aim.launch.py \
+            audition_namespace:=robot_ci/camera \
+            > /tmp/audition_camera_aim.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_camera_aim_graph.py; then
+            cat /tmp/audition_camera_aim.log
+            exit 1
+          fi
+
+      - name: Smoke M3 camera admission authorization and fail-closed lifecycle over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=122
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m3_attention_camera_admission.launch.py \
+            audition_namespace:=robot_ci/admission authorization_timeout_ms:=500 \
+            > /tmp/audition_camera_admission.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_camera_admission_graph.py; then
+            cat /tmp/audition_camera_admission.log
+            exit 1
+          fi
+
+      - name: Smoke M3r strict replay and challenger confirmation over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=113
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cat > /tmp/audition_attention_strict_ci.yaml <<'YAML'
+          /**/attention_manager:
+            ros__parameters:
+              scene_timeout_ms: 5000
+              switch_confirmations: 3
+              switch_confirmation_window_ms: 4000
+              require_advancing_scene_stamp: true
+          YAML
+          ros2 launch audition_bringup m3_attention.launch.py \
+            audition_namespace:=robot_ci/attention_strict \
+            attention_parameters:=/tmp/audition_attention_strict_ci.yaml \
+            > /tmp/audition_attention_strict_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_attention_strict.py; then
+            cat /tmp/audition_attention_strict_launch.log
+            exit 1
+          fi
+
+      - name: Smoke WAV to acoustic scene over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=101
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          python3 - <<'PY'
+          import math, struct, wave
+          with wave.open('/tmp/audition_ci.wav', 'wb') as wav:
+              wav.setnchannels(1)
+              wav.setsampwidth(2)
+              wav.setframerate(16000)
+              for _ in range(40):
+                  samples = [int(7000 * math.sin(2 * math.pi * 440 * i / 16000))
+                             for i in range(16000)]
+                  wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+          PY
+          ros2 launch audition_bringup m1_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav > /tmp/audition_ci_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_wav_pipeline.py; then
+            cat /tmp/audition_ci_launch.log
+            exit 1
+          fi
+
+      - name: Smoke live ALSA via virtual PCM device
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=102
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m1_alsa_pipeline.launch.py \
+            device:=null spatial_backend:=disabled \
+            > /tmp/audition_alsa_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_alsa_pipeline.py; then
+            cat /tmp/audition_alsa_launch.log
+            exit 1
+          fi
+
+      - name: Smoke canonical acoustic events and classification (no ML model)
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=103
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav \
+            > /tmp/audition_m2_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_scene_events.py; then
+            cat /tmp/audition_m2_launch.log
+            exit 1
+          fi
+
+      - name: Smoke no-ODAS mono semantic route over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=104
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_wav_pipeline.launch.py \
+            wav_path:=/tmp/audition_ci.wav spatial_backend:=mono \
+            > /tmp/audition_mono_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_mono_pipeline.py; then
+            cat /tmp/audition_mono_launch.log
+            exit 1
+          fi
+
+      - name: Smoke validated M2c replay profile and capability service
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=105
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \
+            > /tmp/audition_profile_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_profile_capabilities.py; then
+            cat /tmp/audition_profile_launch.log
+            exit 1
+          fi
+          if ! python3 audition_tests/smoke_mono_pipeline.py; then
+            cat /tmp/audition_profile_launch.log
+            exit 1
+          fi
+
+      - name: Smoke canonical semantic epoch admission and stale PCM rejection
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=107
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \
+            > /tmp/audition_epoch_launch.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_semantic_epoch_status.py; then
+            cat /tmp/audition_epoch_launch.log
+            exit 1
+          fi
+          if ! python3 audition_tests/smoke_semantic_reload.py; then
+            cat /tmp/audition_epoch_launch.log
+            exit 1
+          fi
+
+      - name: Smoke capture process restart and old-session replay over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=108
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m2_capture_session_fixture.launch.py \
+            > /tmp/audition_capture_session.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_capture_session_restart.py; then
+            cat /tmp/audition_capture_session.log
+            exit 1
+          fi
+
+      - name: Smoke supervised M2o profile switch and preflight
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=109
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          python3 audition_bringup/launch/profile_supervisor.py \
+            --profile replay_ci --wav-path /tmp/audition_ci.wav \
+            > /tmp/audition_supervisor.log 2>&1 &
+          supervisor_pid=$!
+          trap 'kill "$supervisor_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_pipeline_reload.py; then
+            cat /tmp/audition_supervisor.log
+            exit 1
+          fi
+
+      - name: Smoke supervised live ALSA capture heartbeat
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=110
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          cat > /tmp/audition_live_supervised.yaml <<'YAML'
+          schema_version: 1
+          name: live_supervised_ci
+          capture:
+            kind: alsa
+            device: "null"
+            frame_id: microphone_array
+            channels: 1
+            sample_rate_hz: 16000
+            frames_per_message: 160
+          spatial:
+            backend: mono
+          semantic:
+            classifier_backend: disabled
+            speech_enabled: false
+          YAML
+          python3 audition_bringup/launch/profile_supervisor.py \
+            --profile /tmp/audition_live_supervised.yaml \
+            > /tmp/audition_live_supervisor.log 2>&1 &
+          supervisor_pid=$!
+          trap 'kill "$supervisor_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_supervised_audio_flow.py; then
+            cat /tmp/audition_live_supervisor.log
+            exit 1
+          fi
+
+      - name: Smoke two isolated M2c instances on one DDS domain
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=106
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          python3 - <<'PY'
+          import math, struct, wave
+          with wave.open('/tmp/audition_ci_880.wav', 'wb') as wav:
+              wav.setnchannels(1)
+              wav.setsampwidth(2)
+              wav.setframerate(16000)
+              for _ in range(40):
+                  samples = [int(7000 * math.sin(2 * math.pi * 880 * i / 16000))
+                             for i in range(16000)]
+                  wav.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+          PY
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci.wav \
+            audition_namespace:=robot_a/audition frame_id:=robot_a_mic \
+            > /tmp/audition_robot_a.log 2>&1 &
+          a_pid=$!
+          ros2 launch audition_bringup m2_profile.launch.py \
+            profile:=replay_ci wav_path:=/tmp/audition_ci_880.wav \
+            audition_namespace:=robot_b/audition frame_id:=robot_b_mic \
+            > /tmp/audition_robot_b.log 2>&1 &
+          b_pid=$!
+          trap 'kill "$a_pid" "$b_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_namespaced_instances.py; then
+            echo "Namespace smoke failed: process status and launch logs"
+            ps -eo pid,ppid,stat,comm,args | grep -E 'ros2|component_container|wav_capture' || true
+            cat /tmp/audition_robot_a.log /tmp/audition_robot_b.log
+            exit 1
+          fi

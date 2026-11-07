@@ -1,0 +1,11 @@
+# Advisory target acquisition only. Does not rotate a robot.
+# Empty source_id accepts any currently valid source.
+string source_id
+# Maximum time to wait for a fresh transformed bearing (milliseconds).
+uint32 timeout_ms
+---
+bool acquired
+audition_msgs/AttentionTarget target
+string reason
+---
+string state

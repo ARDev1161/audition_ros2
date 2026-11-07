@@ -1,0 +1,18 @@
+# Startup-safe mono source; opt in to speech only with installed native models.
+schema_version: 1
+name: mono_speech
+capture:
+  kind: wav
+  wav_path: "" # pass wav_path:=/absolute/path/to/mono-16k.wav
+  frame_id: microphone_array
+  channels: 1
+  sample_rate_hz: 16000
+  frames_per_message: 160
+spatial:
+  backend: mono
+semantic:
+  classifier_backend: disabled
+  speech_enabled: false
+  # To enable: speech_enabled: true, supply model names and models_dir:=...
+  speech_vad_model: ""
+  speech_asr_model: ""
