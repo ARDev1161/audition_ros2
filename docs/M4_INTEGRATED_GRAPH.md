@@ -43,3 +43,18 @@ path; it **does not** demonstrate perception quality or verified identity.
 A successful software CI is **CI PASS / HIL NOT RUN**, not a claim that
 the Roadmap's field/ground-truth acceptance gates have passed. M4 metric
 localization and M5 Nav2 remain gated by the later validation stages.
+
+## M4-B retired-session fence
+
+AV audio and visual stream admission now retains up to 64 retired
+incarnation identifiers per input stream. Replays from any retired
+incarnation are rejected even if their sequence number and capture
+timestamp are later than those of the current session. Once the finite
+retirement history fills, transitions to further new incarnations fail
+closed; only an explicit ROS clock-epoch reset of the AV node releases
+that history. This is an ordering safeguard, **not** DDS authentication.
+
+Unit tests cover a delayed old incarnation with a newer timestamp,
+invalid sequence/time types, a full retirement history, and explicit
+reset. This makes M4-B failure isolation independent of the separate
+audio simulation and hardware acceptance projects.
