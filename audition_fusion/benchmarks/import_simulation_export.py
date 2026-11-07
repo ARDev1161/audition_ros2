@@ -39,7 +39,7 @@ def main(argv=None):
         sidecar = args.out.with_name(args.out.name + ".provenance.json")
         args.out.write_text(output, encoding="utf-8")
         sidecar.write_text(json.dumps(provenance, sort_keys=True, indent=2)
-                           + "\\n", encoding="utf-8")
+                           + "\n", encoding="utf-8")
         print(json.dumps(provenance, sort_keys=True), file=sys.stderr)
         return 0
     except (ValueError, OSError, UnicodeError) as error:
