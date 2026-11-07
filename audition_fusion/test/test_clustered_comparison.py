@@ -88,5 +88,41 @@ class ClusteredComparisonTests(unittest.TestCase):
         self.assertEqual(d["max_observable_trials_per_recording"], 2)
 
 
+    def test_strata_preserve_cluster_counts_and_unknowns(self):
+        rows = [trial(i) for i in range(1, 7)]
+        for row in rows[3:]:
+            row["stratum"] = "reflection"
+            row["predictions"]["temporal_fusion"] = {
+                "decision": "pair",
+                "pair": {"audio_id": "a", "radar_id": "wrong"},
+            }
+        unknown = trial(7, observed=False)
+        unknown["stratum"] = "unknown"
+        rows.append(unknown)
+        result = evaluate(dataset(rows))["clustered_comparison"]
+        self.assertEqual(result["baselines"]["instant_fusion"]["recording_clusters"], 6)
+        direct = result["per_stratum"]["direct"]["baselines"]["instant_fusion"]
+        reflection = result["per_stratum"]["reflection"]["baselines"]["instant_fusion"]
+        self.assertEqual(direct["recording_clusters"], 3)
+        self.assertEqual(reflection["recording_clusters"], 3)
+        self.assertEqual(direct["paired_accuracy_delta"], 1.0)
+        self.assertEqual(reflection["paired_accuracy_delta"], 0.0)
+        self.assertIsNone(direct["bootstrap_95pct_accuracy_interval"])
+        self.assertIsNone(reflection["bootstrap_95pct_accuracy_interval"])
+        self.assertEqual(result["per_stratum"]["unknown"]["unobservable_excluded"], 1)
+        self.assertEqual(result["per_stratum"]["unknown"]["baselines"]["audio_only"]
+                         ["recording_clusters"], 0)
+
+    def test_one_recording_in_multiple_strata_is_one_overall_cluster(self):
+        rows = [trial(1, digest="c" * 64), trial(2, digest="c" * 64)]
+        rows[1]["stratum"] = "reflection"
+        result = evaluate(dataset(rows))["clustered_comparison"]
+        self.assertEqual(result["baselines"]["audio_only"]["recording_clusters"], 1)
+        self.assertEqual(result["per_stratum"]["direct"]["baselines"]["audio_only"]
+                         ["recording_clusters"], 1)
+        self.assertEqual(result["per_stratum"]["reflection"]["baselines"]["audio_only"]
+                         ["recording_clusters"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
