@@ -8,6 +8,7 @@ two separate errors, not two trials. Abstention is not a true negative.
 from collections import defaultdict
 from paired_comparison import compare
 from clustered_comparison import clustered_comparison
+from safety_diagnostic import assess
 import math
 import re
 
@@ -156,7 +157,7 @@ def evaluate(data, *, held_out_only=True):
             increment(overall[name], observable, truth, decision, proposed)
             increment(strata[stratum][name], observable, truth,
                       decision, proposed)
-    return {
+    report = {
         "dataset_id": data["dataset_id"],
         "schema_version": 1,
         "evaluation_split": "held_out" if held_out_only else "all",
@@ -173,3 +174,5 @@ def evaluate(data, *, held_out_only=True):
             data, trials, held_out_only=held_out_only),
         "physical_validation_claim": False,
     }
+    report["safety_diagnostic"] = assess(report)
+    return report
