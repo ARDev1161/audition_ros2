@@ -255,7 +255,7 @@ Physical localization and Nav2 remain disabled.
 A separate, independently recorded acquisition manifest can now be supplied:
 
 ```bash
-python3 audition_fusion/benchmarks/evaluate_field_manifest.py \\
+python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
     trials.json --acquisition-provenance acquisition.json > report.json
 ```
 
