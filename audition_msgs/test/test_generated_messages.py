@@ -339,3 +339,36 @@ def test_m4_av_visual_and_pair_contracts_round_trip():
     assert back.hypotheses[0].supporting_synchronized_observations == 2
     assert not back.hypotheses[0].temporally_confirmed
     assert back.hypotheses[0].normalized_residual == pytest.approx(1.5)
+
+
+def test_m4_radar_sensor_and_diagnostic_contracts_round_trip():
+    from audition_msgs.msg import (RadarTrack, RadarTrackArray,
+                                   RadarObservation, RadarObservationArray)
+    t = RadarTrack()
+    t.radar_track_id = "radar-7"
+    t.radar_track_generation = 2
+    t.active = True
+    t.position_m.x = 3.
+    t.position_covariance_m2 = [.04,0.,0.,0.,.09,0.,0.,0.,.16]
+    t.observed_at.sec = 12
+    snapshot = RadarTrackArray()
+    snapshot.header.frame_id = "radar"
+    snapshot.radar_session_id = "a" * 32
+    snapshot.sequence_number = 4
+    snapshot.tracks = [t]
+    restored = deserialize_message(serialize_message(snapshot), RadarTrackArray)
+    assert restored.tracks[0].radar_track_generation == 2
+    assert restored.tracks[0].position_m.x == pytest.approx(3.)
+    o = RadarObservation()
+    o.radar_session_id = snapshot.radar_session_id
+    o.radar_track_id = "radar-7"
+    o.radar_track_generation = 2
+    o.conditional_position_covariance_m2 = [.04,0.,0.,0.,.09,0.,0.,0.,.16]
+    output = RadarObservationArray()
+    output.header.frame_id = "odom"
+    output.radar_session_id = o.radar_session_id
+    output.observations = [o]
+    returned = deserialize_message(serialize_message(output), RadarObservationArray)
+    assert returned.header.frame_id == "odom"
+    assert returned.observations[0].radar_track_id == "radar-7"
+    assert returned.observations[0].conditional_position_covariance_m2[8] == pytest.approx(.16)
