@@ -505,3 +505,7 @@ observable truth, even with `--all-splits`. The JSON report now includes
 `required_strata_held_out_coverage` with positive, negative, and unknown
 truth counts. Development-only and unknown-truth-only adverse conditions
 remain blocked. These counts do not establish provenance authenticity.
+
+### Adverse-stratum positive/negative coverage gate
+
+The opt-in `--require-both-truth-classes` requires each named `--required-stratum` to contain observable held-out positive and negative association truth. One-class strata add `required_stratum_missing_truth_class:NAME` and strict mode exits 3; invoking the option without required strata exits 2. This does not authenticate physical ground truth or permit Nav2 admission.

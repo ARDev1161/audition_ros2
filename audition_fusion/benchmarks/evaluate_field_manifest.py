@@ -54,6 +54,8 @@ def main(argv=None):
                         help="root directory of real recording files; required with --recording-index")
     parser.add_argument("--required-stratum", action="append", default=[], metavar="NAME",
                         help="require an observable held-out stratum; repeat for adverse cases")
+    parser.add_argument("--require-both-truth-classes", action="store_true",
+                        help="required held-out strata must have observable positive and negative truth")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -65,6 +67,8 @@ def main(argv=None):
                           object_pairs_hook=strict_object,
                           parse_constant=reject_constant)
         report = evaluate(data, held_out_only=not args.all_splits)
+        if args.require_both_truth_classes and not args.required_stratum:
+            raise ValueError("--require-both-truth-classes requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -100,6 +104,11 @@ def main(argv=None):
                     "observable_positive": 0, "observable_negative": 0,
                     "unobservable": 0})
                 for name in report["required_strata"]}
+            if args.require_both_truth_classes:
+                for name, counts in report["required_strata_held_out_coverage"].items():
+                    if not counts["observable_positive"] or not counts["observable_negative"]:
+                        apply_diagnostic_blockers(report, {
+                            "required_stratum_missing_truth_class:" + name})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

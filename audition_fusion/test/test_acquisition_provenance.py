@@ -139,6 +139,31 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                       report["safety_diagnostic"]["blockers"])
         self.assertEqual(report["required_strata_held_out_coverage"]["occluded"]["unobservable"], 1)
 
+    def test_required_stratum_needs_both_observable_truth_classes(self):
+        sample = dict(self.dataset["trials"][0])
+        sample["trial_id"] = "negative-only-stratum"
+        sample["stratum"] = "negative-only"
+        sample["split"] = "held_out"
+        sample["truth"] = dict(sample["truth"], observable=True, pair=None)
+        self.dataset["trials"].append(sample)
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "negative-only",
+               "--require-both-truth-classes", "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn("required_stratum_missing_truth_class:negative-only",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_both_classes_requires_explicit_stratum(self):
+        result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest),
+                                 "--require-both-truth-classes"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires --required-stratum", result.stderr)
+
     def test_invalid_required_stratum_is_input_error(self):
         cmd = [sys.executable, str(SCRIPT), str(self.manifest),
                "--required-stratum", " bad ", "--require-diagnostic-eligibility"]
