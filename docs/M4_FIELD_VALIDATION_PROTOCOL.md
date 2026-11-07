@@ -392,3 +392,14 @@ synthetic/unverified-domain restrictions, ground-truth provenance,
 session/scene/subject independence, calibration and M4 physical acceptance
 remain separate gates. Nothing in this command enables metric coordinate
 publication, Nav2 motion, or field acceptance.
+
+
+### Recording-to-scene consistency
+
+A single immutable recording SHA-256 must map to exactly one acquisition
+session **and** one scene. The audit rejects a recording whose trials claim
+conflicting `scene_id` values (`provenance_recording_scene_conflict`),
+just as it rejects conflicting sessions. Distinct `subject_id` values within
+the same recording remain valid because several physical people can be
+observed in one capture. These are consistency checks on supplied labels,
+not proof of authentic provenance or independent physical validation.

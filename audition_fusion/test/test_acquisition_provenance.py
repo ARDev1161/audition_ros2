@@ -145,6 +145,20 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(cli.returncode, 2)
         self.assertIn("provenance_recording_session_conflict", cli.stderr)
 
+    def test_same_recording_with_conflicting_scene_id_rejected(self):
+        # A recording cannot be relabeled into independent rooms by trial.
+        self.audit["trials"][1]["scene_id"] = "fake-second-room"
+        self.write_audit()
+        cli = self.cli()
+        self.assertEqual(cli.returncode, 2)
+        self.assertIn("provenance_recording_scene_conflict", cli.stderr)
+
+    def test_subject_changes_within_recording_are_allowed(self):
+        # Multiple real people may legitimately appear in one capture.
+        self.audit["trials"][1]["subject_id"] = "different-person"
+        self.write_audit()
+        self.assertEqual(self.cli().returncode, 0)
+
     def test_five_files_from_one_scene_are_not_five_independent_scenes(self):
         source = self.dataset["trials"][0]
         self.dataset["trials"] = [
