@@ -4,7 +4,10 @@ This checks whether a pooled gain is hiding a false-pair regression in any
 observable adverse stratum. It NEVER authorizes physical localization, a
 LocalizedSource topic, or Nav2 integration, even on clean synthetic trials.
 """
+import re
 from paired_comparison import BASELINES
+
+PROVENANCE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}\Z")
 
 
 def assess(report):
@@ -81,7 +84,7 @@ def provenance_blockers(manifest):
             problems.append("provenance_trial_invalid")
             continue
         tid = row["trial_id"]
-        if not isinstance(tid, str) or not tid or tid in seen:
+        if not isinstance(tid, str) or PROVENANCE_ID.fullmatch(tid) is None or tid in seen:
             problems.append("provenance_trial_duplicate_or_invalid")
         else:
             seen.add(tid)
@@ -96,6 +99,9 @@ def provenance_blockers(manifest):
                 continue
             if field == "recording_sha256" and (len(value) != 64 or any(c not in "0123456789abcdef" for c in value)):
                 problems.append("provenance_invalid_recording_hash")
+            if field != "recording_sha256" and PROVENANCE_ID.fullmatch(value) is None:
+                problems.append("provenance_invalid_identifier:" + field)
+                continue
             previous = groups.setdefault(value, split)
             if previous != split:
                 problems.append("provenance_split_leak:" + field)

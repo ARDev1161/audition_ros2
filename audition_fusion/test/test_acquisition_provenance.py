@@ -145,6 +145,18 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(cli.returncode, 2)
         self.assertIn("provenance_recording_session_conflict", cli.stderr)
 
+    def test_ambiguous_acquisition_identifiers_rejected(self):
+        # Invisible controls, whitespace aliases and overlong labels must
+        # never inflate the number of supposedly independent acquisitions.
+        for field in ("trial_id", "session_id", "scene_id", "subject_id"):
+            for bad in ("room\\n1", " room", "room ", "équipe", "a" * 129):
+                with self.subTest(field=field, bad=bad):
+                    self.audit = acquisition_rows(self.dataset)
+                    self.audit["trials"][0][field] = bad
+                    self.write_audit()
+                    result = self.cli()
+                    self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_same_recording_with_conflicting_scene_id_rejected(self):
         # A recording cannot be relabeled into independent rooms by trial.
         self.audit["trials"][1]["scene_id"] = "fake-second-room"

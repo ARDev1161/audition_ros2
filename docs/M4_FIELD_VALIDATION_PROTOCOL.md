@@ -433,3 +433,13 @@ if the observable subset looks clean. This deliberately conservative gate
 prevents missing ground truth from silently improving the apparent safety
 assessment. Unknown labels remain excluded from TP/FP/TN/FN scoring, and
 no diagnostic result permits Nav2 admission or physical localization.
+
+
+### Canonical acquisition identifiers
+
+Trial, session, scene and subject IDs in the acquisition sidecar must match
+ASCII `[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}`. Whitespace, control
+characters, Unicode lookalikes and overlong labels are rejected rather than
+silently normalized; otherwise one real room/session could be counted under
+multiple visually indistinguishable identifiers. These are metadata
+consistency checks, not proof that the supplied labels correspond to reality.
