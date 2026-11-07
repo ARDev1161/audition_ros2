@@ -66,7 +66,30 @@ def main():
         assert diagnostics()['world_frame'] == 'odom'
         assert diagnostics()['enable_conditional_evidence'] == 'False'
 
+        # Prime TF2 graph discovery before starting the 500ms pose TTL.
+        # The final pose, TF and acoustic sample use a fresh common stamp.
+        for frame, x in [('m4_integrated_mic', 1.),
+                         ('m4_integrated_camera', 1.05)]:
+            tf = TransformStamped()
+            tf.header.frame_id = 'odom'
+            tf.header.stamp = node.get_clock().now().to_msg()
+            tf.child_frame_id = frame
+            tf.transform.translation.x = x
+            tf.transform.rotation.w = 1.
+            tf_pub.sendTransform(tf)
+        until(lambda: False, .18)
+
         stamp = node.get_clock().now().to_msg()
+        for frame, x in [('m4_integrated_mic', 1.),
+                         ('m4_integrated_camera', 1.05)]:
+            tf = TransformStamped()
+            tf.header.frame_id = 'odom'
+            tf.header.stamp = stamp
+            tf.child_frame_id = frame
+            tf.transform.translation.x = x
+            tf.transform.rotation.w = 1.
+            tf_pub.sendTransform(tf)
+
         pose = Odometry()
         pose.header.frame_id = 'odom'
         pose.header.stamp = stamp
@@ -78,19 +101,7 @@ def main():
         pose_pub.publish(pose)
         assert until(lambda: int(diagnostics().get('accepted_pose_samples', 0)) >= 1), (
             'pose adapter did not accept good odometry', diagnostics())
-
-        for frame, x in [('m4_integrated_mic', 1.),
-                         ('m4_integrated_camera', 1.05)]:
-            tf = TransformStamped()
-            tf.header.frame_id = 'odom'
-            tf.header.stamp = stamp
-            tf.child_frame_id = frame
-            tf.transform.translation.x = x
-            tf.transform.rotation.w = 1.
-            tf_pub.sendTransform(tf)
-        # DDS TF listener needs time to ingest the exact observation stamp.
-        until(lambda: False, .25)
-
+        # No fixed post-pose wait: it would consume the limited TTL.
         a = AcousticSourceArray()
         a.header.frame_id = 'm4_integrated_mic'
         a.header.stamp = stamp
