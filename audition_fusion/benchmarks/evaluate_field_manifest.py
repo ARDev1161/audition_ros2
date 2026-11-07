@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from field_evaluation import evaluate
+from acquisition_provenance import audit_acquisition_provenance
 from simulation_provenance import verified_simulation_provenance
 
 
@@ -31,6 +32,8 @@ def main(argv=None):
                         help="include development trials (not acceptance)")
     parser.add_argument("--require-simulation-provenance", action="store_true",
                         help="reject absent, tampered or invalid adjacent simulation sidecar")
+    parser.add_argument("--acquisition-provenance", type=pathlib.Path,
+                        help="strict external session/scene/subject provenance audit JSON")
     args = parser.parse_args(argv)
     try:
         raw = args.manifest.read_bytes()
@@ -45,6 +48,23 @@ def main(argv=None):
         else:
             report["data_domain"] = "unverified"
             report["provenance_verified"] = False
+        if args.acquisition_provenance is not None:
+            report["acquisition_provenance_audit"] = audit_acquisition_provenance(
+                args.acquisition_provenance, data)
+        else:
+            report["acquisition_provenance_audit"] = {
+                "status": "not_provided",
+                "crosscheck_passed": False,
+                "independently_authenticated": False,
+                "physical_validation_claim": False,
+            }
+            # The standalone evaluator can still diagnose synthetic fixtures,
+            # but a CLI score without external collection metadata is never
+            # eligible even for diagnostic promotion.
+            safety = report["safety_diagnostic"]
+            safety["blockers"] = sorted(set(safety["blockers"]) |
+                                        {"acquisition_provenance_not_supplied"})
+            safety["diagnostic_promotion_eligible"] = False
         report["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
         report["manifest_name"] = args.manifest.name
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
