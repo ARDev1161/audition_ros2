@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from field_evaluation import evaluate
 from acquisition_provenance import audit_acquisition_provenance
-from acquisition_independence import independence_blockers
+from acquisition_independence import independence_blockers, group_robustness_blockers
 from simulation_provenance import verified_simulation_provenance
 
 
@@ -53,6 +53,8 @@ def main(argv=None):
             audit = audit_acquisition_provenance(args.acquisition_provenance, data)
             report["acquisition_provenance_audit"] = audit
             new_blockers = independence_blockers(audit["independence_summary"])
+            new_blockers += group_robustness_blockers(
+                audit["paired_group_sensitivity"])
             if new_blockers:
                 safety = report["safety_diagnostic"]
                 safety["blockers"] = sorted(set(safety["blockers"]) | set(new_blockers))
