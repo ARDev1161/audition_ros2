@@ -403,3 +403,13 @@ just as it rejects conflicting sessions. Distinct `subject_id` values within
 the same recording remain valid because several physical people can be
 observed in one capture. These are consistency checks on supplied labels,
 not proof of authentic provenance or independent physical validation.
+
+
+### Unknown-truth diagnostic semantics
+
+`no_observed_safety_regression` is **false** when any reported stratum
+has no independently observable truth, even if every other stratum has
+zero measured regressions. Lack of evidence must never be represented as
+a safety pass. This flag is narrower than, and never substitutes for,
+`diagnostic_promotion_eligible`; neither flag authorizes physical 3D
+localization or Nav2.

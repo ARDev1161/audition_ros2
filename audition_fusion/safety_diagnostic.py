@@ -36,12 +36,15 @@ def assess(report):
             blockers.append("no_pooled_accuracy_gain:" + baseline)
     if not paired["per_stratum"]:
         blockers.append("no_evaluable_strata")
+    observed_in_every_stratum = bool(paired["per_stratum"]) and all(
+        all(methods[baseline]["observable_trials"] > 0 for baseline in BASELINES)
+        for methods in paired["per_stratum"].values())
     return {
         "scope": "held_out_trial_diagnostics_only",
         "candidate": paired["candidate"],
         "compared_baselines": list(BASELINES),
         "blockers": sorted(set(blockers)),
-        "no_observed_safety_regression": not any(
+        "no_observed_safety_regression": observed_in_every_stratum and not any(
             reason.startswith(("false_pair_regression:", "paired_accuracy_regression:"))
             for reason in blockers),
         "diagnostic_promotion_eligible": not blockers,

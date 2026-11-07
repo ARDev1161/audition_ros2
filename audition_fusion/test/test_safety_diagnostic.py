@@ -89,6 +89,16 @@ class SafetyDiagnosticTests(unittest.TestCase):
         self.assertTrue(any(s.startswith("unknown_truth:occluded:")
                             for s in safety["blockers"]))
         self.assertFalse(safety["diagnostic_promotion_eligible"])
+        self.assertFalse(safety["no_observed_safety_regression"])
+
+    def test_unknown_only_stratum_never_claims_no_regression(self):
+        rows = [trial(i, "direct") for i in range(1, 6)]
+        rows += [trial(i, "unobservable", observable=False) for i in range(6, 11)]
+        safety = evaluate_rows(rows)
+        self.assertIn("unknown_truth:unobservable:audio_only", safety["blockers"])
+        self.assertFalse(safety["no_observed_safety_regression"])
+        self.assertFalse(safety["diagnostic_promotion_eligible"])
+        self.assertFalse(safety["nav2_admission"])
 
     def test_development_split_is_never_diagnostic_promotion(self):
         rows = [trial(i, "direct") for i in range(1, 6)]
