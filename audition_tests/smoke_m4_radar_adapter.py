@@ -94,11 +94,37 @@ def main():
                      positive.sequence_number+1
                      and not observed[-1].observations), (
                          'empty radar snapshot was not admitted')
+        # A fresh radar incarnation starts at sequence 1; reopening its
+        # retired predecessor with a newer timestamp is still forbidden.
+        before = observed[-1].sequence_number
+        new_session = 'f' * 32
+        pub.publish(snapshot(1, node.get_clock().now().to_msg(),
+                             session=new_session, tracks=0))
+        assert until(lambda: observed[-1].sequence_number > before
+                     and observed[-1].radar_session_id == new_session), (
+                         'new radar incarnation not admitted')
+        before = observed[-1].sequence_number
+        pub.publish(snapshot(999, node.get_clock().now().to_msg(),
+                             session=SESSION, tracks=0))
+        until(lambda: False, .16)
+        assert observed[-1].sequence_number == before, (
+            'retired radar incarnation resumed')
+
+        # A fresh track without stamped TF2 is not a world-frame position.
+        stamp = node.get_clock().now().to_msg()
+        no_tf = snapshot(2, stamp, session=new_session)
+        no_tf.header.frame_id = 'radar_frame_without_tf'
+        pub.publish(no_tf)
+        assert until(lambda: observed[-1].sequence_number > before), (
+            'missing TF snapshot not acknowledged')
+        assert not observed[-1].observations, (
+            'radar track without TF was reported in world coordinates')
+
         topics = dict(node.get_topic_names_and_types())
         assert NS+'localized_sources' not in topics
         assert NS+'cmd_vel' not in topics
         print('PASS: radar TF2 metric observation, conditional covariance, '
-              'TTL, replay and empty snapshot; no Nav2')
+              'TTL, sessions, replay, missing TF and empty snapshot; no Nav2')
         return 0
     except Exception as exc:
         print('FAIL: M4 radar ROS graph:', repr(exc), file=sys.stderr)
