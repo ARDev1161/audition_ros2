@@ -258,6 +258,23 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M4 visual evidence and ambiguous pairing over real TF2/DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=124
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_av_pairs.launch.py \
+            audition_namespace:=robot_ci/av world_frame:=odom \
+            > /tmp/audition_m4_av.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_av_pairs.py; then
+            cat /tmp/audition_m4_av.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |
