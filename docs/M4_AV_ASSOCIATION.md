@@ -67,3 +67,12 @@ Results must not trigger camera/base motion, Nav2 costs or metric localization.
 Real-world association precision/recall, source motion, reflection rejection,
 clock calibration and extrinsic uncertainty remain unverified M4 acceptance
 requirements.
+
+## Atomic track identity admission
+
+A single source or visual track ID must not appear twice in one snapshot,
+**even with different generations**. The node rejects the entire offending
+side rather than selecting an arbitrary generation or publishing partial
+matches. The ROS graph smoke covers a visual ID reused across two generations
+in the same snapshot and verifies immediate withdrawal. This is a producer
+contract/safety check, not a calibrated identity claim.

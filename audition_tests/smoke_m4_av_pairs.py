@@ -138,8 +138,19 @@ def main():
         assert not any(p.unique_match for p in ambiguous.hypotheses), 'ambiguity concealed'
         assert not any(p.temporally_confirmed for p in ambiguous.hypotheses), 'stale confirmation'
 
+        # A single visual ID cannot denote two generations in one snapshot.
+        # The entire snapshot must withdraw the prior hypothesis.
         stamp=node.get_clock().now().to_msg()
-        visual.publish(vision_msg(5,stamp,[]))
+        prepare_tf(stamp)
+        duplicate=vision_msg(5,stamp,['face-a','face-a'])
+        duplicate.tracks[1].visual_track_generation=2
+        visual.publish(duplicate)
+        withdrawn=find(lambda m:m.sequence_number>ambiguous.sequence_number
+                       and not m.hypotheses)
+        assert not withdrawn.hypotheses, 'duplicate visual ID was accepted'
+
+        stamp=node.get_clock().now().to_msg()
+        visual.publish(vision_msg(6,stamp,[]))
         cleared=find(lambda m:m.sequence_number>ambiguous.sequence_number
                     and not m.hypotheses)
         assert not cleared.hypotheses

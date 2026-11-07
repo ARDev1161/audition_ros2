@@ -118,7 +118,7 @@ class AvPairNode(Node):
         incoming=[]
         seen=set()
         for s in msg.sources:
-            key=(s.source_id,s.source_generation)
+            key=s.source_id
             if key in seen:
                 incoming=[]
                 break
@@ -150,7 +150,7 @@ class AvPairNode(Node):
         incoming=[]
         seen=set()
         for s in msg.tracks:
-            key=(s.visual_track_id,s.visual_track_generation)
+            key=s.visual_track_id
             if key in seen:
                 incoming=[]
                 break
