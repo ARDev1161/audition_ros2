@@ -5,6 +5,7 @@ Only pair suggestions are produced: no speaker identity, depth, person
 presence, confidence probability, covariance or navigation occupancy.
 """
 from dataclasses import dataclass
+from collections import deque
 import math
 import re
 
@@ -31,26 +32,41 @@ class Pair:
 
 
 class StreamFence:
-    """Snapshot admission with replay fencing across epochs and clock resets."""
-    def __init__(self):
+    """Bounded epoch/replay admission. Reset is only for a verified clock reset.
+
+    An old session cannot become current again using a forged newer stamp.
+    After retirement capacity is exhausted, fail closed until an explicit
+    reset rather than silently forgetting an old incarnation.
+    """
+    def __init__(self, *, max_retired=64):
+        if type(max_retired) is not int or not 1 <= max_retired <= 256:
+            raise ValueError('invalid retired stream capacity')
+        self.max_retired = max_retired
         self.reset()
 
     def reset(self):
         self.session = None
         self.sequence = 0
         self.stamp_ns = 0
+        self.retired = deque()
 
     def accept(self, session, sequence, stamp_ns):
         if (not isinstance(session, str)
                 or not re.fullmatch(r'[0-9a-f]{32}', session)
-                or sequence <= 0 or stamp_ns <= 0):
+                or type(sequence) is not int or sequence <= 0
+                or type(stamp_ns) is not int or stamp_ns <= 0
+                or session in self.retired):
             return False
-        # A different epoch may be newer, but never permit an older snapshot
-        # to reopen a retired incarnation without an explicit clock reset.
+        # No snapshot from any session may regress the admitted clock.
         if self.session is not None and stamp_ns <= self.stamp_ns:
             return False
-        if self.session == session and sequence <= self.sequence:
-            return False
+        if self.session == session:
+            if sequence <= self.sequence:
+                return False
+        elif self.session is not None:
+            if len(self.retired) >= self.max_retired:
+                return False
+            self.retired.append(self.session)
         self.session = session
         self.sequence = sequence
         self.stamp_ns = stamp_ns
