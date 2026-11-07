@@ -68,3 +68,17 @@ even with a newer capture timestamp, and immediate clearing when the camera
 publishes an empty track snapshot. Each fresh identity/incarnation starts
 with a single unconfirmed pair; no unverified speaker identity is inferred.
 This is software-only test coverage, not camera or acoustic simulator work.
+
+## M4-B inverse AV ambiguity and silent-stream expiry
+
+The live M4 AV smoke covers both directions of competing assignments:
+one audio track versus two visually plausible tracks, and **two simultaneous
+acoustic tracks versus one visually plausible track**. Neither configuration
+may expose a unique/confirmed association, even though each direction
+passes the individual time/angle gate. An authoritative empty audio snapshot
+must immediately revoke every pending AV pair independently of the camera.
+
+A separate live scenario verifies that if the visual publisher stops without
+an explicit empty snapshot, the AV node publishes an empty hypothesis array
+after its bounded observation TTL. These are ROS2/DDS integration checks,
+not accuracy evidence or acoustic simulation.
