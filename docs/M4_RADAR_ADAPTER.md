@@ -87,3 +87,26 @@ the aligned impostor and reflection classes. These metrics are scoped
 radar hardware or a measured cross-sensor improvement. They demonstrate
 that geometric compatibility alone cannot prove radar/audio identity,
 justify `LocalizedSource`, or satisfy M4's physical acceptance gate.
+
+## M4-D temporal candidate corroboration (software-only)
+
+`radar_temporal.py` provides an optional bounded `RadarPairTemporalGate`
+over the diagnostic edges of `RadarBearingMatcher`. A pairing needs at
+least three independently **advanced audio and radar observations**
+(default minimum spacing 100 ms, maximum gap 600 ms). The gate carries
+evidence only for a stable pair of source ID+generation and radar track
+ID+generation within unchanged audio and radar session identifiers.
+
+It immediately invalidates history on any ambiguity, explicit empty
+snapshot, session change, source generation change or clock rollback.
+Repeated observations from either modality cannot increase evidence.
+Its `temporally_correlated` flag is deliberately **not** an assertion of
+speaker identity, accurate range, sensor independence, or physical
+localization: an aligned impostor or reflection may match for many
+consecutive frames. This module is pure Python and has no ROS publisher,
+Nav2 consumer, robot control, or acoustic simulator dependency.
+
+CI runs `test_radar_temporal.py` as part of the existing radar test
+pattern. Promotion to a ROS-level consumer is deferred until a
+ground-truth comparison documents false matches and independent-sensing
+baseline performance.
