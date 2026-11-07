@@ -42,7 +42,7 @@ def run():
             assert handle.accepted
             return handle.get_result_async()
 
-        def send(delay=0.0):
+        def send(delay=0.0, repeats=2):
             nonlocal stamp
             if delay:
                 time.sleep(delay)
@@ -58,7 +58,7 @@ def run():
             # Repeated publication of one stamp helps the worker consume the
             # observation without adding evidence. Keep the send cadence
             # well below the 180ms minimum spacing in the burst case.
-            for _ in range(2):
+            for _ in range(repeats):
                 pub.publish(msg)
                 rclpy.spin_once(node, timeout_sec=0.03)
             time.sleep(0.04)
@@ -86,11 +86,14 @@ def run():
 
         # A fresh bounded sequence satisfies all three constraints.
         result = goal(2500)
-        send()
-        # Two ~350ms arrival gaps satisfy both the 180ms minimum and
-        # 900ms maximum confirmation window with ample scheduler margin.
-        send(delay=0.25)
-        send(delay=0.25)
+        # Republish each identical stamped observation across several
+        # executor spins: DDS scheduling may miss a single short burst under
+        # CI load, but duplicates must NOT count as independent evidence.
+        # ~0.34s between the final arrivals satisfies the 180ms minimum,
+        # 750ms maximum gap and 900ms total confirmation window.
+        send(repeats=4)
+        send(delay=0.22, repeats=4)
+        send(delay=0.22, repeats=4)
         outcome = wait(node, result)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("bounded recovery", outcome.status, outcome.result.reason)
         assert outcome.result.acquired
