@@ -249,3 +249,30 @@ missing IDs and duplicate trial IDs. It is deliberately a separate diagnostic
 check: passing it does **not** imply that the source manifest is authentic,
 that five recordings are independent, or that M4 has passed field acceptance.
 Physical localization and Nav2 remain disabled.
+
+### Running the acquisition audit through the scorer
+
+A separate, independently recorded acquisition manifest can now be supplied:
+
+```bash
+python3 audition_fusion/benchmarks/evaluate_field_manifest.py \\
+    trials.json --acquisition-provenance acquisition.json > report.json
+```
+
+The audit JSON contains exactly one root `trials` list. Every row must
+contain exactly `trial_id`, `split`, `recording_sha256`,
+`session_id`, `scene_id`, and `subject_id`. It must cover **all**
+development and held-out trial IDs in the scoring manifest, without extra
+rows, and each trial's split and recording hash must agree exactly.
+Malformed JSON, duplicate keys, unknown rows, conflicting hashes, shared
+subject/session/scene across development and held-out, missing metadata
+and payloads over 4 MiB make the CLI exit nonzero. No report is emitted
+for a failed external audit.
+
+Without `--acquisition-provenance` the ordinary scoring diagnostics still
+work, but the CLI marks the acquisition audit `not_provided` and adds
+`acquisition_provenance_not_supplied` to the diagnostic blockers.
+A successful cross-check includes the audit file's SHA-256 for reproducible
+review; it **does not authenticate** who collected the metadata, verify
+the claimed physical subject or sensor geometry, or clear M4 acceptance.
+`physical_validation_claim` and `nav2_admission` remain false.
