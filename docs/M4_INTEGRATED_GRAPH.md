@@ -22,7 +22,7 @@ at runtime: loss of one must not prevent basic audio perception.
 ROS 2 graph (not three separately launched graphs): node discovery,
 Odometry ingestion, synchronized timestamped TF2, one active audio source,
 one visual track, AV hypothesis, one-view bearing rejection, and
-diagnostic-only pose matching. It explicitly checks there is no default
+diagnostic-only pose matching. The test also checks source retirement across both AV and bearing-candidate outputs, fresh scene incarnation admission with pose-cache invalidation, and rejection of a delayed former incarnation. It explicitly checks there is no default
 `localized_sources` or `cmd_vel` publisher in the namespace.
 
 Separate existing tests cover replay/session changes, timestamp skew,
