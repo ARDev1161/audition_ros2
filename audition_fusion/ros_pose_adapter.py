@@ -82,14 +82,15 @@ def from_ros_pose_message(message, *, world_frame, lever_arm_xy,
             return None
         # x/y/yaw entries in ROS REP-103 row-major 6x6 pose covariance.
         indices = (0, 1, 5)
-        joint = tuple(covariance[6*r+c] for r in indices for c in indices)
+        joint = tuple(float(covariance[6*r+c]) for r in indices for c in indices)
         yaw = _yaw_if_planar(pose.orientation)
         if yaw is None:
             return None
         robot_pose = PlanarPose(
-            pose.position.x, pose.position.y, yaw, joint)
-        origin = project_microphone_origin(robot_pose, lever_arm_xy)
+            float(pose.position.x), float(pose.position.y), float(yaw), joint)
+        arm = tuple(float(v) for v in lever_arm_xy)
+        origin = project_microphone_origin(robot_pose, arm)
         return (StampedMicrophoneOrigin(stamp_ns, world_frame, origin)
                 if origin is not None else None)
-    except (AttributeError, TypeError, IndexError, ValueError):
+    except (AttributeError, TypeError, IndexError, ValueError, OverflowError):
         return None
