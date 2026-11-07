@@ -11,6 +11,7 @@ from audition_msgs.msg import AcousticSourceArray, AcousticSource
 
 from pose_sample_cache import PoseSampleCache
 from ros_pose_adapter import from_ros_pose_message
+from scene_admission import SceneAdmission
 
 
 def ns(stamp):
@@ -45,6 +46,10 @@ class PoseEvidenceNode(Node):
         self.matches = 0
         self.unmatched = 0
         self.last_clock = 0
+        self.scene_guard = SceneAdmission()
+        self.replayed_scenes = 0
+        self.session_restarts = 0
+        self.clock_resets = 0
         self.publisher = self.create_publisher(DiagnosticArray, 'fusion/pose_evidence_diagnostics', 10)
         pose_cls = Odometry if self.mode == 'odometry' else PoseWithCovarianceStamped
         self.pose_sub = self.create_subscription(pose_cls, 'fusion/input_pose',
@@ -57,6 +62,8 @@ class PoseEvidenceNode(Node):
         value = self.get_clock().now().nanoseconds
         if self.last_clock and value < self.last_clock:
             self.cache.reset()
+            self.scene_guard.reset()
+            self.clock_resets += 1
         self.last_clock = value
         self.cache.tick(value)
         return value
@@ -83,6 +90,16 @@ class PoseEvidenceNode(Node):
                 or now - scene_stamp > self.age_ns):
             self.unmatched += 1
             return
+        admission = self.scene_guard.begin(
+            array.scene_session_id, int(array.sequence_number), scene_stamp)
+        if not admission.accepted:
+            self.replayed_scenes += 1
+            return
+        if admission.restarted:
+            # Pose samples from the previous capture incarnation are not
+            # reassigned to a new stream by timestamp coincidence alone.
+            self.cache.reset()
+            self.session_restarts += 1
         for source in array.sources:
             if (source.state != AcousticSource.ACTIVE
                     or not source.has_direction or not source.source_id):
@@ -115,6 +132,9 @@ class PoseEvidenceNode(Node):
             ('cache_rejected_pose_samples', self.cache_rejected),
             ('matching_bearings', self.matches),
             ('unmatched_bearings', self.unmatched),
+            ('replayed_scenes', self.replayed_scenes),
+            ('session_restarts', self.session_restarts),
+            ('clock_resets', self.clock_resets),
             ('buffered_pose_samples', len(self.cache.samples)),
             ('world_frame', self.frame)):
             status.values.append(KeyValue(key=str(key), value=str(value)))
