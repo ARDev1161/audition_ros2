@@ -47,6 +47,7 @@ def validate(data):
     require(isinstance(trials, list) and 1 <= len(trials) <= 100000,
             "invalid trial count")
     seen = set()
+    recording_splits = {}
     result = []
     for i, trial in enumerate(trials):
         name = "trials[" + str(i) + "]"
@@ -64,6 +65,10 @@ def validate(data):
         require(isinstance(recording_hash, str)
                 and HASH_RE.fullmatch(recording_hash) is not None,
                 "invalid recording sha256")
+        previous_split = recording_splits.setdefault(
+            recording_hash, trial["split"])
+        require(previous_split == trial["split"],
+                "recording appears in development and held_out splits")
         truth = trial["truth"]
         require(isinstance(truth, dict)
                 and set(truth) == {"observable", "pair"},
