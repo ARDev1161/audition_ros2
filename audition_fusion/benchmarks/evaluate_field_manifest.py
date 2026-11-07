@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from field_evaluation import evaluate
+from simulation_provenance import verified_simulation_provenance
 
 
 def strict_object(pairs):
@@ -28,6 +29,8 @@ def main(argv=None):
     parser.add_argument("manifest", type=pathlib.Path)
     parser.add_argument("--all-splits", action="store_true",
                         help="include development trials (not acceptance)")
+    parser.add_argument("--require-simulation-provenance", action="store_true",
+                        help="reject absent, tampered or invalid adjacent simulation sidecar")
     args = parser.parse_args(argv)
     try:
         raw = args.manifest.read_bytes()
@@ -37,6 +40,11 @@ def main(argv=None):
                           object_pairs_hook=strict_object,
                           parse_constant=reject_constant)
         report = evaluate(data, held_out_only=not args.all_splits)
+        if args.require_simulation_provenance:
+            report.update(verified_simulation_provenance(args.manifest, raw, data))
+        else:
+            report["data_domain"] = "unverified"
+            report["provenance_verified"] = False
         report["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
         report["manifest_name"] = args.manifest.name
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
