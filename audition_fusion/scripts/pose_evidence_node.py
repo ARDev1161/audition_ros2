@@ -10,7 +10,8 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from audition_msgs.msg import AcousticSourceArray, AcousticSource
 
 from pose_sample_cache import PoseSampleCache
-from ros_pose_adapter import from_ros_pose_message
+from ros_pose_adapter import from_ros_pose_message, _yaw_if_planar
+from pose_uncertainty import PlanarPose, project_microphone_origin
 
 
 def ns(stamp):
@@ -70,14 +71,19 @@ class PoseEvidenceNode(Node):
         if parsed is None:
             # Bounded, non-sensitive numeric rejection diagnostics for CI
             # and misconfigured robot covariance/clock investigations.
+            q = msg.pose.pose.orientation
+            yaw = _yaw_if_planar(q)
+            indices = (0, 1, 5)
+            joint = tuple(msg.pose.covariance[6*r+c]
+                          for r in indices for c in indices)
+            debug_pose = None if yaw is None else project_microphone_origin(
+                PlanarPose(msg.pose.pose.position.x,
+                           msg.pose.pose.position.y, yaw, joint), self.arm)
             self.get_logger().warning(
                 'pose rejected: frame=%s expected=%s stamp=%d now=%d '
-                'cov_xx=%s cov_yy=%s cov_yaw=%s q_w=%s' % (
+                'yaw=%s covariance=%s projected=%s' % (
                     msg.header.frame_id, self.frame, ns(msg.header.stamp), now,
-                    str(msg.pose.covariance[0]), str(msg.pose.covariance[7]),
-                    str(msg.pose.covariance[35]),
-                    str(msg.pose.pose.orientation.w)),
-                throttle_duration_sec=1.0)
+                    str(yaw), str(joint), str(debug_pose)))
             self.adapter_rejected += 1
             self.rejected += 1
         elif self.cache.add(parsed, now):
