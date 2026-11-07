@@ -60,6 +60,26 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(self.p.receive(proposal(1000, source='é'*129), 1.21))
         self.assertTrue(self.p.receive(proposal(3), 1.22))
 
+    def test_foreign_retirement_does_not_revoke_active_aim(self):
+        self.p.authorize(True, 1)
+        self.assertTrue(self.p.receive(proposal(10, source='tracked'), 1.1))
+        self.assertFalse(self.p.receive(proposal(999, source='foreign', valid=False), 1.12))
+        self.assertTrue(self.p.active)
+        self.assertTrue(self.p.receive(proposal(11, source='tracked'), 1.14))
+
+    def test_old_tracker_retirement_does_not_revoke(self):
+        self.p.authorize(True, 1)
+        m = proposal(10)
+        m.source_generation = 3
+        self.assertTrue(self.p.receive(m, 1.1))
+        stale = proposal(999, valid=False)
+        stale.source_generation = 2
+        self.assertFalse(self.p.receive(stale, 1.12))
+        self.assertTrue(self.p.active)
+        m = proposal(11)
+        m.source_generation = 3
+        self.assertTrue(self.p.receive(m, 1.14))
+
     def test_limits_and_frame(self):
         self.p.authorize(True, 1)
         self.assertFalse(self.p.receive(proposal(1, pan=1.3), 1.1))

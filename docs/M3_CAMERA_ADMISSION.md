@@ -33,3 +33,5 @@ ros2 topic echo /audition/attention/camera_aim_admitted
 Policy unit tests cover default denial, timeout, revocation, replay,
 retirement, malformed identity, frame and angle bounds. Hardware validation
 remains outside this milestone.
+
+An explicit retirement from a foreign source or older tracker generation is ignored while a different active aim exists; it cannot poison the replay watermark. This is a ROS policy gate, not a cryptographic authentication mechanism.

@@ -21,11 +21,15 @@ class Admission:
         self.last_key = None
         self.active = False
         self.active_at = None
+        self.active_source = None
+        self.active_generation = None
 
     def authorize(self, enabled, now):
         self.enabled_at = now if enabled else None
         if not enabled:
             self.active = False
+            self.active_source = None
+            self.active_generation = None
 
     def allowed(self, now):
         return self.enabled_at is not None and 0 <= now - self.enabled_at <= self.age
@@ -41,8 +45,14 @@ class Admission:
         if self.last_key is not None and key <= self.last_key:
             return False
         if not msg.valid:
+            # Retirement of a different tracker cannot revoke an active aim.
+            if (self.active and (msg.source_id != self.active_source
+                    or msg.source_generation < self.active_generation)):
+                return False
             self.last_key = key
             self.active = False
+            self.active_source = None
+            self.active_generation = None
             return False
         if (not self.allowed(now) or not msg.source_id
                 or not math.isfinite(msg.pan_rad) or not math.isfinite(msg.tilt_rad)
@@ -52,6 +62,8 @@ class Admission:
         self.last_key = key
         self.active = True
         self.active_at = now
+        self.active_source = msg.source_id
+        self.active_generation = msg.source_generation
         return True
 
     def expired(self, now):
