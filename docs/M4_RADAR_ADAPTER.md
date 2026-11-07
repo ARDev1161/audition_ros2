@@ -40,3 +40,32 @@ Later M4 work may match these independently measured radar coordinates
 to acoustic bearings with explicit association uncertainty and ambiguity
 preservation. That must remain a diagnostic hypothesis until independent
 ground-truth evaluation establishes precision, recall and false matches.
+
+## Optional diagnostic radar/acoustic association primitive
+
+`radar_bearing_matching.py` is a **pure-Python, non-publishing** candidate
+matcher that can be fed independently observed world-frame `Ray` bearings
+and radar points after TF2 conversion. It conservatively gates finite
+timestamps (default maximum 150 ms skew), valid 3-D geometry, forward
+radar-point distance along an acoustic ray (0.5–30 m), ray/point angular
+difference, measurement variance, and per-frame track capacity.
+
+For each eligible edge, it reports the radar point's **distance along the
+acoustic ray**, geometric lateral residual, normalized *diagnostic* residual
+and whether the edge is isolated among other candidates on both sides.
+This distance is **not** measured acoustic source range; the radar object
+may be an unrelated person, wall or reflector aligned with a sound.
+Ambiguous many-to-one and one-to-many alternatives remain explicit and
+cannot be promoted to unique matches.
+
+The uncertainty denominator is a conservative approximation combining
+angular variance at range with the trace of radar measurement covariance.
+It is **not** calibrated probability, a cross-sensor covariance fusion
+algorithm or evidence of sensor-error independence. Accordingly this
+increment intentionally has **no ROS publisher, no `LocalizedSource`,
+no automatic audio/radar identity claim, and no Nav2 consumer**.
+
+CI unit tests cover correct geometry, impossible angles, behind-sensor
+and excessive distance, time skew, invalid covariance, duplicate identity
+and reciprocal ambiguity. Physical-sensor precision/recall and the M4
+ground-truth gate remain deferred.
