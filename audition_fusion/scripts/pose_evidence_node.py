@@ -68,6 +68,16 @@ class PoseEvidenceNode(Node):
             now_ns=now, maximum_age_ns=self.age_ns,
             maximum_future_ns=0)
         if parsed is None:
+            # Bounded, non-sensitive numeric rejection diagnostics for CI
+            # and misconfigured robot covariance/clock investigations.
+            self.get_logger().warning(
+                'pose rejected: frame=%s expected=%s stamp=%d now=%d '
+                'cov_xx=%s cov_yy=%s cov_yaw=%s q_w=%s' % (
+                    msg.header.frame_id, self.frame, ns(msg.header.stamp), now,
+                    str(msg.pose.covariance[0]), str(msg.pose.covariance[7]),
+                    str(msg.pose.covariance[35]),
+                    str(msg.pose.pose.orientation.w)),
+                throttle_duration_sec=1.0)
             self.adapter_rejected += 1
             self.rejected += 1
         elif self.cache.add(parsed, now):
