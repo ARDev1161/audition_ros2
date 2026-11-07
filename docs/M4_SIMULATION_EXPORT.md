@@ -94,3 +94,16 @@ with explicit event-to-truth IDs. This v1 importer does not validate
 timing, sensor calibration or raw sample accuracy because the format
 contains trial-level decisions and artifact hashes, not those tracks.
 These remain separate M4 gate requirements.
+
+## Simulation provenance sidecar
+
+The import command additionally writes
+`simulation-field-manifest.json.provenance.json` next to the output.
+It contains `domain: simulation`, `physical_validation_claim: false`,
+`simulation_export_sha256`, `manifest_sha256` and the trial count.
+**Keep this sidecar with every derived report.** Validate the latter
+SHA-256 against the scored manifest before aggregation; results without
+matching provenance should be marked `unknown-origin` and excluded
+from physical-validation claims. The field v1 scorer intentionally
+remains compatible with independently annotated real recordings; its
+output schema alone does not classify simulated versus physical sources.
