@@ -129,6 +129,12 @@ both FP (incorrect candidate) and FN (missed true candidate), while
 the trial itself is counted once. Unknown/unobservable truth is reported
 as a separate count, not silently forced to a negative label.
 
+The v1 validator also rejects any recording SHA-256 that appears in both
+`development` and `held_out` trials: separate events from the same
+recording are not independent test recordings and must not cross splits.
+Multiple trials from the same recording **within** a split remain valid,
+but their uncertainty estimates should be clustered by recording/trial.
+
 The report includes TP, FP, TN, FN, abstention and unobservable counts,
 precision, recall, F1, false-positive rate, and breakdown by stratum.
 A rate with a zero denominator is `null`, not a fictitious 0% or 100%.
