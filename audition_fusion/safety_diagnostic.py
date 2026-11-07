@@ -80,7 +80,7 @@ def provenance_blockers(manifest):
         else:
             seen.add(tid)
         split = row["split"]
-        if split not in ("development", "held_out"):
+        if not isinstance(split, str) or split not in ("development", "held_out"):
             problems.append("provenance_split_invalid")
             continue
         for field, groups in splits.items():

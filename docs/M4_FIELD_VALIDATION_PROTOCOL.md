@@ -413,3 +413,11 @@ zero measured regressions. Lack of evidence must never be represented as
 a safety pass. This flag is narrower than, and never substitutes for,
 `diagnostic_promotion_eligible`; neither flag authorizes physical 3D
 localization or Nav2.
+
+
+### Malformed provenance type rejection
+
+The audit must reject JSON arrays and objects supplied in place of any
+`split`, recording hash, session, scene or subject identifier. Invalid input
+returns CLI exit code 2 with a validation error rather than an uncaught
+`TypeError`. No malformed sidecar can be counted as independent evidence.

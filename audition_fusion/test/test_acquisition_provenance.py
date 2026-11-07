@@ -195,6 +195,20 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(summary["overall_distinct_groups"]["session_id"], 0)
         self.assertEqual(summary["unknown_truth_excluded"], len(self.dataset["trials"]))
 
+    def test_nonstring_group_fields_fail_closed_without_traceback(self):
+        # JSON arrays/objects must never reach dictionary setdefault keys.
+        for field in ("split", "recording_sha256", "session_id",
+                      "scene_id", "subject_id"):
+            for bad in ([], {"unexpected": "object"}):
+                with self.subTest(field=field, bad=bad):
+                    self.audit = acquisition_rows(self.dataset)
+                    self.audit["trials"][0][field] = bad
+                    self.write_audit()
+                    result = self.cli()
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("Invalid M4 evaluation input:", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_unhashable_trial_ids_fail_closed(self):
         self.audit["trials"][0]["trial_id"] = ["invalid"]
         self.write_audit()
