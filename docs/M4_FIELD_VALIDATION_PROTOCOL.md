@@ -197,3 +197,18 @@ remains `false`. The release gate still requires externally documented
 scene/subject/session partitioning, predeclared safety limits, calibrated
 sensors and independent field truth. A confidence interval above zero on
 synthetic data is not proof that fusion safely improves physical localization.
+
+### Adverse-stratum cluster isolation
+
+The `clustered_comparison.per_stratum` report repeats recording-clustered
+paired diagnostics within each declared stratum. It preserves
+strata with only unobservable truth and reports their excluded counts,
+with null interval and gain fields. Five distinct held-out recordings in
+the overall pool do not authorize bootstrap bounds for a stratum with only
+three recordings. One recording appearing in two strata is counted once
+in the global total and once within each stratum; these strata are not
+independent samples. Report adverse-stratum regressions separately instead
+of averaging them into a pooled win.
+
+This is diagnostic analysis only; no metric source publication or Nav2
+admission is inferred.
