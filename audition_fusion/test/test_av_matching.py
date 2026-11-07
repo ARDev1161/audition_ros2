@@ -28,6 +28,40 @@ class TestStreamFence(unittest.TestCase):
         self.assertTrue(f.accept(a,1,1))
 
 
+    def test_retired_epoch_cannot_return_with_newer_timestamp(self):
+        guard = StreamFence()
+        a, b, c = ('a' * 32, 'b' * 32, 'c' * 32)
+        self.assertTrue(guard.accept(a, 1, 100))
+        self.assertTrue(guard.accept(b, 1, 200))
+        self.assertFalse(guard.accept(a, 999, 300))
+        self.assertEqual((guard.session, guard.sequence, guard.stamp_ns),
+                         (b, 1, 200))
+        self.assertTrue(guard.accept(c, 1, 301))
+        self.assertFalse(guard.accept(b, 2, 302))
+        guard.reset()  # Explicit clock epoch reset, not producer restart.
+        self.assertTrue(guard.accept(a, 1, 1))
+
+    def test_retirement_capacity_exhaustion_fails_closed(self):
+        guard = StreamFence(max_retired=1)
+        self.assertTrue(guard.accept('a' * 32, 1, 100))
+        self.assertTrue(guard.accept('b' * 32, 1, 200))
+        self.assertFalse(guard.accept('c' * 32, 1, 300))
+        self.assertFalse(guard.accept('a' * 32, 9, 400))
+        self.assertTrue(guard.accept('b' * 32, 2, 500))
+        self.assertEqual(len(guard.retired), 1)
+
+    def test_malformed_epoch_parameters_rejected_without_state_mutation(self):
+        guard = StreamFence()
+        self.assertTrue(guard.accept('a' * 32, 1, 100))
+        for session, seq, stamp in [
+                ('A' * 32, 2, 200), ('b' * 32, 0, 200),
+                ('b' * 32, True, 200), ('b' * 32, 1, 0),
+                ('b' * 32, 1, 2.0)]:
+            self.assertFalse(guard.accept(session, seq, stamp))
+        self.assertEqual((guard.session, guard.sequence, guard.stamp_ns),
+                         ('a' * 32, 1, 100))
+
+
 class TestPairMatcher(unittest.TestCase):
     def setUp(self):
         self.m=PairMatcher()
