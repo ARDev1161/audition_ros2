@@ -11,7 +11,7 @@ from audition_msgs.msg import AcousticSourceArray, AcousticSource
 
 from pose_sample_cache import PoseSampleCache
 from ros_pose_adapter import from_ros_pose_message, _yaw_if_planar
-from pose_uncertainty import PlanarPose, project_microphone_origin
+from pose_uncertainty import PlanarPose, project_microphone_origin, _psd3
 
 
 def ns(stamp):
@@ -81,9 +81,11 @@ class PoseEvidenceNode(Node):
                            msg.pose.pose.position.y, yaw, joint), self.arm)
             self.get_logger().warning(
                 'pose rejected: frame=%s expected=%s stamp=%d now=%d '
-                'yaw=%s covariance=%s projected=%s' % (
+                'yaw=%s covariance=%s psd=%s xy=%s arm=%s projected=%s' % (
                     msg.header.frame_id, self.frame, ns(msg.header.stamp), now,
-                    str(yaw), str(joint), str(debug_pose)))
+                    str(yaw), str(joint), str(_psd3(joint)),
+                    str((msg.pose.pose.position.x, msg.pose.pose.position.y)),
+                    str(self.arm), str(debug_pose)))
             self.adapter_rejected += 1
             self.rejected += 1
         elif self.cache.add(parsed, now):
