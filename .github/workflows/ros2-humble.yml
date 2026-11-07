@@ -28,7 +28,7 @@ jobs:
           python3 audition_fusion/benchmarks/common_mode_geometry_benchmark.py
       - name: Confirm synthetic field report cannot authorize localization
         run: |
-          python3 audition_fusion/benchmarks/evaluate_field_manifest.py \\
+          python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
             audition_fusion/test/fixtures/m4_field_contract_example.json > /tmp/m4-report.json
           python3 - <<'PY'
           import json
