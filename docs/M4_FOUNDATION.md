@@ -66,3 +66,4 @@ module does not publish `LocalizedSource` or inject confidence into Nav2.
 
 - [Adversarial synthetic bearing benchmark](M4_SYNTHETIC_BENCHMARK.md): deterministic regression dataset, including known unavoidable false associations
 - [Strict ground-truth AV scorer](M4_GROUND_TRUTH_EVAL.md): externally annotated JSONL frames and confusion matrices, with full-session provenance
+- [Planar range and position scorer](M4_BEARING_EVAL.md): surveyed source/robot XY truth, false triangulation and position/range errors

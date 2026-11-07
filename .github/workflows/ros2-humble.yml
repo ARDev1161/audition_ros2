@@ -61,6 +61,7 @@ jobs:
         run: |
           python3 audition_fusion/benchmarks/av_association_benchmark.py
           python3 -m unittest discover -s audition_fusion/test -p 'test_av_groundtruth.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_bearing_groundtruth.py' -v
 
       - name: Validate launch Python syntax
         run: |
