@@ -108,6 +108,12 @@ def paired_group_sensitivity(validated_trials, provenance_rows, *,
             "paired_accuracy_delta": result["paired_accuracy_delta"],
             "paired_false_pair_delta_per_trial":
                 result["paired_false_pair_delta_per_trial"],
+            "min_single_group_accuracy_delta": min(
+                (summary(v)["paired_accuracy_delta"] for v in ordered),
+                default=None),
+            "max_single_group_false_pair_delta_per_trial": max(
+                (summary(v)["paired_false_pair_delta_per_trial"] for v in ordered),
+                default=None),
             "leave_one_group_out_accuracy_range": None,
             "leave_one_group_out_false_pair_range": None,
         }
@@ -183,6 +189,19 @@ def group_robustness_blockers(analysis):
     for stratum, data in analysis["per_stratum"].items():
         for dimension, payload in data["dimensions"].items():
             for baseline, stats in payload["baselines"].items():
+                # Even when the pooled stratum improves, one acquisition
+                # group must not gain false matches or lose correctness.
+                if (stats["max_single_group_false_pair_delta_per_trial"]
+                        is not None
+                        and stats["max_single_group_false_pair_delta_per_trial"] > 0):
+                    blockers.append(
+                        "acquisition_group_false_pair_regression:" +
+                        stratum + ":" + dimension + ":" + baseline)
+                if (stats["min_single_group_accuracy_delta"] is not None
+                        and stats["min_single_group_accuracy_delta"] < 0):
+                    blockers.append(
+                        "acquisition_group_accuracy_regression:" +
+                        stratum + ":" + dimension + ":" + baseline)
                 if stats["acquisition_groups"] < MIN_GROUPS:
                     continue
                 gain = stats["leave_one_group_out_accuracy_range"]
