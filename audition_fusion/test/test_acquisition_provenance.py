@@ -19,7 +19,7 @@ def acquisition_rows(dataset):
     return {"trials": [
         {"trial_id": t["trial_id"], "split": t["split"],
          "recording_sha256": t["recording_sha256"],
-         "session_id": "session-" + t["recording_sha256"][:12],
+         "session_id": "session-" + t["recording_sha256"][-12:],
          "scene_id": "scene-" + t["recording_sha256"][:12],
          "subject_id": "subject-" + str(i)}
         for i, t in enumerate(dataset["trials"])
