@@ -175,3 +175,25 @@ are correlated; independent held-out scene/recording evaluation with
 clustered uncertainty and a predeclared safety margin is still required
 before granting the M4 release gate. Simulated and field trial reports
 must never be pooled into one claim.
+
+## Recording-cluster sensitivity (software evaluation increment)
+
+The evaluator additionally emits `clustered_comparison` using the **verified
+recording SHA-256** as the resampling unit. Multiple trial events in the same
+recording remain one cluster. The diagnostic reports observed-trial counts per
+recording, the pooled paired gain and false-pair delta, leave-one-recording-out
+ranges and a reproducible 512-draw percentile cluster bootstrap with fixed
+seed. It resamples entire recordings (not individual event rows). Fewer than
+five recording clusters yield `null` bootstrap bounds; fewer than two yield
+`null` leave-one-recording-out bounds. Unknown-truth opportunities are
+excluded rather than scored as successful.
+
+**These are exploratory intervals, not M4 acceptance thresholds.** Even
+different recording hashes may contain the same room, speaker, robot session,
+sensor calibration error or correlated synthetic scenario. The SHA-256 groups
+do not establish physically independent subjects or scenes; no guarantee of
+95% real-world interval coverage is made, and `physical_validation_claim`
+remains `false`. The release gate still requires externally documented
+scene/subject/session partitioning, predeclared safety limits, calibrated
+sensors and independent field truth. A confidence interval above zero on
+synthetic data is not proof that fusion safely improves physical localization.
