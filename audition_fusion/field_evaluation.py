@@ -7,6 +7,7 @@ two separate errors, not two trials. Abstention is not a true negative.
 """
 from collections import defaultdict
 from paired_comparison import compare
+from clustered_comparison import clustered_comparison
 import math
 import re
 
@@ -168,5 +169,7 @@ def evaluate(data, *, held_out_only=True):
             for k, group in sorted(strata.items())
         },
         "paired_comparison": compare(selected),
+        "clustered_comparison": clustered_comparison(
+            data, trials, held_out_only=held_out_only),
         "physical_validation_claim": False,
     }
