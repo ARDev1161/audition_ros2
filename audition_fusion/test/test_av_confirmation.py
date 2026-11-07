@@ -34,8 +34,20 @@ class ConfirmationTests(unittest.TestCase):
         self.assertEqual(result(self.g, pair(a+step,a), a+step).count, 1)
         self.assertEqual(result(self.g, pair(a+step,a+step), a+step).count, 2)
         self.assertEqual(result(self.g, pair(a+2*step,a+2*step), a+2*step).count, 3)
-        self.assertTrue(result(self.g, pair(a+2*step,a+2*step), a+2*step).confirmed)
+        self.assertFalse(result(self.g, pair(a+2*step,a+2*step), a+2*step).confirmed)
         self.assertEqual(result(self.g, pair(a+2*step,a+2*step), a+2*step).count, 3)
+
+    def test_one_modality_replay_cannot_retain_confirmation(self):
+        a = 1_000_000_000
+        step = 150_000_000
+        for i in range(3):
+            observed = result(self.g,pair(a+i*step,a+i*step),a+i*step)
+        self.assertTrue(observed.confirmed)
+        replay = result(self.g,pair(a+3*step,a+2*step),a+3*step)
+        self.assertEqual(replay.count,3)
+        self.assertFalse(replay.confirmed)
+        resumed = result(self.g,pair(a+3*step,a+3*step),a+3*step)
+        self.assertTrue(resumed.confirmed)
 
     def test_short_spacing_and_long_gap(self):
         a=1_000_000_000

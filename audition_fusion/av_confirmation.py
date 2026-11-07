@@ -69,6 +69,7 @@ class TemporalPairGate:
         for key, pair in eligible.items():
             a, v = pair.audio.stamp_ns, pair.visual.stamp_ns
             prev = self.history.get(key)
+            advanced = False
             if prev is None:
                 value = (1, a, v)
             else:
@@ -84,7 +85,11 @@ class TemporalPairGate:
                 elif min(da, dv) < self.minimum_spacing_ns:
                     value = prev
                 else:
+                    advanced = True
                     value = (min(self.confirmations, count+1), a, v)
             self.history[key] = value
-            results[key] = Confirmation(value[0], value[0] >= self.confirmations)
+            # A previously confirmed identity must not remain *currently*
+            # confirmed when only one sensor (or neither) has refreshed its
+            # evidence. Keep bounded history but fail closed on this output.
+            results[key] = Confirmation(value[0], advanced and value[0] >= self.confirmations)
         return results

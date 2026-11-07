@@ -55,12 +55,13 @@ def run():
             msg.header.frame_id = "base_link"
             msg.header.stamp.sec = stamp
             msg.direction_unit.x = 1.0
-            # Repeated publication of one stamp ensures a worker poll without
-            # introducing additional evidence. Each send is ~100 ms.
+            # Repeated publication of one stamp helps the worker consume the
+            # observation without adding evidence. Keep the send cadence
+            # well below the 180ms minimum spacing in the burst case.
             for _ in range(2):
                 pub.publish(msg)
-                rclpy.spin_once(node, timeout_sec=0.05)
-            time.sleep(0.08)
+                rclpy.spin_once(node, timeout_sec=0.03)
+            time.sleep(0.04)
 
         # Three updates in a burst: at most two should meet 180ms spacing.
         result = goal(900)
@@ -86,8 +87,10 @@ def run():
         # A fresh bounded sequence satisfies all three constraints.
         result = goal(2500)
         send()
-        send(delay=0.35)
-        send(delay=0.35)
+        # Two ~350ms arrival gaps satisfy both the 180ms minimum and
+        # 900ms maximum confirmation window with ample scheduler margin.
+        send(delay=0.25)
+        send(delay=0.25)
         outcome = wait(node, result)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("bounded recovery", outcome.status, outcome.result.reason)
         assert outcome.result.acquired
