@@ -33,36 +33,21 @@ localization. They have no metric Z, calibrated covariance, pose uncertainty,
 stationary-source identity proof or reflection immunity. They must never
 be published as `LocalizedSource`, occupancy or Nav2 cost.
 
-## AV association: bounded, conservative pure logic (not yet wired to ROS)
+## AV association: running opt-in diagnostic ROS graph
 
-`audition_fusion/av_matching.py` introduces a ROS-independent `PairMatcher`
-and `StreamFence` with unit tests. This is a preparatory logic module,
-**not a live AV fusion node** and not proof of speaker identity.
+`av_pair_node` is wired to canonical `AcousticSourceArray` and independent
+camera-origin `VisualBearingObservationArray` with exact-time TF2, session
+fences, bounded ambiguity and temporal confirmations. It only publishes
+`AudioVisualPairHypothesisArray`, never source identity or metric positions.
+See [M4 AV pairing](M4_AV_ASSOCIATION.md).
 
-The caller must provide independent timestamped world-frame audio and
-visual 3-D *unit rays* with measured angular variances, stable track
-identifiers/generations, and independently observed activity evidence.
-The matcher rejects nonfinite or invalid rays, unknown/zero variance,
-inactive tracks, excess temporal skew, excessive sensor separation,
-angular disagreement, oversized batches and duplicate track identities.
-It returns candidate pair suggestions and a `unique_match` flag only
-when a pair wins by a configured margin in *both* audio and visual groups.
-Ambiguous alternatives are preserved as nonunique suggestions, not silently
-assigned. The normalized angular residual is a heuristic gate; it is **not**
-a calibrated probability or a 3-D covariance. The baseline term uses a
-configured assumed minimum range, never a measured distance.
+## Conditional planar covariance (not a ROS position output)
 
-`StreamFence` rejects repeated/out-of-order snapshots and older epochs.
-The producer must explicitly reset it after a verified ROS clock reset.
-Before a ROS graph consumer is enabled, it must additionally require
-observation-time TF2, independently measured camera intrinsics/extrinsics,
-bounded time synchronization and freshness/retirement clearing.
-No `/fusion/av_pairs` topic is currently claimed to exist.
-
-Tests:
-```bash
-python3 -m unittest discover -s audition_fusion/test -p 'test_*.py' -v
-```
+[Uncertainty gate](M4_UNCERTAINTY.md) requires explicit independent
+angular and sensor-origin pose covariances for every ray. Unknown uncertainty
+or poor conditioning makes the gate abstain. The existing ROS sources and
+TF2-only transforms lack the needed calibrated pose covariance, so this
+module does not publish `LocalizedSource` or inject confidence into Nav2.
 
 ## Still required for M4 acceptance
 

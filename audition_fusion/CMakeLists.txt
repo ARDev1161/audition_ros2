@@ -5,9 +5,10 @@ install(PROGRAMS scripts/av_pair_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME av_pair_node)
 install(PROGRAMS scripts/bearing_candidate_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME bearing_candidate_node)
-install(FILES geometry.py association.py av_matching.py av_confirmation.py DESTINATION lib/${PROJECT_NAME})
+install(FILES geometry.py association.py av_matching.py av_confirmation.py uncertainty.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(m4_uncertainty_test test/test_uncertainty.py)
   ament_add_pytest_test(m4_geometry_test test/test_geometry.py)
   ament_add_pytest_test(m4_association_test test/test_association.py)
   ament_add_pytest_test(m4_av_groundtruth_test test/test_av_groundtruth.py)
