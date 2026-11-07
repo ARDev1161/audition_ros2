@@ -33,7 +33,7 @@ class RadarGeometryTests(unittest.TestCase):
             # A zero covariance is *not* reported accuracy; a sensor must
             # supply nonzero measurement uncertainty.
             self.assertIsNone(transform_track((1.,0.,0.),cov,
-                (0.,0.,0.,1.),(0.,0.,0.))) if cov != (0.,)*9 else None
+                (0.,0.,0.,1.),(0.,0.,0.)))
         self.assertIsNone(transform_track((1.,0.,0.),valid,
             (0.,0.,0.,0.),(0.,0.,0.)))
         self.assertIsNone(transform_track((float('inf'),0.,0.),valid,
