@@ -331,3 +331,16 @@ self-reported metadata establishes physically independent observations.
 These deliberately conservative gates only control
 `diagnostic_promotion_eligible`. They can never set
 `physical_localization_accepted` or `nav2_admission` to true.
+
+
+### Domain isolation: simulation is never field evidence
+
+The CLI now always blocks diagnostic promotion for `data_domain=simulation`
+(`simulation_only_evidence`), even if the simulated manifest has a valid
+sidecar **and** a cross-checked acquisition metadata file. Simulation
+provenance proves reproducible synthetic lineage, not real measurements.
+When the domain is not independently established, `data_domain=unverified`
+adds `data_domain_unverified`. These blockers are additional to all
+per-stratum and acquisition-group blockers. A successful acquisition audit
+never removes them. Neither condition can authorize metric 3D localization,
+`LocalizedSource` publication, Nav2 admission or hardware acceptance.

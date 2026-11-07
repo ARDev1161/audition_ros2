@@ -61,6 +61,36 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertFalse(report["physical_validation_claim"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
+    def test_unverified_domain_blocks_promotion_even_with_acquisition_audit(self):
+        cli = self.cli()
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        report = json.loads(cli.stdout)
+        self.assertIn("data_domain_unverified", report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_simulation_lineage_cannot_be_laundered_through_acquisition_audit(self):
+        manifest_raw = self.manifest.read_bytes()
+        sidecar = self.manifest.with_name(self.manifest.name + ".provenance.json")
+        sidecar.write_text(json.dumps({
+            "domain": "simulation", "physical_validation_claim": False,
+            "simulation_export_sha256": "f" * 64,
+            "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+            "trials": len(self.dataset["trials"]),
+        }), encoding="utf-8")
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--require-simulation-provenance",
+               "--acquisition-provenance", str(self.audit_file)]
+        cli = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        report = json.loads(cli.stdout)
+        self.assertEqual(report["data_domain"], "simulation")
+        self.assertTrue(report["acquisition_provenance_audit"]["crosscheck_passed"])
+        self.assertIn("simulation_only_evidence", report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
+        self.assertFalse(report["safety_diagnostic"]["physical_localization_accepted"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
     def test_missing_audit_downgrades_diagnostic_not_scoring(self):
         cli = self.cli(supply=False)
         self.assertEqual(cli.returncode, 0, cli.stderr)

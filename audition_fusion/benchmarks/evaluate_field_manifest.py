@@ -49,6 +49,19 @@ def main(argv=None):
         else:
             report["data_domain"] = "unverified"
             report["provenance_verified"] = False
+        # A valid simulated lineage is still simulated. A supplied acquisition
+        # manifest must not launder simulated observations into field evidence.
+        # Conversely an unverified domain cannot be promoted as field evidence.
+        if report["data_domain"] == "simulation":
+            report["safety_diagnostic"]["blockers"] = sorted(set(
+                report["safety_diagnostic"]["blockers"]) |
+                {"simulation_only_evidence"})
+            report["safety_diagnostic"]["diagnostic_promotion_eligible"] = False
+        else:
+            report["safety_diagnostic"]["blockers"] = sorted(set(
+                report["safety_diagnostic"]["blockers"]) |
+                {"data_domain_unverified"})
+            report["safety_diagnostic"]["diagnostic_promotion_eligible"] = False
         if args.acquisition_provenance is not None:
             audit = audit_acquisition_provenance(args.acquisition_provenance, data)
             report["acquisition_provenance_audit"] = audit
