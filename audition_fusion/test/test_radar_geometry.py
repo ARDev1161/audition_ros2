@@ -40,10 +40,10 @@ class RadarGeometryTests(unittest.TestCase):
             (0.,0.,0.,1.),(0.,0.,0.)))
         self.assertIsNone(quaternion_rotation((0.,0.,float('nan'),1.)))
 
-    def test_covariance_psd_semidefinite_is_accepted(self):
+    def test_missing_axis_variance_fails_closed(self):
         out=rotate_covariance((1.,0.,0.,0.,1.,0.,0.,0.,0.),
                               quaternion_rotation((0.,0.,0.,1.)))
-        self.assertIsNotNone(out)
+        self.assertIsNone(out)
 
 
 if __name__=='__main__':
