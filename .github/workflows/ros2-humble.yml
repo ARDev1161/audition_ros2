@@ -99,8 +99,12 @@ jobs:
           assert clusters['recording_independence_only'] is True
           assert clusters['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
           assert 'direct' in clusters['per_stratum']
-          assert 'impostor' in clusters['per_stratum']
-          assert clusters['per_stratum']['impostor']['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
+          assert 'aligned-impostor' in clusters['per_stratum']
+          assert 'identity-swap' in clusters['per_stratum']
+          assert 'occluded' in clusters['per_stratum']
+          assert clusters['per_stratum']['aligned-impostor']['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
+          assert clusters['per_stratum']['occluded']['unobservable_excluded'] == 1
+          assert clusters['per_stratum']['occluded']['baselines']['instant_fusion']['paired_accuracy_delta'] is None
           instant = comparison['baseline_comparisons']['instant_fusion']
           assert instant['observable_trials'] == 3
           assert instant['candidate_false_pairs'] == 0
