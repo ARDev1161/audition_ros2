@@ -91,6 +91,14 @@ jobs:
           assert report['strategies']['temporal_fusion']['fp'] == 0
           assert report['strategies']['temporal_fusion']['fn'] == 1
           assert report['physical_validation_claim'] is False
+          comparison = report['paired_comparison']
+          assert comparison['candidate'] == 'temporal_fusion'
+          assert comparison['positive_gain_validated'] is False
+          instant = comparison['baseline_comparisons']['instant_fusion']
+          assert instant['observable_trials'] == 3
+          assert instant['candidate_false_pairs'] == 0
+          assert instant['baseline_false_pairs'] == 2
+          assert instant['paired_false_pair_delta_per_trial'] == -2/3
           PY
 
       - name: M4 simulator export ingestion and verified artifact hashes
