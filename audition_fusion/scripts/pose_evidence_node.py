@@ -40,6 +40,8 @@ class PoseEvidenceNode(Node):
                                      maximum_age_ns=self.age_ns)
         self.accepted = 0
         self.rejected = 0
+        self.adapter_rejected = 0
+        self.cache_rejected = 0
         self.matches = 0
         self.unmatched = 0
         self.last_clock = 0
@@ -65,9 +67,13 @@ class PoseEvidenceNode(Node):
             msg, world_frame=self.frame, lever_arm_xy=self.arm,
             now_ns=now, maximum_age_ns=self.age_ns,
             maximum_future_ns=0)
-        if parsed is not None and self.cache.add(parsed, now):
+        if parsed is None:
+            self.adapter_rejected += 1
+            self.rejected += 1
+        elif self.cache.add(parsed, now):
             self.accepted += 1
         else:
+            self.cache_rejected += 1
             self.rejected += 1
 
     def on_sources(self, array):
@@ -105,6 +111,8 @@ class PoseEvidenceNode(Node):
         for key, value in (
             ('accepted_pose_samples', self.accepted),
             ('rejected_pose_samples', self.rejected),
+            ('adapter_rejected_pose_samples', self.adapter_rejected),
+            ('cache_rejected_pose_samples', self.cache_rejected),
             ('matching_bearings', self.matches),
             ('unmatched_bearings', self.unmatched),
             ('buffered_pose_samples', len(self.cache.samples)),
