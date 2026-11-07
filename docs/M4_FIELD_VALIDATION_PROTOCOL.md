@@ -212,3 +212,24 @@ of averaging them into a pooled win.
 
 This is diagnostic analysis only; no metric source publication or Nav2
 admission is inferred.
+
+### Per-stratum regression blocker (diagnostic, not field acceptance)
+
+The evaluator now includes `safety_diagnostic`, which inspects the
+same held-out observable trials per declared stratum for
+`temporal_fusion` versus `audio_only`, `radar_only`, and
+`instant_fusion`. Any increase in **incorrect emitted pairs** or decrease
+in paired correctness in a stratum blocks `diagnostic_promotion_eligible`,
+even if pooled accuracy rises. Strata with unobservable truth, fewer than
+five independent recording hashes, use of development data, or no overall
+paired gain against a baseline also block a positive diagnostic result.
+
+The machine-readable `blockers` field names the precise stratum and
+baseline. Passing these checks is deliberately weaker than *physical*
+acceptance: `physical_localization_accepted` and `nav2_admission` are
+always `false`. In particular, 5 different files are not necessarily
+5 independent acquisition sessions, and no prespecified safety threshold,
+sensor calibration or field truth has yet been certified. A regression
+blocker must never be overridden by pooled F1, bootstrap resampling,
+or synthetic fixture success. The checker is a software contract, not
+an algorithm change in libaudition.
