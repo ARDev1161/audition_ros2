@@ -12,6 +12,7 @@ from audition_msgs.msg import (AcousticSource, AcousticSourceArray,
     VisualBearingObservationArray, AudioVisualPairHypothesis,
     AudioVisualPairHypothesisArray)
 from av_matching import PairMatcher, Ray, StreamFence
+from av_confirmation import TemporalPairGate
 
 
 def ns(stamp):
@@ -43,6 +44,10 @@ class AvPairNode(Node):
             maximum_baseline_m=float(self.declare_parameter('maximum_sensor_separation_m',0.2).value),
             maximum_angle_rad=float(self.declare_parameter('maximum_pair_angle_rad',0.3).value),
             minimum_assumed_range_m=float(self.declare_parameter('minimum_assumed_range_m',1.0).value))
+        self.temporal = TemporalPairGate(
+            confirmations=int(self.declare_parameter('minimum_pair_confirmations',3).value),
+            minimum_spacing_ns=int(self.declare_parameter('minimum_pair_spacing_ms',100).value)*1000000,
+            maximum_gap_ns=int(self.declare_parameter('maximum_pair_gap_ms',600).value)*1000000)
         if (not isinstance(self.frame,str) or not self.frame or self.frame.startswith('/')
                 or not 50000000 <= self.age_ns <= 5000000000):
             raise ValueError('invalid AV observation age or frame')
@@ -72,6 +77,7 @@ class AvPairNode(Node):
             self.visual=[]
             self.audio_time=None
             self.vision_time=None
+            self.temporal.reset()
             self.emit([])
         self.last_clock_ns=now_ns
         return now_ns
@@ -169,9 +175,17 @@ class AvPairNode(Node):
             pairs=[]
         else:
             pairs=self.matcher.propose(self.audio,self.visual)
-        self.emit(pairs)
+        # DDS producers are asynchronous: temporarily missing the next
+        # matching sample must not erase bounded independent evidence.
+        pending = (not pairs and self.audio and self.visual
+                   and abs(self.audio[0].stamp_ns - self.visual[0].stamp_ns)
+                       > self.matcher.skew_ns)
+        self.emit(pairs, pending=bool(pending))
 
-    def emit(self,pairs):
+    def emit(self,pairs,pending=False):
+        confirmations = ({} if pending else self.temporal.observe(
+            pairs,self.audio_fence.session,self.vision_fence.session,
+            self.get_clock().now().nanoseconds))
         msg=AudioVisualPairHypothesisArray()
         msg.header.stamp=self.get_clock().now().to_msg()
         msg.header.frame_id=self.frame
@@ -192,6 +206,9 @@ class AvPairNode(Node):
             p.visual_observed_at.sec=candidate.visual.stamp_ns//1000000000
             p.visual_observed_at.nanosec=candidate.visual.stamp_ns%1000000000
             p.unique_match=candidate.unique_match
+            evidence=confirmations.get(self.temporal.key(candidate))
+            p.supporting_synchronized_observations=evidence.count if evidence else 0
+            p.temporally_confirmed=bool(evidence and evidence.confirmed)
             p.angle_difference_rad=candidate.angle_rad
             p.normalized_residual=candidate.normalized_residual
             p.sensor_baseline_m=candidate.sensor_baseline_m
@@ -207,6 +224,7 @@ class AvPairNode(Node):
                  or time.monotonic()-self.vision_time>self.age_ns/1e9)):
             self.audio=[]
             self.visual=[]
+            self.temporal.reset()
             self.emit([])
 
 

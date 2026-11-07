@@ -13,3 +13,7 @@ float64 angle_difference_rad
 # A relative residual, not calibrated confidence or probability.
 float64 normalized_residual
 float64 sensor_baseline_m
+
+# Independent temporal corroboration, not verified speaker identity.
+uint32 supporting_synchronized_observations
+bool temporally_confirmed
