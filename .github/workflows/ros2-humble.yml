@@ -68,6 +68,11 @@ jobs:
           python3 -m unittest discover -s audition_fusion/test -p 'test_av_groundtruth.py' -v
           python3 -m unittest discover -s audition_fusion/test -p 'test_bearing_groundtruth.py' -v
 
+      - name: M4-C synthetic radar/audio association benchmark (diagnostic only)
+        run: |
+          python3 audition_fusion/benchmarks/radar_association_benchmark.py
+          python3 -m unittest discover -s audition_fusion/test -p 'test_radar*.py' -v
+
       - name: M4 adverse conditional geometry audit (known blind spots)
         run: |
           python3 audition_fusion/benchmarks/conditional_geometry_adversarial.py
