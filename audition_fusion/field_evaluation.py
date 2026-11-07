@@ -6,6 +6,7 @@ A wrong pair on a positive trial contributes both FP and FN; they represent
 two separate errors, not two trials. Abstention is not a true negative.
 """
 from collections import defaultdict
+from paired_comparison import compare
 import math
 import re
 
@@ -166,5 +167,6 @@ def evaluate(data, *, held_out_only=True):
             k: {name: summarise(v) for name,v in group.items()}
             for k, group in sorted(strata.items())
         },
+        "paired_comparison": compare(selected),
         "physical_validation_claim": False,
     }
