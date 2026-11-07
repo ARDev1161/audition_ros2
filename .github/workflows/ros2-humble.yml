@@ -310,6 +310,8 @@ jobs:
           ros2 launch audition_bringup m4_pose_evidence.launch.py \
             audition_namespace:=robot_ci/pose_tf world_frame:=odom \
             require_tf_consistency:=true \
+            enable_conditional_evidence:=true \
+            microphone_extrinsics_calibrated:=true \
             > /tmp/audition_m4_pose_tf.log 2>&1 &
           launch_pid=$!
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
