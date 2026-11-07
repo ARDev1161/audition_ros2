@@ -93,6 +93,30 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertFalse(report["safety_diagnostic"]["physical_localization_accepted"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
+    def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
+        # Default scoring is useful for diagnostics, but automation requiring
+        # eligible evidence must not mistake a JSON report for acceptance.
+        base = [sys.executable, str(SCRIPT), str(self.manifest),
+                "--acquisition-provenance", str(self.audit_file)]
+        scored = subprocess.run(base, capture_output=True, text=True)
+        self.assertEqual(scored.returncode, 0, scored.stderr)
+        strict = subprocess.run(base + ["--require-diagnostic-eligibility"],
+                                capture_output=True, text=True)
+        self.assertEqual(strict.returncode, 3, strict.stderr)
+        report = json.loads(strict.stdout)
+        self.assertFalse(report["safety_diagnostic"]["diagnostic_promotion_eligible"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+        self.assertIn("data_domain_unverified", strict.stderr)
+
+    def test_strict_cli_malformed_input_still_returns_validation_error(self):
+        self.audit_file.write_text('{"trials":[]}', encoding="utf-8")
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--acquisition-provenance", str(self.audit_file),
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Invalid M4 evaluation input:", result.stderr)
+
     def test_missing_audit_downgrades_diagnostic_not_scoring(self):
         cli = self.cli(supply=False)
         self.assertEqual(cli.returncode, 0, cli.stderr)

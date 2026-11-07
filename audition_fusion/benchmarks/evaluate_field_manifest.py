@@ -52,6 +52,8 @@ def main(argv=None):
                         help="JSON mapping every declared recording SHA to a relative artifact path")
     parser.add_argument("--recordings-root", type=pathlib.Path,
                         help="root directory of real recording files; required with --recording-index")
+    parser.add_argument("--require-diagnostic-eligibility", action="store_true",
+                        help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
     try:
         raw = args.manifest.read_bytes()
@@ -108,6 +110,10 @@ def main(argv=None):
         report["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
         report["manifest_name"] = args.manifest.name
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+        if args.require_diagnostic_eligibility and not report["safety_diagnostic"]["diagnostic_promotion_eligible"]:
+            print("M4 diagnostic eligibility blocked: " + ", ".join(
+                report["safety_diagnostic"]["blockers"]), file=sys.stderr)
+            return 3
         return 0
     except (ValueError, OSError, UnicodeError) as error:
         print("Invalid M4 evaluation input:", error, file=sys.stderr)

@@ -476,3 +476,16 @@ physical localization or Nav2. This isolates M4 diagnostic failures from ROS
 container installation/build failures; **both** jobs must pass. It does not
 replace ROS graph smoke, native backend CI, or physical acceptance. A missing
 GitHub Actions result is not a passing result.
+
+
+### Machine-enforced diagnostic eligibility
+
+The field evaluator defaults to exit 0 when a syntactically valid report was
+produced, even if the report is **blocked**; callers must not equate exit 0
+with acceptance. Pass `--require-diagnostic-eligibility` to enforce a separate
+fail-closed process result: exit 0 means diagnostic blockers are absent, exit 3
+means a JSON diagnostic report was produced but eligibility is blocked, and
+exit 2 means malformed/unverifiable input. The report is printed on stdout
+for exit 3 so automation can retain the complete blocker evidence. This flag
+**never** authorizes physical localization or Nav2. Presently, simulation-only
+or unverified-domain evidence necessarily returns 3 in strict mode.
