@@ -212,7 +212,48 @@ def main():
                   and m.vision_session_id=='d'*32
                   and not m.hypotheses)
         assert not gone.hypotheses
-        print('PASS: live AV TF2 rotated-frame pairing, ambiguity, retirement, new IDs, visual restart and replay fencing')
+        # Reverse ambiguity: two equally plausible audio tracks compete
+        # for one visual track. Neither pairing may be marked unique or
+        # temporally confirmed, despite matching timestamps and bearings.
+        stamp=node.get_clock().now().to_msg()
+        prepare_tf(stamp)
+        two_audio=audio_msg(7,stamp)
+        competitor=AcousticSource()
+        competitor.header=two_audio.sources[0].header
+        competitor.last_seen=stamp
+        competitor.state=AcousticSource.ACTIVE
+        competitor.source_id='competing-sound'
+        competitor.source_generation=1
+        competitor.has_direction=True
+        competitor.direction_unit.x=1.
+        competitor.has_angular_variance=True
+        competitor.angular_variance_rad2=.01
+        two_audio.sources.append(competitor)
+        one_visual=vision_msg(3,stamp,['face-new'])
+        one_visual.vision_session_id='d'*32
+        acoustic.publish(two_audio)
+        visual.publish(one_visual)
+        reverse=find(lambda m:m.sequence_number>gone.sequence_number
+                     and m.vision_session_id=='d'*32
+                     and len(m.hypotheses)==2)
+        assert {p.audio_source_id for p in reverse.hypotheses}=={
+            'speaker-hyp','competing-sound'}
+        assert not any(p.unique_match or p.temporally_confirmed
+                       for p in reverse.hypotheses), (
+                           'audio competition incorrectly promoted a pair')
+
+        # Acoustic source loss must revoke all AV matches, without
+        # depending on camera shutdown or expiry of observation TTL.
+        stamp=node.get_clock().now().to_msg()
+        no_audio=audio_msg(8,stamp)
+        no_audio.sources=[]
+        acoustic.publish(no_audio)
+        revoked=find(lambda m:m.sequence_number>reverse.sequence_number
+                     and not m.hypotheses)
+        assert not revoked.hypotheses
+
+        print('PASS: live AV TF2 pairing, both ambiguity directions, TTL, '
+              'retirement, identity/epoch changes and replay fencing')
         return 0
     except Exception as exc:
         print('FAIL: AV DDS/TF2 graph:',repr(exc),file=sys.stderr)
