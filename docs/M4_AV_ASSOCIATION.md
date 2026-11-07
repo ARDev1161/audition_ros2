@@ -76,3 +76,13 @@ side rather than selecting an arbitrary generation or publishing partial
 matches. The ROS graph smoke covers a visual ID reused across two generations
 in the same snapshot and verifies immediate withdrawal. This is a producer
 contract/safety check, not a calibrated identity claim.
+
+## CI regression: authoritative empty snapshots and replay fencing
+
+The ROS graph smoke advances the visual sequence after an explicit empty
+snapshot before testing reacquisition. Reusing the empty snapshot's sequence
+is correctly rejected by `StreamFence`, even if it carries a new track and a
+later timestamp. A rejected replay must not resurrect a withdrawn pair.
+The test uses a new sequence for legitimate reacquisition and still checks
+that the temporal confirmation count restarts at one. This is a test-fixture
+correction, not a relaxation of production replay admission.
