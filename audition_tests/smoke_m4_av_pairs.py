@@ -154,7 +154,55 @@ def main():
         cleared=find(lambda m:m.sequence_number>ambiguous.sequence_number
                     and not m.hypotheses)
         assert not cleared.hypotheses
-        print('PASS: live AV TF2 rotated-frame pairing, ambiguity, retirement clearing')
+        # Reacquisition with a *different visual identity* is an independent
+        # hypothesis, even if the bearing is geometrically identical.
+        stamp=node.get_clock().now().to_msg()
+        prepare_tf(stamp)
+        acoustic.publish(audio_msg(5,stamp))
+        visual.publish(vision_msg(6,stamp,['face-new']))
+        fresh=find(lambda m:m.sequence_number>cleared.sequence_number
+                   and len(m.hypotheses)==1
+                   and m.hypotheses[0].visual_track_id=='face-new')
+        assert fresh.hypotheses[0].supporting_synchronized_observations==1
+        assert not fresh.hypotheses[0].temporally_confirmed
+
+        # A process restart may begin with sequence 1 on a fresh visual
+        # incarnation, but confirmation must reset even with the same ID.
+        stamp=node.get_clock().now().to_msg()
+        prepare_tf(stamp)
+        acoustic.publish(audio_msg(6,stamp))
+        new_vision=vision_msg(1,stamp,['face-new'])
+        new_vision.vision_session_id='d'*32
+        visual.publish(new_vision)
+        restarted=find(lambda m:m.sequence_number>fresh.sequence_number
+                      and m.vision_session_id=='d'*32
+                      and len(m.hypotheses)==1
+                      and m.hypotheses[0].visual_track_id=='face-new')
+        assert restarted.hypotheses[0].supporting_synchronized_observations==1
+        assert not restarted.hypotheses[0].temporally_confirmed
+
+        # A retired vision incarnation must never reopen with a later
+        # timestamp, even if its sequence has advanced.
+        before=len(received)
+        old_vision=vision_msg(99,node.get_clock().now().to_msg(),['old-face'])
+        old_vision.vision_session_id=VISION_EPOCH
+        visual.publish(old_vision)
+        spin_for(.15)
+        assert not any(m.vision_session_id==VISION_EPOCH
+                       for m in received[before:]), (
+                           'retired visual incarnation reentered the graph')
+
+        # Explicit loss of camera tracks revokes any live pairing without
+        # waiting for a timer-based TTL expiry.
+        stamp=node.get_clock().now().to_msg()
+        empty=vision_msg(2,stamp,[])
+        empty.vision_session_id='d'*32
+        visual.publish(empty)
+        gone=find(lambda m:m.sequence_number>restarted.sequence_number
+                  and m.vision_session_id=='d'*32
+                  and not m.hypotheses)
+        assert not gone.hypotheses
+        print('PASS: live AV TF2 rotated-frame pairing, ambiguity, retirement, new IDs, visual restart and replay fencing')
         return 0
     except Exception as exc:
         print('FAIL: AV DDS/TF2 graph:',repr(exc),file=sys.stderr)
