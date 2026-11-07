@@ -110,3 +110,40 @@ CI runs `test_radar_temporal.py` as part of the existing radar test
 pattern. Promotion to a ROS-level consumer is deferred until a
 ground-truth comparison documents false matches and independent-sensing
 baseline performance.
+
+## M4-D opt-in integrated ROS2 diagnostic graph
+
+Launch the dedicated radar + acoustic diagnostic chain with:
+
+```bash
+ros2 launch audition_bringup m4_radar_diagnostics.launch.py \
+  audition_namespace:=audition world_frame:=odom
+```
+
+`radar_adapter_node` consumes independent `radar/tracks` and emits
+`fusion/radar_observations`; `radar_audio_association_node` additionally
+consumes canonical acoustic `sources`, transforms each accepted acoustic
+bearing into the common frame at the observation timestamp, and publishes
+`fusion/radar_audio_candidates` as `RadarAudioCandidateArray`.
+The output gives the *radar target* distance projected along the *acoustic
+ray*, perpendicular geometric mismatch, pair ambiguity and up to three or
+more separately refreshed cross-sensor observations. It never reports a
+measured acoustic distance, verified identity or position covariance of a
+sound emitter.
+
+Accepted input frames are bounded by observation TTL, monotonically
+increasing per-session sequence and capture time, valid 32-hex stream
+incarnations, actual stamped TF2, measured sensor covariance, and reciprocal
+ambiguity. Old stream incarnations cannot be reopened by newer timestamps.
+When either authoritative snapshot is empty, competing matches are
+published but cannot be confirmed; when the input producer stops, output
+candidates expire. The graph publishes no `LocalizedSource`, Nav2
+costmap entries or motion commands.
+
+The ROS2 Humble CI smoke
+`audition_tests/smoke_m4_radar_audio_graph.py` exercises the **actual
+combined DDS/TF2 graph**, verifies three independent observations, two
+radar candidates competing for one acoustic bearing, two acoustic
+sources competing for one radar object, explicit retirement, session
+restart and old-epoch rejection. CI acceptance is still software-only;
+synthetic fixture correctness does not demonstrate physical precision.
