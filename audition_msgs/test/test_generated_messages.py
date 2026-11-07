@@ -294,3 +294,48 @@ def test_attention_target_round_trip():
     assert restored.valid and restored.source_id == "track-1"
     assert restored.source_generation == restored.scene_generation == 7
     assert restored.header.frame_id == "microphone_array"
+
+
+def test_m4_av_visual_and_pair_contracts_round_trip():
+    from audition_msgs.msg import (
+        VisualBearingObservation, VisualBearingObservationArray,
+        AudioVisualPairHypothesis, AudioVisualPairHypothesisArray)
+
+    face = VisualBearingObservation()
+    face.visual_track_id = "face-3"
+    face.visual_track_generation = 7
+    face.active = True
+    face.activity_evidence = True
+    face.has_angular_variance = True
+    face.angular_variance_rad2 = 0.04
+    face.direction_unit.z = 1.0
+    face.observed_at.sec = 42
+    vision = VisualBearingObservationArray()
+    vision.header.frame_id = "camera_optical_frame"
+    vision.vision_session_id = "a" * 32
+    vision.sequence_number = 9
+    vision.tracks = [face]
+    vision_roundtrip = deserialize_message(serialize_message(vision), VisualBearingObservationArray)
+    assert vision_roundtrip.tracks[0].activity_evidence
+    assert vision_roundtrip.tracks[0].observed_at.sec == 42
+
+    pair = AudioVisualPairHypothesis()
+    pair.audio_source_id = "speaker-2"
+    pair.visual_track_id = "face-3"
+    pair.audio_source_generation = 4
+    pair.visual_track_generation = 7
+    pair.unique_match = False
+    pair.supporting_synchronized_observations = 2
+    pair.temporally_confirmed = False
+    pair.angle_difference_rad = 0.1
+    pair.normalized_residual = 1.5
+    pairs = AudioVisualPairHypothesisArray()
+    pairs.audio_scene_session_id = "b" * 32
+    pairs.vision_session_id = "a" * 32
+    pairs.hypotheses = [pair]
+    back = deserialize_message(serialize_message(pairs), AudioVisualPairHypothesisArray)
+    assert len(back.hypotheses) == 1
+    assert not back.hypotheses[0].unique_match
+    assert back.hypotheses[0].supporting_synchronized_observations == 2
+    assert not back.hypotheses[0].temporally_confirmed
+    assert back.hypotheses[0].normalized_residual == pytest.approx(1.5)
