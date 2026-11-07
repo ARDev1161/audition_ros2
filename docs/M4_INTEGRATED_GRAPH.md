@@ -58,3 +58,13 @@ Unit tests cover a delayed old incarnation with a newer timestamp,
 invalid sequence/time types, a full retirement history, and explicit
 reset. This makes M4-B failure isolation independent of the separate
 audio simulation and hardware acceptance projects.
+
+## M4-B DDS visual identity and restart regressions
+
+The existing AV graph smoke now checks reacquisition under a **different**
+visual track identifier, a new visual session reusing a track identifier
+and resetting its sequence to 1, rejection of the retired visual session
+even with a newer capture timestamp, and immediate clearing when the camera
+publishes an empty track snapshot. Each fresh identity/incarnation starts
+with a single unconfirmed pair; no unverified speaker identity is inferred.
+This is software-only test coverage, not camera or acoustic simulator work.
