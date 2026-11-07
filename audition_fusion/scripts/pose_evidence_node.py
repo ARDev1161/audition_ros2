@@ -4,6 +4,9 @@ import math
 
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
+from rclpy.duration import Duration
+from tf2_ros import Buffer, TransformListener, TransformException
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
@@ -12,6 +15,7 @@ from audition_msgs.msg import AcousticSourceArray, AcousticSource
 from pose_sample_cache import PoseSampleCache
 from ros_pose_adapter import from_ros_pose_message
 from scene_admission import SceneAdmission
+from tf_pose_consistency import TransformOrigin, consistent_origin
 
 
 def ns(stamp):
@@ -35,7 +39,21 @@ class PoseEvidenceNode(Node):
                 or len(arm) != 2
                 or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in arm)):
             raise ValueError('invalid M4 pose evidence configuration')
+        self.require_tf = self.declare_parameter('require_tf_consistency', False).value
+        self.microphone_frame = self.declare_parameter(
+            'microphone_frame', 'microphone_array').value
+        self.maximum_tf_difference_m = float(self.declare_parameter(
+            'maximum_tf_pose_disagreement_m', 0.25).value)
+        if (type(self.require_tf) is not bool or
+                not isinstance(self.microphone_frame, str)
+                or not self.microphone_frame or self.microphone_frame.startswith('/')
+                or not math.isfinite(self.maximum_tf_difference_m)
+                or not 0 < self.maximum_tf_difference_m <= 2.0):
+            raise ValueError('invalid M4 TF consistency limits')
         self.arm = tuple(arm)
+        if self.require_tf:
+            self.tf_buffer = Buffer()
+            self.tf_listener = TransformListener(self.tf_buffer, self)
         self.cache = PoseSampleCache(capacity=capacity,
                                      maximum_skew_ns=skew_ns,
                                      maximum_age_ns=self.age_ns)
@@ -45,6 +63,7 @@ class PoseEvidenceNode(Node):
         self.cache_rejected = 0
         self.matches = 0
         self.unmatched = 0
+        self.tf_rejected = 0
         self.last_clock = 0
         self.scene_guard = SceneAdmission()
         self.replayed_scenes = 0
@@ -109,12 +128,39 @@ class PoseEvidenceNode(Node):
                     or now - stamp > self.age_ns):
                 self.unmatched += 1
                 continue
-            if self.cache.match(stamp, now) is None:
+            pose_match = self.cache.match(stamp, now)
+            if pose_match is None:
                 self.unmatched += 1
-            else:
-                # This only establishes same-clock timestamp proximity.
-                # It is not source correspondence or metric position.
-                self.matches += 1
+                continue
+            if self.require_tf:
+                # Zero timeout: never block the executor or extrapolate TF.
+                # A missing/mismatched transform fails closed.
+                if array.header.frame_id != self.microphone_frame:
+                    self.tf_rejected += 1
+                    continue
+                try:
+                    transform = self.tf_buffer.lookup_transform(
+                        self.frame, self.microphone_frame,
+                        Time.from_msg(source.last_seen),
+                        timeout=Duration(seconds=0.0))
+                    origin = TransformOrigin(
+                        transform.header.frame_id, transform.child_frame_id,
+                        ns(transform.header.stamp),
+                        float(transform.transform.translation.x),
+                        float(transform.transform.translation.y))
+                except (TransformException, ValueError, TypeError):
+                    self.tf_rejected += 1
+                    continue
+                if not consistent_origin(
+                        pose_match.sample, origin,
+                        expected_world=self.frame,
+                        expected_child=self.microphone_frame,
+                        maximum_skew_ns=self.cache.maximum_skew_ns,
+                        maximum_disagreement_m=self.maximum_tf_difference_m):
+                    self.tf_rejected += 1
+                    continue
+            # A match is diagnostic timestamp/TF agreement only.
+            self.matches += 1
 
     def on_timer(self):
         self.clock()
@@ -132,6 +178,8 @@ class PoseEvidenceNode(Node):
             ('cache_rejected_pose_samples', self.cache_rejected),
             ('matching_bearings', self.matches),
             ('unmatched_bearings', self.unmatched),
+            ('tf_rejected_bearings', self.tf_rejected),
+            ('require_tf_consistency', self.require_tf),
             ('replayed_scenes', self.replayed_scenes),
             ('session_restarts', self.session_restarts),
             ('clock_resets', self.clock_resets),
