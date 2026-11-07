@@ -23,6 +23,8 @@ jobs:
             ros-humble-ament-cmake-gtest \
             ros-humble-rosidl-default-generators \
             ros-humble-geometry-msgs \
+            ros-humble-nav-msgs \
+            ros-humble-diagnostic-msgs \
             ros-humble-visualization-msgs \
             ros-humble-tf2-ros \
             ros-humble-rclpy \
@@ -65,7 +67,7 @@ jobs:
 
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/m3_track_sound.launch.py audition_bringup/launch/m3_attention_bearing_ray.launch.py audition_bringup/launch/m3_attention_camera_aim.launch.py audition_bringup/launch/m3_attention_camera_admission.launch.py audition_bringup/launch/m4_bearing_candidates.launch.py audition_bringup/launch/m4_av_pairs.launch.py audition_bringup/launch/attention_config.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/m3_track_sound.launch.py audition_bringup/launch/m3_attention_bearing_ray.launch.py audition_bringup/launch/m3_attention_camera_aim.launch.py audition_bringup/launch/m3_attention_camera_admission.launch.py audition_bringup/launch/m4_bearing_candidates.launch.py audition_bringup/launch/m4_av_pairs.launch.py audition_bringup/launch/m4_pose_evidence.launch.py audition_bringup/launch/attention_config.py
 
       - name: Smoke M3 attention advisory over real ROS graph
         shell: bash
@@ -278,6 +280,23 @@ jobs:
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
           if ! python3 audition_tests/smoke_m4_av_pairs.py; then
             cat /tmp/audition_m4_av.log
+            exit 1
+          fi
+
+      - name: Smoke M4 pose uncertainty evidence over real ROS DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=125
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_pose_evidence.launch.py \
+            audition_namespace:=robot_ci/pose world_frame:=odom \
+            > /tmp/audition_m4_pose_evidence.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_pose_evidence.py; then
+            cat /tmp/audition_m4_pose_evidence.log
             exit 1
           fi
 
