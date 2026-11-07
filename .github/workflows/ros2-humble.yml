@@ -300,6 +300,24 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M4 TF2 and pose covariance agreement on real DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=126
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_pose_evidence.launch.py \
+            audition_namespace:=robot_ci/pose_tf world_frame:=odom \
+            require_tf_consistency:=true \
+            > /tmp/audition_m4_pose_tf.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_tf_pose_evidence.py; then
+            cat /tmp/audition_m4_pose_tf.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |
