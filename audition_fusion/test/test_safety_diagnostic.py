@@ -91,6 +91,23 @@ class SafetyDiagnosticTests(unittest.TestCase):
         self.assertFalse(safety["diagnostic_promotion_eligible"])
         self.assertFalse(safety["no_observed_safety_regression"])
 
+    def test_insufficient_clusters_cannot_claim_clean_safety(self):
+        rows = [trial(i, "direct", digest="a" * 64) for i in range(1, 7)]
+        safety = evaluate_rows(rows)
+        self.assertTrue(any(x.startswith("insufficient_recording_clusters:")
+                            for x in safety["blockers"]))
+        self.assertFalse(safety["no_observed_safety_regression"])
+        self.assertFalse(safety["diagnostic_promotion_eligible"])
+        self.assertFalse(safety["nav2_admission"])
+
+    def test_no_pooled_gain_cannot_claim_clean_safety(self):
+        rows = [trial(i, "direct") for i in range(1, 7)]
+        for row in rows:
+            row["predictions"]["audio_only"] = row["predictions"]["temporal_fusion"].copy()
+        safety = evaluate_rows(rows)
+        self.assertIn("no_pooled_accuracy_gain:audio_only", safety["blockers"])
+        self.assertFalse(safety["no_observed_safety_regression"])
+
     def test_partially_unobservable_stratum_blocks_clean_safety_claim(self):
         rows = [trial(i, "mixed") for i in range(1, 7)]
         rows.append(trial(7, "mixed", observable=False))

@@ -443,3 +443,13 @@ characters, Unicode lookalikes and overlong labels are rejected rather than
 silently normalized; otherwise one real room/session could be counted under
 multiple visually indistinguishable identifiers. These are metadata
 consistency checks, not proof that the supplied labels correspond to reality.
+
+
+### Evidence-qualified no-regression flag
+
+`no_observed_safety_regression` is **false whenever any diagnostic
+blocker exists**, including too few independent recording clusters, absent
+observable ground truth, development data inclusion, or failure to show a
+pooled gain against a baseline. A clean observable subset must not turn this
+flag true while its evidence gate fails. This flag is still diagnostic only;
+`physical_localization_accepted` and `nav2_admission` remain false.
