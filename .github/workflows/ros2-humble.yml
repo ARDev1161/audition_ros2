@@ -122,6 +122,13 @@ jobs:
                   'audition_fusion/benchmarks/import_simulation_export.py',
                   str(source),'--artifacts-root',str(root),'--out',str(manifest)],
                   check=True)
+              provenance=json.loads((root/'manifest.json.provenance.json').read_text())
+              assert provenance['domain'] == 'simulation'
+              assert provenance['physical_validation_claim'] is False
+              assert provenance['simulation_export_sha256'] == hashlib.sha256(
+                  source.read_bytes()).hexdigest()
+              assert provenance['manifest_sha256'] == hashlib.sha256(
+                  manifest.read_bytes()).hexdigest()
               report=subprocess.check_output([sys.executable,
                   'audition_fusion/benchmarks/evaluate_field_manifest.py',
                   str(manifest)])
