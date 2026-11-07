@@ -98,6 +98,9 @@ jobs:
           assert clusters['physical_validation_claim'] is False
           assert clusters['recording_independence_only'] is True
           assert clusters['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
+          assert 'direct' in clusters['per_stratum']
+          assert 'impostor' in clusters['per_stratum']
+          assert clusters['per_stratum']['impostor']['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
           instant = comparison['baseline_comparisons']['instant_fusion']
           assert instant['observable_trials'] == 3
           assert instant['candidate_false_pairs'] == 0
