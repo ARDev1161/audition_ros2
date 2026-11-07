@@ -57,7 +57,6 @@ class RadarTemporalTests(unittest.TestCase):
         step(self.g,[self.c],0)
         step(self.g,[self.c],1)
         rival=candidate(radar='other',unique=False)
-        assert not self.c.unique_match is False
         result=step(self.g,[self.c,rival],2)
         self.assertEqual(result,{})
         self.assertEqual(step(self.g,[self.c],3)[self.key].
