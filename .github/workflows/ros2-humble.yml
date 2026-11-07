@@ -568,7 +568,7 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           ros2 launch audition_bringup m2_wav_pipeline.launch.py \
-            wav_path:=/tmp/audition_ci.wav \
+            wav_path:=/tmp/audition_ci.wav loop:=true \
             > /tmp/audition_m2_launch.log 2>&1 &
           launch_pid=$!
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
