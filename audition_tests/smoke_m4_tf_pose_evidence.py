@@ -89,19 +89,23 @@ def main():
         assert wait_for(lambda: poses.get_subscription_count() > 0 and
                         scenes.get_subscription_count() > 0 and
                         broadcaster.pub_tf.get_subscription_count() > 0 and
-                        counts().get('require_tf_consistency') == 'True'), (
+                        counts().get('require_tf_consistency') == 'True' and
+                        counts().get('enable_conditional_evidence') == 'True'), (
                             'TF2 diagnostic node unavailable', counts())
         rejected = int(counts()['tf_rejected_bearings'])
         send(1)
         expect_counter('tf_rejected_bearings', rejected + 1)
         matched = int(counts()['matching_bearings'])
+        missing_variance = int(counts()['conditional_rejected'])
         send(2, tf_x=1.)
         expect_counter('matching_bearings', matched + 1)
+        expect_counter('conditional_rejected', missing_variance + 1)
+        assert int(counts()['conditional_admitted']) == 0
         rejected = int(counts()['tf_rejected_bearings'])
         send(3, tf_x=3.)
         expect_counter('tf_rejected_bearings', rejected + 1)
         assert int(counts()['matching_bearings']) == matched + 1
-        print('PASS: TF absent / consistent / contradictory, no localization')
+        print('PASS: TF absent / consistent / contradictory; missing angular variance fails closed')
         return 0
     except Exception as exc:
         print('FAIL: M4 TF pose smoke:', repr(exc), file=sys.stderr)
