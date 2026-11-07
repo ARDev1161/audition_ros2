@@ -97,19 +97,34 @@ def clustered_comparison(data, validated_trials, *, held_out_only=True):
     """
     assert len(data["trials"]) == len(validated_trials)
     groups = defaultdict(list)
+    groups_by_stratum = defaultdict(lambda: defaultdict(list))
+    excluded_by_stratum = defaultdict(int)
     excluded_unknown = 0
     for item, trial in zip(data["trials"], validated_trials):
-        _, _, split, observable, truth, predictions = trial
+        _, stratum, split, observable, truth, predictions = trial
         if held_out_only and split != "held_out":
             continue
         if not observable:
             excluded_unknown += 1
+            excluded_by_stratum[stratum] += 1
+            # Preserve explicitly unobservable strata in the report: their
+            # lack of measurable truth must never disappear from diagnostics.
+            groups_by_stratum[stratum]
             continue
-        groups[item["recording_sha256"]].append((truth, predictions))
+        key = item["recording_sha256"]
+        groups[key].append((truth, predictions))
+        groups_by_stratum[stratum][key].append((truth, predictions))
     return {
         "candidate": CANDIDATE,
         "baselines": {name: _analyze(groups, name) for name in BASELINES},
         "unobservable_excluded": excluded_unknown,
+        "per_stratum": {
+            stratum: {
+                "baselines": {name: _analyze(group, name) for name in BASELINES},
+                "unobservable_excluded": excluded_by_stratum[stratum],
+            }
+            for stratum, group in sorted(groups_by_stratum.items())
+        },
         "recording_independence_only": True,
         "physical_validation_claim": False,
         "interpretation": (
