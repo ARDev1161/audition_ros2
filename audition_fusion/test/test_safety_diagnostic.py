@@ -5,6 +5,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from field_evaluation import evaluate
+from safety_diagnostic import provenance_blockers
 
 
 def trial(i, stratum, *, wrong=False, digest=None, observable=True):
@@ -33,6 +34,28 @@ def evaluate_rows(rows):
 
 
 class SafetyDiagnosticTests(unittest.TestCase):
+    def test_provenance_rejects_session_scene_and_subject_leakage(self):
+        a = {"trial_id": "a", "split": "development", "recording_sha256": "a"*64,
+             "session_id": "session1", "scene_id": "room1", "subject_id": "person1"}
+        b = dict(a, trial_id="b", split="held_out", recording_sha256="b"*64)
+        problems = provenance_blockers({"trials": [a, b]})
+        for field in ("session_id", "scene_id", "subject_id"):
+            self.assertIn("provenance_split_leak:" + field, problems)
+
+    def test_provenance_rejects_missing_and_duplicate_trials(self):
+        a = {"trial_id": "a", "split": "held_out", "recording_sha256": "a"*64,
+             "session_id": "", "scene_id": "room1", "subject_id": "person1"}
+        problems = provenance_blockers({"trials": [a, a]})
+        self.assertIn("provenance_missing:session_id", problems)
+        self.assertIn("provenance_trial_duplicate_or_invalid", problems)
+        self.assertIn("provenance_manifest_missing_or_invalid", provenance_blockers(None))
+
+    def test_provenance_allows_distinct_sessions_and_subjects(self):
+        rows = [dict(trial_id=str(i), split=split, recording_sha256=hex(i+1)[2:].zfill(64),
+                     session_id="session"+str(i), scene_id="room"+str(i),
+                     subject_id="person"+str(i)) for i, split in enumerate(("development", "held_out"))]
+        self.assertEqual(provenance_blockers({"trials": rows}), [])
+
     def test_pooled_gain_does_not_hide_adverse_false_pair_regression(self):
         rows = [trial(i, "direct") for i in range(1, 7)]
         rows.append(trial(7, "reflection", wrong=True))

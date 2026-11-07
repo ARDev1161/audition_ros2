@@ -52,3 +52,41 @@ def assess(report):
             "field truth, sensor calibration, scene/subject/session splits "
             "and prespecified acceptance thresholds remain mandatory."),
     }
+
+
+def provenance_blockers(manifest):
+    """Reject leakage across acquisition sessions, scenes and physical emitters.
+
+    This is an optional external audit manifest. Missing or contradictory
+    provenance always blocks diagnostic promotion; it never upgrades safety.
+    """
+    if not isinstance(manifest, dict) or set(manifest) != {"trials"} or not isinstance(manifest["trials"], list):
+        return ["provenance_manifest_missing_or_invalid"]
+    seen = set()
+    splits = {"recording_sha256": {}, "session_id": {}, "scene_id": {}, "subject_id": {}}
+    problems = []
+    for row in manifest["trials"]:
+        if not isinstance(row, dict) or set(row) != {"trial_id", "split", *splits}:
+            problems.append("provenance_trial_invalid")
+            continue
+        tid = row["trial_id"]
+        if not isinstance(tid, str) or not tid or tid in seen:
+            problems.append("provenance_trial_duplicate_or_invalid")
+        seen.add(tid)
+        split = row["split"]
+        if split not in ("development", "held_out"):
+            problems.append("provenance_split_invalid")
+            continue
+        for field, groups in splits.items():
+            value = row[field]
+            if not isinstance(value, str) or not value.strip():
+                problems.append("provenance_missing:" + field)
+                continue
+            if field == "recording_sha256" and (len(value) != 64 or any(c not in "0123456789abcdef" for c in value)):
+                problems.append("provenance_invalid_recording_hash")
+            previous = groups.setdefault(value, split)
+            if previous != split:
+                problems.append("provenance_split_leak:" + field)
+    if not seen:
+        problems.append("provenance_no_trials")
+    return sorted(set(problems))

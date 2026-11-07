@@ -233,3 +233,19 @@ sensor calibration or field truth has yet been certified. A regression
 blocker must never be overridden by pooled F1, bootstrap resampling,
 or synthetic fixture success. The checker is a software contract, not
 an algorithm change in libaudition.
+
+
+## Independent acquisition provenance audit (M4 diagnostic gate)
+
+The trial scorer's recording hashes prevent byte-identical leakage, but do
+**not** establish independence of acquisition sessions, rooms or physical
+emitters. The optional standalone `safety_diagnostic.provenance_blockers`
+accepts a separate audit manifest with exactly `trials`, each containing
+`trial_id`, `split`, `recording_sha256`, `session_id`, `scene_id`,
+`subject_id`. These IDs must be assigned from independently verified
+collection metadata, not detector predictions. The audit rejects any
+session, scene, subject or recording crossing development/held-out splits,
+missing IDs and duplicate trial IDs. It is deliberately a separate diagnostic
+check: passing it does **not** imply that the source manifest is authentic,
+that five recordings are independent, or that M4 has passed field acceptance.
+Physical localization and Nav2 remain disabled.
