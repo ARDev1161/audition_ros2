@@ -19,8 +19,8 @@ def acquisition_rows(dataset):
     return {"trials": [
         {"trial_id": t["trial_id"], "split": t["split"],
          "recording_sha256": t["recording_sha256"],
-         "session_id": "session-" + str(i),
-         "scene_id": "scene-" + str(i),
+         "session_id": "session-" + t["recording_sha256"][:12],
+         "scene_id": "scene-" + t["recording_sha256"][:12],
          "subject_id": "subject-" + str(i)}
         for i, t in enumerate(dataset["trials"])
     ]}
@@ -105,6 +105,51 @@ class AcquisitionProvenanceTests(unittest.TestCase):
             with self.subTest(size=len(raw)):
                 self.audit_file.write_text(raw, encoding="utf-8")
                 self.assertEqual(self.cli().returncode, 2)
+
+    def test_same_recording_with_conflicting_session_id_rejected(self):
+        # The fixture has several events from exactly the same recording;
+        # giving one event a new session label must be rejected.
+        self.audit["trials"][1]["session_id"] = "fake-other-session"
+        self.write_audit()
+        cli = self.cli()
+        self.assertEqual(cli.returncode, 2)
+        self.assertIn("provenance_recording_session_conflict", cli.stderr)
+
+    def test_five_files_from_one_scene_are_not_five_independent_scenes(self):
+        source = self.dataset["trials"][0]
+        self.dataset["trials"] = [
+            dict(source, trial_id="independent-" + str(i),
+                 recording_sha256=format(i + 1, "064x"))
+            for i in range(5)
+        ]
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        self.audit = acquisition_rows(self.dataset)
+        for row in self.audit["trials"]:
+            row["scene_id"] = "shared-room"
+        self.write_audit()
+        cli = self.cli()
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        result = json.loads(cli.stdout)
+        summary = result["acquisition_provenance_audit"]["independence_summary"]
+        self.assertEqual(summary["overall_distinct_groups"]["session_id"], 5)
+        self.assertEqual(summary["overall_distinct_groups"]["scene_id"], 1)
+        self.assertEqual(summary["per_stratum"]["direct"]["distinct_groups"]["scene_id"], 1)
+        self.assertIn(
+            "insufficient_acquisition_groups:direct:scene_id",
+            result["safety_diagnostic"]["blockers"])
+        self.assertFalse(result["safety_diagnostic"]["diagnostic_promotion_eligible"])
+        self.assertFalse(result["safety_diagnostic"]["physical_localization_accepted"])
+
+    def test_unobservable_trials_are_not_independent_evidence(self):
+        for trial in self.dataset["trials"]:
+            trial["truth"] = {"observable": False, "pair": None}
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        cli = self.cli()
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        summary = json.loads(cli.stdout)["acquisition_provenance_audit"]["independence_summary"]
+        self.assertEqual(summary["observable_trials"], 0)
+        self.assertEqual(summary["overall_distinct_groups"]["session_id"], 0)
+        self.assertEqual(summary["unknown_truth_excluded"], len(self.dataset["trials"]))
 
     def test_unhashable_trial_ids_fail_closed(self):
         self.audit["trials"][0]["trial_id"] = ["invalid"]
