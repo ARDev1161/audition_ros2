@@ -16,7 +16,9 @@ def rotate_covariance(cov, rotation):
     # Sylvester principal minors for a symmetric 3x3 positive semidefinite matrix.
     a,b,c,d,e,f = cov[0],cov[1],cov[2],cov[4],cov[5],cov[8]
     eps=1e-9
-    if (min(a,d,f) < 0 or a*d-b*b < -eps or a*f-c*c < -eps
+    # Unknown/zero sensor variance must not be silently interpreted as a
+    # perfect measurement. Require positive axis variances.
+    if (min(a,d,f) <= 0 or a*d-b*b < -eps or a*f-c*c < -eps
             or d*f-e*e < -eps
             or a*d*f+2*b*c*e-a*e*e-d*c*c-f*b*b < -eps):
         return None
