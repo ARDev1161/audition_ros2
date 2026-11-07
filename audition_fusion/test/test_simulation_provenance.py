@@ -52,7 +52,7 @@ class SimulationProvenanceTests(unittest.TestCase):
 
     def test_tampered_metadata(self):
         for key, value, message in [
-            ("domain", "physical", "domain"),
+            ("domain", "physical", "physical claims"),
             ("physical_validation_claim", True, "physical claims"),
             ("trials", True, "trial count"),
             ("trials", 3, "trial count"),
