@@ -104,6 +104,11 @@ class AvPairNode(Node):
             return
         if not self.audio_fence.accept(msg.scene_session_id,msg.sequence_number,ns(msg.header.stamp)):
             return
+        if len(msg.sources)>self.matcher.maximum_tracks:
+            self.audio=[]
+            self.audio_time=time.monotonic()
+            self.publish_pairs()
+            return
         incoming=[]
         seen=set()
         for s in msg.sources:
@@ -130,6 +135,11 @@ class AvPairNode(Node):
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
             return
         if not self.vision_fence.accept(msg.vision_session_id,msg.sequence_number,ns(msg.header.stamp)):
+            return
+        if len(msg.tracks)>self.matcher.maximum_tracks:
+            self.visual=[]
+            self.vision_time=time.monotonic()
+            self.publish_pairs()
             return
         incoming=[]
         seen=set()

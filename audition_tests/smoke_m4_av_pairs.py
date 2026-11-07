@@ -2,6 +2,7 @@
 """M4 AV diagnostic live DDS/TF2 graph smoke; never movement or identity."""
 import sys
 import time
+import math
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
@@ -40,14 +41,16 @@ def main():
         raise AssertionError(('missing AV observation',len(received),
               [(len(m.hypotheses),m.sequence_number) for m in received[-12:]]))
 
-    def prepare_tf(stamp):
+    def prepare_tf(stamp,camera_yaw=0.0):
         for frame,x in [('robot_ci_av_mic',0.),('robot_ci_av_camera',.05)]:
             tf=TransformStamped()
             tf.header.stamp=stamp
             tf.header.frame_id='odom'
             tf.child_frame_id=frame
             tf.transform.translation.x=x
-            tf.transform.rotation.w=1.
+            yaw=camera_yaw if frame=='robot_ci_av_camera' else 0.0
+            tf.transform.rotation.z=math.sin(yaw/2.0)
+            tf.transform.rotation.w=math.cos(yaw/2.0)
             tfpub.sendTransform(tf)
         spin_for(.22)
 
@@ -73,7 +76,7 @@ def main():
         a.sources=[s]
         return a
 
-    def vision_msg(sequence,stamp,track_ids):
+    def vision_msg(sequence,stamp,track_ids,local_yaw=0.0):
         v=VisualBearingObservationArray()
         v.header.frame_id='robot_ci_av_camera'
         v.header.stamp=stamp
@@ -87,7 +90,8 @@ def main():
             t.activity_evidence=True
             t.has_angular_variance=True
             t.angular_variance_rad2=.01
-            t.direction_unit.x=1.
+            t.direction_unit.x=math.cos(local_yaw)
+            t.direction_unit.y=math.sin(local_yaw)
             t.observed_at=stamp
             v.tracks.append(t)
         return v
@@ -114,9 +118,10 @@ def main():
         assert first.hypotheses[0].sensor_baseline_m<.1
 
         stamp=node.get_clock().now().to_msg()
-        prepare_tf(stamp)
+        # Camera rotates +90 degrees, requiring historical TF2 orientation.
+        prepare_tf(stamp,camera_yaw=math.pi/2)
         acoustic.publish(audio_msg(2,stamp))
-        visual.publish(vision_msg(2,stamp,['face-a','face-b']))
+        visual.publish(vision_msg(2,stamp,['face-a','face-b'],local_yaw=-math.pi/2))
         ambiguous=find(lambda m:len(m.hypotheses)==2)
         assert not any(p.unique_match for p in ambiguous.hypotheses), 'ambiguity concealed'
 
@@ -125,7 +130,7 @@ def main():
         cleared=find(lambda m:m.sequence_number>ambiguous.sequence_number
                     and not m.hypotheses)
         assert not cleared.hypotheses
-        print('PASS: live AV TF2 unique pair, explicit ambiguity, retirement clearing')
+        print('PASS: live AV TF2 rotated-frame pairing, ambiguity, retirement clearing')
         return 0
     except Exception as exc:
         print('FAIL: AV DDS/TF2 graph:',repr(exc),file=sys.stderr)
