@@ -27,13 +27,20 @@ def main(argv=None):
         # The manifest is intentionally the existing v1 scorer schema.
         # The output filename is explicitly marked 'simulation' by caller.
         output = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-        args.out.write_text(output, encoding="utf-8")
-        print(json.dumps({
+        provenance = {
             "domain": "simulation", "physical_validation_claim": False,
             "simulation_export_sha256": hashlib.sha256(raw).hexdigest(),
             "manifest_sha256": hashlib.sha256(output.encode()).hexdigest(),
             "trials": len(manifest["trials"]),
-        }, sort_keys=True), file=sys.stderr)
+        }
+        # The v1 scorer deliberately has a fixed schema. Keep origin and
+        # hashes in a required adjacent machine-readable sidecar instead of
+        # quietly stripping the simulation provenance during conversion.
+        sidecar = args.out.with_name(args.out.name + ".provenance.json")
+        args.out.write_text(output, encoding="utf-8")
+        sidecar.write_text(json.dumps(provenance, sort_keys=True, indent=2)
+                           + "\\n", encoding="utf-8")
+        print(json.dumps(provenance, sort_keys=True), file=sys.stderr)
         return 0
     except (ValueError, OSError, UnicodeError) as error:
         print("Invalid simulator export:", error, file=sys.stderr)
