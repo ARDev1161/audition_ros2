@@ -150,3 +150,28 @@ positive gain. That still requires frozen detector outputs for each
 strategy on the exact same held-out recordings, independently checked
 reference annotations, sensor calibration and trial-clustered uncertainty
 analysis.
+
+## Paired baseline comparison report (software diagnostic)
+
+The trial-level evaluator also emits `paired_comparison`: for each of
+`audio_only`, `radar_only` and `instant_fusion`, it compares the
+`temporal_fusion` decision on the **same independently labeled trial**.
+It reports both-correct, candidate-only-correct, baseline-only-correct,
+both-incorrect and unobservable-excluded counts, per stratum and overall.
+On verified negatives only the explicit `none` decision is correct;
+an abstention is never counted as correct. An emitted incorrect pair is
+a false association even when the true pairing was positive.
+
+`paired_accuracy_delta = (candidate_only_correct -
+baseline_only_correct) / observable_trials`, and
+`paired_false_pair_delta_per_trial = (candidate_false_pairs -
+baseline_false_pairs) / observable_trials`. Zero denominators produce
+`null` rather than invented rates. `descriptive_improvement` only
+indicates a positive observed paired accuracy difference; it is **not**
+statistical significance, an independent-cluster confidence bound or
+proof of safe physical performance. The report always explicitly marks
+`positive_gain_validated: false`. Repeated event trials in a recording
+are correlated; independent held-out scene/recording evaluation with
+clustered uncertainty and a predeclared safety margin is still required
+before granting the M4 release gate. Simulated and field trial reports
+must never be pooled into one claim.
