@@ -131,10 +131,12 @@ jobs:
                   manifest.read_bytes()).hexdigest()
               report=subprocess.check_output([sys.executable,
                   'audition_fusion/benchmarks/evaluate_field_manifest.py',
-                  str(manifest)])
+                  str(manifest),'--require-simulation-provenance'])
               result=json.loads(report)
               assert result["strategies"]["temporal_fusion"]["tp"] == 1
               assert result["physical_validation_claim"] is False
+              assert result["data_domain"] == "simulation"
+              assert result["provenance_verified"] is True
           PY
 
       - name: M4 adverse conditional geometry audit (known blind spots)
