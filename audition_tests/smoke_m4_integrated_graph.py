@@ -149,12 +149,64 @@ def main():
         assert not any(p.hypotheses[0].temporally_confirmed
                        for p in pairs if len(p.hypotheses) == 1), (
             'one-view AV proposal marked confirmed')
+        # An authoritative empty canonical snapshot must revoke the last
+        # AV hypothesis in the same combined graph, without awaiting TTL.
+        last_pair_sequence = max(p.sequence_number for p in pairs)
+        last_candidate_sequence = max(c.sequence_number for c in candidates)
+        retired = AcousticSourceArray()
+        retired.header.frame_id = a.header.frame_id
+        retired.header.stamp = node.get_clock().now().to_msg()
+        retired.scene_session_id = AUDIO_SESSION
+        retired.spatial_session_id = a.spatial_session_id
+        retired.generation = a.generation
+        retired.sequence_number = 2
+        audio.publish(retired)
+        assert until(lambda: any(
+            p.sequence_number > last_pair_sequence and not p.hypotheses
+            for p in pairs) and any(
+            c.sequence_number > last_candidate_sequence and not c.candidates
+            for c in candidates)), (
+                'retired source still has diagnostic hypotheses',
+                [(p.sequence_number, len(p.hypotheses)) for p in pairs[-4:]],
+                [(c.sequence_number, len(c.candidates))
+                 for c in candidates[-4:]])
+
+        # Simulate scene process restart: a fresh incarnation can start at
+        # sequence 1, but it must retire the old pose evidence.
+        restart_count = int(diagnostics()['session_restarts'])
+        restarted = AcousticSourceArray()
+        restarted.header.frame_id = a.header.frame_id
+        restarted.header.stamp = node.get_clock().now().to_msg()
+        restarted.scene_session_id = 'd' * 32
+        restarted.spatial_session_id = a.spatial_session_id
+        restarted.generation = a.generation
+        restarted.sequence_number = 1
+        audio.publish(restarted)
+        assert until(lambda: int(diagnostics().get('session_restarts', 0))
+                     >= restart_count + 1), (
+                         'scene restart was not admitted', diagnostics())
+        assert int(diagnostics()['buffered_pose_samples']) == 0
+
+        # A retired incarnation cannot reintroduce its old observations.
+        replayed = int(diagnostics()['replayed_scenes'])
+        old = AcousticSourceArray()
+        old.header.frame_id = a.header.frame_id
+        old.header.stamp = node.get_clock().now().to_msg()
+        old.scene_session_id = AUDIO_SESSION
+        old.spatial_session_id = a.spatial_session_id
+        old.generation = a.generation
+        old.sequence_number = 3
+        audio.publish(old)
+        assert until(lambda: int(diagnostics().get('replayed_scenes', 0))
+                     >= replayed + 1), (
+                         'retired scene incarnation unexpectedly admitted',
+                         diagnostics())
         # No M4 consumer is entitled to publish authoritative localization.
         topics = dict(node.get_topic_names_and_types())
         assert NS + 'localized_sources' not in topics
         assert NS + 'cmd_vel' not in topics
-        print('PASS: one-launch M4 DDS AV + TF bearing + pose diagnostics; '
-              'no metric localization or motion')
+        print('PASS: one-launch M4 DDS AV + TF bearing + pose; '
+              'retirement, restart and replay fencing; no motion')
         return 0
     except Exception as exc:
         print('FAIL: M4 integrated graph:', repr(exc), file=sys.stderr)
