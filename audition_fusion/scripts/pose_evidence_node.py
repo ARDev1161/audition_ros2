@@ -16,6 +16,8 @@ from pose_sample_cache import PoseSampleCache
 from ros_pose_adapter import from_ros_pose_message
 from scene_admission import SceneAdmission
 from tf_pose_consistency import TransformOrigin, consistent_origin
+from ray_evidence import planar_ray_from_observation
+from evidence_buffer import DiagnosticEvidenceBuffer
 
 
 def ns(stamp):
@@ -50,10 +52,23 @@ class PoseEvidenceNode(Node):
                 or not math.isfinite(self.maximum_tf_difference_m)
                 or not 0 < self.maximum_tf_difference_m <= 2.0):
             raise ValueError('invalid M4 TF consistency limits')
+        self.enable_evidence = self.declare_parameter(
+            'enable_conditional_evidence', False).value
+        self.extrinsics_calibrated = self.declare_parameter(
+            'microphone_extrinsics_calibrated', False).value
+        if (type(self.enable_evidence) is not bool
+                or type(self.extrinsics_calibrated) is not bool
+                or (self.enable_evidence and
+                    (not self.require_tf or not self.extrinsics_calibrated))):
+            raise ValueError('conditional rays require TF and explicit calibration')
         self.arm = tuple(arm)
         if self.require_tf:
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.evidence = DiagnosticEvidenceBuffer()
+        self.conditional_evaluated = 0
+        self.conditional_admitted = 0
+        self.conditional_rejected = 0
         self.cache = PoseSampleCache(capacity=capacity,
                                      maximum_skew_ns=skew_ns,
                                      maximum_age_ns=self.age_ns)
@@ -82,6 +97,7 @@ class PoseEvidenceNode(Node):
         if self.last_clock and value < self.last_clock:
             self.cache.reset()
             self.scene_guard.reset()
+            self.evidence.reset()
             self.clock_resets += 1
         self.last_clock = value
         self.cache.tick(value)
@@ -118,7 +134,9 @@ class PoseEvidenceNode(Node):
             # Pose samples from the previous capture incarnation are not
             # reassigned to a new stream by timestamp coincidence alone.
             self.cache.reset()
+            self.evidence.reset()
             self.session_restarts += 1
+        active_evidence = set()
         for source in array.sources:
             if (source.state != AcousticSource.ACTIVE
                     or not source.has_direction or not source.source_id):
@@ -161,6 +179,29 @@ class PoseEvidenceNode(Node):
                     continue
             # A match is diagnostic timestamp/TF agreement only.
             self.matches += 1
+            if self.enable_evidence:
+                if (not source.has_angular_variance
+                        or source.header.frame_id not in ('', self.microphone_frame)
+                        or source.source_generation <= 0):
+                    self.conditional_rejected += 1
+                    continue
+                ray = planar_ray_from_observation(
+                    source, transform, pose_match, expected_stamp_ns=stamp)
+                if ray is None:
+                    self.conditional_rejected += 1
+                    continue
+                identity = (array.scene_session_id, source.source_id,
+                            int(source.source_generation))
+                active_evidence.add(identity)
+                outcome = self.evidence.add(*identity, ray)
+                if outcome.evaluated:
+                    self.conditional_evaluated += 1
+                    if outcome.admitted:
+                        self.conditional_admitted += 1
+                    else:
+                        self.conditional_rejected += 1
+        if self.enable_evidence:
+            self.evidence.retire_missing(active_evidence)
 
     def on_timer(self):
         self.clock()
@@ -180,6 +221,10 @@ class PoseEvidenceNode(Node):
             ('unmatched_bearings', self.unmatched),
             ('tf_rejected_bearings', self.tf_rejected),
             ('require_tf_consistency', self.require_tf),
+            ('enable_conditional_evidence', self.enable_evidence),
+            ('conditional_evaluated', self.conditional_evaluated),
+            ('conditional_admitted', self.conditional_admitted),
+            ('conditional_rejected', self.conditional_rejected),
             ('replayed_scenes', self.replayed_scenes),
             ('session_restarts', self.session_restarts),
             ('clock_resets', self.clock_resets),
