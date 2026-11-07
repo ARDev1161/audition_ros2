@@ -83,3 +83,64 @@ schema, ground-truth annotation protocol, complete evaluation command,
 versioned parameters and a machine-readable confusion/error report.
 Document missing hardware coverage explicitly. As of this protocol update,
 **no such field acceptance report has been completed**.
+
+## Machine-readable independent trial manifest v1
+
+A strict trial-level evaluator is available as:
+
+```bash
+python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
+    /path/to/independently_annotated_trial_manifest.json > report.json
+```
+
+The CLI defaults to **held-out trials only**. `--all-splits` can be used
+for internal debugging, but is not an acceptance run. The input file must be
+valid UTF-8 JSON, at most 16 MiB, with no repeated keys, NaN or Infinity.
+`manifest_sha256` is included in the report, so the exact evaluated input
+can be audited. The evaluator does **not** check that the referenced
+recording bytes match the declared recording hash: this must be done by
+the recording ingestion/verification procedure before calling the scorer.
+
+The root object must have exactly `schema_version: 1`, `dataset_id`
+and a nonempty `trials` array. Each trial has:
+
+- `trial_id`: unique immutable event/trial ID, not an observation frame
+- `stratum`: adversarial class, reported separately
+- `split`: exactly `development` or `held_out`
+- `recording_sha256`: lowercase 64-hex SHA-256 of recording artifact
+- `truth`: `{"observable":true,"pair":{"audio_id":"...","radar_id":"..."}}`
+  for an independently verified emitter/object pairing;
+  `{"observable":true,"pair":null}` for a verified negative opportunity;
+  `{"observable":false,"pair":null}` for identity that cannot be
+  independently established
+- `predictions`: exactly four predeclared strategies
+  (`audio_only`, `radar_only`, `instant_fusion`,
+  `temporal_fusion`), each with `{"decision":"pair","pair":{...}}`,
+  `{"decision":"none","pair":null}`, or
+  `{"decision":"abstain","pair":null}`
+
+Both `none` and `abstain` must be used consistently.
+`none` asserts that no acceptable correspondence was found; it
+counts as TN **only if** the independently established ground truth says
+there was no pair. `abstain` denotes insufficient evidence and
+never becomes a true negative. Positive unrecognized associations
+contribute FN; a wrong emitted pair on a positive trial contributes
+both FP (incorrect candidate) and FN (missed true candidate), while
+the trial itself is counted once. Unknown/unobservable truth is reported
+as a separate count, not silently forced to a negative label.
+
+The report includes TP, FP, TN, FN, abstention and unobservable counts,
+precision, recall, F1, false-positive rate, and breakdown by stratum.
+A rate with a zero denominator is `null`, not a fictitious 0% or 100%.
+These are **association** metrics only; the contract does not infer
+acoustic source range or validate a localization covariance.
+
+`audition_fusion/test/fixtures/m4_field_contract_example.json` exists
+solely to test parsing, report generation and the metric definitions;
+its recording hash is a placeholder and it is **not field evidence**.
+The scorer consumes externally supplied predictions and ground truth;
+it does not fabricate annotations, run radar/audio inference, or prove
+positive gain. That still requires frozen detector outputs for each
+strategy on the exact same held-out recordings, independently checked
+reference annotations, sensor calibration and trial-clustered uncertainty
+analysis.
