@@ -300,3 +300,34 @@ metadata can still exist. Passing them never changes
 `physical_localization_accepted: false` or `nav2_admission: false`.
 This metadata audit does not replace an external physical truth collection,
 predeclared performance thresholds or the later M4 field acceptance.
+
+### Acquisition-group leave-one-out sensitivity (software diagnostic)
+
+When a complete `--acquisition-provenance` audit is supplied, the scorer
+now also reports `acquisition_provenance_audit.paired_group_sensitivity`.
+For every held-out stratum, it groups independently annotated **observable**
+trials by supplied `session_id`, `scene_id`, and `subject_id`, separately
+for each of the three baselines versus `temporal_fusion`. It reports:
+
+- the distinct number of claimed groups and observable trials;
+- the paired correctness and incorrect-pair deltas for the full stratum;
+- the range of those two deltas when each complete group is removed once;
+- the worst individual group's accuracy and incorrect-pair deltas.
+
+Less than two groups yields `null` leave-one-out ranges; fewer than five
+claimed groups in any dimension remain separately blocked by the acquisition
+independence check. Unknown-truth events never contribute success or
+independent sample counts. For otherwise sufficiently large strata, a claimed
+gain that disappears when *any* session, scene or emitter is removed yields
+`fragile_acquisition_gain:<stratum>:<dimension>:<baseline>`; a remaining
+false-pair deterioration yields `fragile_acquisition_false_pairs:...`.
+A **single group's** accuracy regression or elevated wrong-pair rate is
+also blocked, even when the pooled stratum comparison looks favorable.
+
+Each grouping dimension is an alternative, overlapping view of the
+**same** trials. Do not combine the three group counts, treat the
+leave-one-out ranges as calibrated confidence intervals, or assume
+self-reported metadata establishes physically independent observations.
+These deliberately conservative gates only control
+`diagnostic_promotion_eligible`. They can never set
+`physical_localization_accepted` or `nav2_admission` to true.
