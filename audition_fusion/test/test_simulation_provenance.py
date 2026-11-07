@@ -60,11 +60,14 @@ class SimulationProvenanceTests(unittest.TestCase):
         ]:
             with self.subTest(key=key, value=value):
                 original = self.provenance[key]
-                self.provenance[key] = value
-                self.write_sidecar()
-                with self.assertRaisesRegex(ValueError, message):
-                    self.verify()
-                self.provenance[key] = original
+                try:
+                    self.provenance[key] = value
+                    self.write_sidecar()
+                    with self.assertRaisesRegex(ValueError, message):
+                        self.verify()
+                finally:
+                    self.provenance[key] = original
+                    self.write_sidecar()
 
     def test_unknown_fields_and_duplicate_keys(self):
         self.sidecar.write_text('{"domain":"simulation","domain":"physical"}')
