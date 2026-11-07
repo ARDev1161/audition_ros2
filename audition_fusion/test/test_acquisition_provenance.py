@@ -93,6 +93,26 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertFalse(report["safety_diagnostic"]["physical_localization_accepted"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
+    def test_required_adverse_strata_fail_closed_without_observable_truth(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "reflection",
+               "--required-stratum", "not-in-dataset",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["required_strata"], ["not-in-dataset", "reflection"])
+        self.assertIn("required_stratum_missing_or_unobservable:not-in-dataset",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_invalid_required_stratum_is_input_error(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", " bad ", "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid required stratum name", result.stderr)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

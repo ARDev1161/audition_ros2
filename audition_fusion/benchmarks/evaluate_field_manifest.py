@@ -52,6 +52,8 @@ def main(argv=None):
                         help="JSON mapping every declared recording SHA to a relative artifact path")
     parser.add_argument("--recordings-root", type=pathlib.Path,
                         help="root directory of real recording files; required with --recording-index")
+    parser.add_argument("--required-stratum", action="append", default=[], metavar="NAME",
+                        help="require an observable held-out stratum; repeat for adverse cases")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -63,6 +65,24 @@ def main(argv=None):
                           object_pairs_hook=strict_object,
                           parse_constant=reject_constant)
         report = evaluate(data, held_out_only=not args.all_splits)
+        # Predeclared adverse strata must actually be represented by
+        # independently observable held-out trials. A missing stratum is
+        # an explicit diagnostic blocker, not an empty success.
+        if args.required_stratum:
+            observed = report["paired_comparison"]["per_stratum"]
+            missing = set()
+            for name in args.required_stratum:
+                if not name or name.strip() != name or len(name) > 128:
+                    raise ValueError("invalid required stratum name")
+                if name not in observed or not any(
+                        counts["observable_trials"] > 0
+                        for counts in observed[name].values()):
+                    missing.add(name)
+            report["required_strata"] = sorted(set(args.required_stratum))
+            if missing:
+                apply_diagnostic_blockers(report, {
+                    "required_stratum_missing_or_unobservable:" + name
+                    for name in missing})
         if args.require_simulation_provenance:
             report.update(verified_simulation_provenance(args.manifest, raw, data))
         else:

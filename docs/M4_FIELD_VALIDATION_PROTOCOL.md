@@ -489,3 +489,13 @@ exit 2 means malformed/unverifiable input. The report is printed on stdout
 for exit 3 so automation can retain the complete blocker evidence. This flag
 **never** authorizes physical localization or Nav2. Presently, simulation-only
 or unverified-domain evidence necessarily returns 3 in strict mode.
+
+### Prespecified adverse-stratum coverage gate
+
+The field evaluator accepts repeatable `--required-stratum NAME` flags for
+prespecified adverse conditions (e.g. reflection, time skew, moving speaker).
+A missing stratum or one without observable independent truth adds
+`required_stratum_missing_or_unobservable:NAME` to the diagnostic blockers;
+`--require-diagnostic-eligibility` then exits 3 while preserving the JSON
+report. Invalid names are rejected as input errors (exit 2). This is a
+coverage gate, not evidence of physical localization or Nav2 admission.
