@@ -69,3 +69,21 @@ CI unit tests cover correct geometry, impossible angles, behind-sensor
 and excessive distance, time skew, invalid covariance, duplicate identity
 and reciprocal ambiguity. Physical-sensor precision/recall and the M4
 ground-truth gate remain deferred.
+
+## M4-C deterministic synthetic association benchmark
+
+Run `python3 audition_fusion/benchmarks/radar_association_benchmark.py`
+for 160 labeled synthetic fixtures (8 classes × 20 seeds). The explicit
+ground-truth construction separates true direct associations from off-axis,
+rear-facing, time-skewed and one-to-many ambiguous alternatives, plus two
+adversarial negative classes whose measured inputs exactly match a true
+association: an aligned radar impostor and an aligned reflected sound.
+
+The fixed **expected** synthetic confusion matrix (not yet CI-verified for
+this commit) is TP=40, FP=40, TN=80, FN=0: precision 50%, recall 100%,
+false-positive rate 33.3%. The 40 unavoidable false positives arise from
+the aligned impostor and reflection classes. These metrics are scoped
+**only to the constructed examples**, not real people, acoustic recordings,
+radar hardware or a measured cross-sensor improvement. They demonstrate
+that geometric compatibility alone cannot prove radar/audio identity,
+justify `LocalizedSource`, or satisfy M4's physical acceptance gate.
