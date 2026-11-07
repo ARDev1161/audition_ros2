@@ -92,16 +92,26 @@ class GraphProbe:
         expected = self.expected(spec, self.validate(spec))
         service = "/" + spec.namespace + "/semantic_perception/get_capabilities"
         end = time.monotonic() + timeout
+        last_nodes, last_services = [], set()
         while time.monotonic() < end:
             if process.poll() is not None:
+                self.node.get_logger().error(
+                    "owned launch exited before readiness (code=%s, log=%s)" %
+                    (process.poll(), process.log.name))
                 return False
             services = {name for name, _ in self.node.get_service_names_and_types()}
             nodes = self._nodes()
+            last_nodes, last_services = nodes, services
             if all(nodes.count(item) == 1 for item in expected) and service in services:
                 self._ready_expected = expected
                 self._ready_service = service
                 return True
             time.sleep(0.1)
+        missing_nodes = sorted(item for item in expected if last_nodes.count(item) != 1)
+        self.node.get_logger().error(
+            "pipeline readiness timeout: missing/duplicate nodes=%s, "
+            "capability_service_present=%s, owned_log=%s" %
+            (missing_nodes, service in last_services, process.log.name))
         return False
 
     def health(self, spec):

@@ -740,12 +740,18 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           python3 audition_bringup/launch/profile_supervisor.py \
-            --profile replay_ci --wav-path /tmp/audition_ci.wav \
+            --profile replay_ci --wav-path /tmp/audition_ci.wav --timeout 75 \
             > /tmp/audition_supervisor.log 2>&1 &
           supervisor_pid=$!
           trap 'kill "$supervisor_pid" 2>/dev/null || true' EXIT
           if ! python3 audition_tests/smoke_pipeline_reload.py; then
             cat /tmp/audition_supervisor.log
+            for log in /tmp/audition-profile-*.log; do
+              if [ -f "$log" ]; then
+                echo "==== owned pipeline: $log ===="
+                tail -n 160 "$log"
+              fi
+            done
             exit 1
           fi
 
