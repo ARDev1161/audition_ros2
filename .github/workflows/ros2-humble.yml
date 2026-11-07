@@ -91,6 +91,11 @@ jobs:
           assert report['strategies']['temporal_fusion']['fp'] == 0
           assert report['strategies']['temporal_fusion']['fn'] == 1
           assert report['physical_validation_claim'] is False
+          safety = report['safety_diagnostic']
+          assert safety['physical_localization_accepted'] is False
+          assert safety['nav2_admission'] is False
+          assert safety['diagnostic_promotion_eligible'] is False
+          assert any(x.startswith('insufficient_recording_clusters:') for x in safety['blockers'])
           comparison = report['paired_comparison']
           assert comparison['candidate'] == 'temporal_fusion'
           assert comparison['positive_gain_validated'] is False
