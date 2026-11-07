@@ -7,6 +7,44 @@ on:
     branches: [main, "feat/**"]
 
 jobs:
+  m4-diagnostic-contract:
+    name: M4 independent diagnostic contract (no ROS dependencies)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile M4 Python sources
+        run: |
+          python3 -m compileall -q audition_fusion
+      - name: Execute all M4 diagnostic contract and negative tests
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_*.py' -v
+      - name: Reproduce adverse association and geometry benchmarks
+        run: |
+          python3 audition_fusion/benchmarks/av_association_benchmark.py
+          python3 audition_fusion/benchmarks/radar_association_benchmark.py
+          python3 audition_fusion/benchmarks/radar_temporal_benchmark.py
+          python3 audition_fusion/benchmarks/conditional_geometry_adversarial.py
+          python3 audition_fusion/benchmarks/common_mode_geometry_benchmark.py
+      - name: Confirm synthetic field report cannot authorize localization
+        run: |
+          python3 audition_fusion/benchmarks/evaluate_field_manifest.py \\
+            audition_fusion/test/fixtures/m4_field_contract_example.json > /tmp/m4-report.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/m4-report.json', encoding='utf-8') as stream:
+              report = json.load(stream)
+          safety = report['safety_diagnostic']
+          assert report['physical_validation_claim'] is False
+          assert safety['physical_localization_accepted'] is False
+          assert safety['nav2_admission'] is False
+          assert safety['diagnostic_promotion_eligible'] is False
+          assert safety['no_observed_safety_regression'] is False
+          assert 'acquisition_provenance_not_supplied' in safety['blockers']
+          assert 'recording_bytes_not_verified' in safety['blockers']
+          assert 'data_domain_unverified' in safety['blockers']
+          PY
+
   humble:
     runs-on: ubuntu-22.04
     container: ros:humble-ros-base

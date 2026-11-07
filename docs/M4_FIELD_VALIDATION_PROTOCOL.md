@@ -464,3 +464,15 @@ group regression) now updates **both** `diagnostic_promotion_eligible` and
 may still report a clean synthetic comparison, but the full CLI must not
 claim clean safety evidence when its external audits fail or are absent.
 Neither field authorizes physical localization or Nav2 admission.
+
+
+## Independent fast diagnostic CI gate
+
+The `ROS 2 Humble CI` workflow runs a separate `m4-diagnostic-contract`
+Ubuntu 22.04 job in parallel with the ROS container job. It compiles M4 Python,
+runs the complete Python unit/negative suite, replays adverse AV/radar/geometry
+benchmarks and asserts that a synthetic field fixture cannot authorize
+physical localization or Nav2. This isolates M4 diagnostic failures from ROS
+container installation/build failures; **both** jobs must pass. It does not
+replace ROS graph smoke, native backend CI, or physical acceptance. A missing
+GitHub Actions result is not a passing result.
