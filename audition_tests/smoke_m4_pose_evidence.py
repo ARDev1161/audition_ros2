@@ -98,7 +98,7 @@ def main():
 
         # A replay cannot inflate the matches, even with a good pose.
         replays = int(counters()['replayed_scenes'])
-        scene(stamp, sequence=2)
+        scene(node.get_clock().now().to_msg(), sequence=2)
         wait_counter('replayed_scenes', replays + 1)
         assert int(counters()['matching_bearings']) == matched + 1
 
