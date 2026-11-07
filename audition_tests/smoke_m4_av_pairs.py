@@ -129,6 +129,14 @@ def main():
         assert first.vision_session_id==VISION_EPOCH
         assert first.hypotheses[0].sensor_baseline_m<.1
 
+        # A camera that goes silent (without publishing an empty snapshot)
+        # must not leave the last confirmed pairing indefinitely visible.
+        # The AV node defaults to an 800ms observation-age timeout.
+        last_confirmed_sequence=max(m.sequence_number for m in received)
+        expired=find(lambda m:m.sequence_number>last_confirmed_sequence
+                     and not m.hypotheses,timeout=3.0)
+        assert not expired.hypotheses, 'stale camera evidence retained'
+
         stamp=node.get_clock().now().to_msg()
         # Camera rotates +90 degrees, requiring historical TF2 orientation.
         prepare_tf(stamp,camera_yaw=math.pi/2)
