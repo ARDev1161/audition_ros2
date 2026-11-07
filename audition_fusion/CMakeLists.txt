@@ -3,6 +3,8 @@ project(audition_fusion VERSION 0.1.0)
 find_package(ament_cmake REQUIRED)
 install(PROGRAMS scripts/pose_evidence_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME pose_evidence_node)
+install(PROGRAMS scripts/radar_audio_association_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME radar_audio_association_node)
 install(PROGRAMS scripts/radar_adapter_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME radar_adapter_node)
 install(PROGRAMS scripts/av_pair_node.py
