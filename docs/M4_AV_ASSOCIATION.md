@@ -47,3 +47,23 @@ stream replay. Dedicated live ROS graph testing validates actual TF2
 calibration, pairing, ambiguity and removal against synthetic observations.
 Real-camera evaluation, AV precision/recall, reflections and moving-source
 validation remain outstanding.
+
+## Temporal corroboration (still diagnostic, no physical identity proof)
+
+The `supporting_synchronized_observations` field is a bounded count, not a
+probability. `temporally_confirmed=true` requires three mutually unique
+AV pairs with **both independent sample timestamps** advancing by >=100 ms,
+and no >600 ms gap between counted pairs (configurable launch parameters:
+`minimum_pair_confirmations`, `minimum_pair_spacing_ms`,
+`maximum_pair_gap_ms`). Republishing the same audio or camera observation
+cannot increase the count. Ambiguous competitors, disappearance/retirement,
+source generation changes, either stream session restart, clock rollback,
+or expiry revoke evidence. An audio or visual publisher temporarily leading
+the other may produce an empty diagnostic snapshot without destroying its
+bounded, still-fresh corroboration history; no stale hypothesis is republished.
+
+Corroboration is neither voice/person identity nor lip-sync verification.
+Results must not trigger camera/base motion, Nav2 costs or metric localization.
+Real-world association precision/recall, source motion, reflection rejection,
+clock calibration and extrinsic uncertainty remain unverified M4 acceptance
+requirements.
