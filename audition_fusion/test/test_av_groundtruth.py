@@ -20,8 +20,8 @@ def frame(t=1000000000):
         "visual_tracks":[["person",1],["screen",1]],
         "truth_pairs":[["speech",1,"person",1]],
         "hypotheses":[
-            {"pair":["speech",1,"person",1],"unique_match":True,"temporally_confirmed":False},
-            {"pair":["fan",1,"screen",1],"unique_match":False,"temporally_confirmed":False},
+            {"pair":["speech",1,"person",1],"audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,"unique_match":True,"temporally_confirmed":False},
+            {"pair":["fan",1,"screen",1],"audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,"unique_match":False,"temporally_confirmed":False},
         ],
     }
 
@@ -31,8 +31,8 @@ class ScoringTests(unittest.TestCase):
         first=frame()
         second=frame(1200000000)
         second["hypotheses"]=[
-            {"pair":["speech",1,"person",1],"unique_match":True,"temporally_confirmed":True},
-            {"pair":["fan",1,"screen",1],"unique_match":True,"temporally_confirmed":False},
+            {"pair":["speech",1,"person",1],"audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,"unique_match":True,"temporally_confirmed":True},
+            {"pair":["fan",1,"screen",1],"audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,"unique_match":True,"temporally_confirmed":False},
         ]
         third=frame(1400000000)
         third["hypotheses"]=[]
@@ -62,10 +62,13 @@ class ScoringTests(unittest.TestCase):
             lambda d: d.update(truth_pairs=[["absent",1,"person",1]]),
             lambda d: d.update(audio_tracks=[["speech",1],["speech",1]]),
             lambda d: d.update(hypotheses=[{"pair":["speech",1,"screen",1],
+                          "audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,
                           "unique_match":False,"temporally_confirmed":True}]),
             lambda d: d.update(hypotheses=[{"pair":["speech",1,"screen",1],
+                          "audio_scene_session_id":"a"*32,"vision_session_id":"b"*32,
                           "unique_match":True,"temporally_confirmed":"true"}]),
             lambda d: d.update(vision_session_id="b"),
+            lambda d: d["hypotheses"][0].update(vision_session_id="c"*32),
         ]:
             row=copy.deepcopy(source)
             change(row)

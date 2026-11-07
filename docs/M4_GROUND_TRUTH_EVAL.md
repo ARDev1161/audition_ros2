@@ -11,13 +11,15 @@ python3 audition_fusion/benchmarks/score_av_groundtruth.py labeled_frames.jsonl
 One JSON object per line, sorted by strictly increasing `stamp_ns`:
 
 ```json
-{"schema":"av_eval_v1","stamp_ns":1000000000,"fully_annotated":true,"audio_scene_session_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","vision_session_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","audio_tracks":[["s1",1]],"visual_tracks":[["face1",1]],"truth_pairs":[["s1",1,"face1",1]],"hypotheses":[{"pair":["s1",1,"face1",1],"unique_match":true,"temporally_confirmed":false}]}
+{"schema":"av_eval_v1","stamp_ns":1000000000,"fully_annotated":true,"audio_scene_session_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","vision_session_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","audio_tracks":[["s1",1]],"visual_tracks":[["face1",1]],"truth_pairs":[["s1",1,"face1",1]],"hypotheses":[{"pair":["s1",1,"face1",1],"audio_scene_session_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","vision_session_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","unique_match":true,"temporally_confirmed":false}]}
 ```
 
 Generation is part of both track identities. `truth_pairs` is the externally
 annotated common physical source pairing for that frame, not merely similar
 bearings; annotators must label it independently of the algorithm outputs.
-Each frame lists **all** independently observable audio and visual tracks,
+Every predicted hypothesis repeats both stream session IDs to reject stale
+cross-epoch associations, including reused source/visual IDs. Each frame lists
+**all** independently observable audio and visual tracks,
 including unrelated noise and silent faces. `fully_annotated=false` excludes
 a frame from evaluation, rather than converting unknown associations into
 false negatives or true negatives. At least one complete frame is required.

@@ -75,3 +75,9 @@ python3 -m unittest discover -s audition_fusion/test -p 'test_*.py' -v
   overlapping and reverberant environments; measured advantage over independent
   sensing before metric localization or navigation use.
 - Hardware acceptance remains unverified; M4 is not ready to merge.
+
+
+## AV evaluation tools
+
+- [Adversarial synthetic bearing benchmark](M4_SYNTHETIC_BENCHMARK.md): deterministic regression dataset, including known unavoidable false associations
+- [Strict ground-truth AV scorer](M4_GROUND_TRUTH_EVAL.md): externally annotated JSONL frames and confusion matrices, with full-session provenance

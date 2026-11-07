@@ -89,6 +89,9 @@ def score_frames(frames):
         for item in predicted:
             if not isinstance(item, dict):
                 raise ValueError("frame %d: malformed hypothesis" % index)
+            if (item.get("audio_scene_session_id") != row["audio_scene_session_id"]
+                    or item.get("vision_session_id") != row["vision_session_id"]):
+                raise ValueError("frame %d: stale AV hypothesis session" % index)
             key = pair_key(item.get("pair"))
             if key not in universe or key in all_pairs:
                 raise ValueError("frame %d: invalid/duplicate hypothesis" % index)
