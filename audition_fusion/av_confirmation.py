@@ -64,6 +64,14 @@ class TemporalPairGate:
                 self.reset()
                 return {}
             eligible[key] = pair
+        # A producer can mark individual edges unique incorrectly. Never
+        # confirm a many-to-one or one-to-many pairing even if every edge has
+        # unique_match=True. Discard all evidence for the conflicting snapshot.
+        audio_keys = [k[:2] for k in eligible]
+        visual_keys = [k[2:] for k in eligible]
+        if len(set(audio_keys)) != len(audio_keys) or len(set(visual_keys)) != len(visual_keys):
+            self.history.clear()
+            return {}
         self.history = {k: v for k, v in self.history.items() if k in eligible}
         results = {}
         for key, pair in eligible.items():
