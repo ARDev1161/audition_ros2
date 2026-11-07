@@ -56,6 +56,8 @@ def main(argv=None):
                         help="require an observable held-out stratum; repeat for adverse cases")
     parser.add_argument("--require-both-truth-classes", action="store_true",
                         help="required held-out strata must have observable positive and negative truth")
+    parser.add_argument("--minimum-recordings-per-truth-class", type=int, default=0,
+                        metavar="N", help="minimum distinct held-out recording hashes per truth class in each required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -69,6 +71,10 @@ def main(argv=None):
         report = evaluate(data, held_out_only=not args.all_splits)
         if args.require_both_truth_classes and not args.required_stratum:
             raise ValueError("--require-both-truth-classes requires --required-stratum")
+        if args.minimum_recordings_per_truth_class < 0 or args.minimum_recordings_per_truth_class > 100000:
+            raise ValueError("invalid minimum recordings per truth class")
+        if args.minimum_recordings_per_truth_class and not args.required_stratum:
+            raise ValueError("--minimum-recordings-per-truth-class requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -90,6 +96,15 @@ def main(argv=None):
                     entry["observable_negative"] += 1
                 else:
                     entry["observable_positive"] += 1
+            # Trial counts alone are insufficient: many trials can come from
+            # one recording and falsely inflate adverse-condition coverage.
+            recording_groups = {}
+            for trial in data["trials"]:
+                if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+                    continue
+                kind = ("negative" if trial["truth"]["pair"] is None else "positive")
+                recording_groups.setdefault(trial["stratum"], {
+                    "positive": set(), "negative": set()})[kind].add(trial["recording_sha256"])
             missing = set()
             for name in args.required_stratum:
                 if not name or name.strip() != name or len(name) > 128:
@@ -109,6 +124,16 @@ def main(argv=None):
                     if not counts["observable_positive"] or not counts["observable_negative"]:
                         apply_diagnostic_blockers(report, {
                             "required_stratum_missing_truth_class:" + name})
+            if args.minimum_recordings_per_truth_class:
+                report["required_strata_recording_coverage"] = {
+                    name: {kind: len(recording_groups.get(name, {}).get(kind, set()))
+                           for kind in ("positive", "negative")}
+                    for name in report["required_strata"]}
+                for name, counts in report["required_strata_recording_coverage"].items():
+                    for kind, count in counts.items():
+                        if count < args.minimum_recordings_per_truth_class:
+                            apply_diagnostic_blockers(report, {
+                                "required_stratum_insufficient_recordings:" + name + ":" + kind})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

@@ -171,6 +171,27 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("invalid required stratum name", result.stderr)
 
+    def test_repeated_trials_do_not_inflate_distinct_recording_coverage(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "reflection",
+               "--minimum-recordings-per-truth-class", "2",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        counts = report["required_strata_recording_coverage"]["reflection"]
+        self.assertLess(counts["positive"], 2)
+        self.assertIn("required_stratum_insufficient_recordings:reflection:positive",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_recording_coverage_flag_requires_named_strata(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--minimum-recordings-per-truth-class", "2"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires --required-stratum", result.stderr)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

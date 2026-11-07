@@ -509,3 +509,16 @@ remain blocked. These counts do not establish provenance authenticity.
 ### Adverse-stratum positive/negative coverage gate
 
 The opt-in `--require-both-truth-classes` requires each named `--required-stratum` to contain observable held-out positive and negative association truth. One-class strata add `required_stratum_missing_truth_class:NAME` and strict mode exits 3; invoking the option without required strata exits 2. This does not authenticate physical ground truth or permit Nav2 admission.
+
+### Distinct-recording adverse truth coverage
+
+With repeatable `--required-stratum` flags, the opt-in
+`--minimum-recordings-per-truth-class N` requires at least N **distinct
+held-out recording SHA-256 values** in each positive and negative observable
+truth class for each named stratum. Multiple trials from the same recording
+cannot inflate this count. The report includes
+`required_strata_recording_coverage` and blockers named
+`required_stratum_insufficient_recordings:STRATUM:CLASS`. Invalid bounds or
+omitting required strata is an input error (exit 2). Recording hashes are
+not independent sessions or proof of acquisition authenticity; separate
+session/scene/subject provenance and physical validation remain mandatory.
