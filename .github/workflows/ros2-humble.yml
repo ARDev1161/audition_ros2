@@ -78,6 +78,7 @@ jobs:
       - name: M4 independent field manifest contract scoring (synthetic fixture only)
         run: |
           python3 -m unittest discover -s audition_fusion/test -p 'test_field_evaluation.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_acquisition_provenance.py' -v
           python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
             audition_fusion/test/fixtures/m4_field_contract_example.json \
             > /tmp/audition_m4_field_contract_report.json
