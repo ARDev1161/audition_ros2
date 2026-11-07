@@ -147,3 +147,40 @@ radar candidates competing for one acoustic bearing, two acoustic
 sources competing for one radar object, explicit retirement, session
 restart and old-epoch rejection. CI acceptance is still software-only;
 synthetic fixture correctness does not demonstrate physical precision.
+
+## M4-D paired benchmark: single-frame versus three refreshed observations
+
+Run both deterministic, **synthetic-only** radar evaluations:
+
+```bash
+python3 audition_fusion/benchmarks/radar_association_benchmark.py
+python3 audition_fusion/benchmarks/radar_temporal_benchmark.py
+```
+
+The latter compares two strategies on the **same 180 labeled scenarios**
+(9 classes × 20 seeds; 3 synchronized frames/scenario). Each scenario
+has one truth label, scored **once per scenario**, never once per frame:
+`single_frame_any` accepts any isolated geometrically compatible frame;
+`three_independent_updates` accepts only after the radar and audio timestamps
+have each advanced in the same stable ID/generation/session. The ninth
+class is a one-frame coincidence that becomes clearly off-ray thereafter.
+The original eight classes include plausible static impostors and
+reflections that stay geometrically indistinguishable from the true source.
+
+Expected fixed fixture counts:
+
+| Synthetic strategy | TP | FP | TN | FN | Precision | Recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Any one compatible frame | 40 | 60 | 80 | 0 | 40% | 100% | 42.9% |
+| Three independently refreshed frames | 40 | 40 | 100 | 0 | 50% | 100% | 28.6% |
+
+These are unit-test regression expectations, **not measurements from real
+radar, acoustic recordings or people**. Both methods still falsely
+associate 20 aligned impostors and 20 reflected signals. The temporal
+method's apparent synthetic improvement comes entirely from the
+deliberately constructed transient category. It establishes neither
+a positive real-world fusion gain over standalone sensors nor completion
+of the Roadmap's physical M4 acceptance gate. In particular, the matcher's
+`radar_range_along_audio_ray_m` is a distance to a radar return, not a
+measured acoustic source range. Do not activate `LocalizedSource` or Nav2
+from these fixtures.
