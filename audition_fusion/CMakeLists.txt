@@ -3,11 +3,13 @@ project(audition_fusion VERSION 0.1.0)
 find_package(ament_cmake REQUIRED)
 install(PROGRAMS scripts/pose_evidence_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME pose_evidence_node)
+install(PROGRAMS scripts/radar_adapter_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME radar_adapter_node)
 install(PROGRAMS scripts/av_pair_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME av_pair_node)
 install(PROGRAMS scripts/bearing_candidate_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME bearing_candidate_node)
-install(FILES geometry.py association.py av_matching.py av_confirmation.py uncertainty.py stationarity.py diagnostic_pipeline.py pose_uncertainty.py ros_pose_adapter.py pose_sample_cache.py scene_admission.py tf_pose_consistency.py ray_evidence.py evidence_buffer.py DESTINATION lib/${PROJECT_NAME})
+install(FILES geometry.py radar_geometry.py association.py av_matching.py av_confirmation.py uncertainty.py stationarity.py diagnostic_pipeline.py pose_uncertainty.py ros_pose_adapter.py pose_sample_cache.py scene_admission.py tf_pose_consistency.py ray_evidence.py evidence_buffer.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(m4_uncertainty_test test/test_uncertainty.py)
@@ -26,6 +28,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(m4_av_groundtruth_test test/test_av_groundtruth.py)
   ament_add_pytest_test(m4_av_benchmark_test test/test_av_benchmark.py)
   ament_add_pytest_test(m4_av_confirmation_test test/test_av_confirmation.py)
+  ament_add_pytest_test(m4_radar_geometry_test test/test_radar_geometry.py)
   ament_add_pytest_test(m4_av_matching_test test/test_av_matching.py)
 endif()
 ament_package()
