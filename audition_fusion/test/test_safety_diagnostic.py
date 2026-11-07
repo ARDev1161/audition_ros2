@@ -91,6 +91,16 @@ class SafetyDiagnosticTests(unittest.TestCase):
         self.assertFalse(safety["diagnostic_promotion_eligible"])
         self.assertFalse(safety["no_observed_safety_regression"])
 
+    def test_partially_unobservable_stratum_blocks_clean_safety_claim(self):
+        rows = [trial(i, "mixed") for i in range(1, 7)]
+        rows.append(trial(7, "mixed", observable=False))
+        safety = evaluate_rows(rows)
+        self.assertIn("unobservable_ground_truth:mixed", safety["blockers"])
+        self.assertFalse(safety["no_observed_safety_regression"])
+        self.assertFalse(safety["diagnostic_promotion_eligible"])
+        self.assertFalse(safety["physical_localization_accepted"])
+        self.assertFalse(safety["nav2_admission"])
+
     def test_unknown_only_stratum_never_claims_no_regression(self):
         rows = [trial(i, "direct") for i in range(1, 6)]
         rows += [trial(i, "unobservable", observable=False) for i in range(6, 11)]

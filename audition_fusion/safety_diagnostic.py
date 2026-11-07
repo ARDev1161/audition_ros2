@@ -14,6 +14,10 @@ def assess(report):
     if report["evaluation_split"] != "held_out":
         blockers.append("development_data_included")
     for stratum, methods in sorted(paired["per_stratum"].items()):
+        # A partly unobservable stratum must not be described as fully
+        # evaluated: missing independent truth is not a negative label.
+        if report["per_stratum"][stratum][BASELINES[0]]["unobservable"] > 0:
+            blockers.append("unobservable_ground_truth:" + stratum)
         cluster_info = clustered["per_stratum"][stratum]
         for baseline in BASELINES:
             counts = methods[baseline]
@@ -36,7 +40,9 @@ def assess(report):
             blockers.append("no_pooled_accuracy_gain:" + baseline)
     if not paired["per_stratum"]:
         blockers.append("no_evaluable_strata")
-    observed_in_every_stratum = bool(paired["per_stratum"]) and all(
+    observed_in_every_stratum = bool(paired["per_stratum"]) and not any(
+        reason.startswith("unobservable_ground_truth:") for reason in blockers
+    ) and all(
         all(methods[baseline]["observable_trials"] > 0 for baseline in BASELINES)
         for methods in paired["per_stratum"].values())
     return {

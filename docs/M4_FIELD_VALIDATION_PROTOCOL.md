@@ -421,3 +421,15 @@ The audit must reject JSON arrays and objects supplied in place of any
 `split`, recording hash, session, scene or subject identifier. Invalid input
 returns CLI exit code 2 with a validation error rather than an uncaught
 `TypeError`. No malformed sidecar can be counted as independent evidence.
+
+
+### Partial ground-truth coverage gate
+
+An adverse stratum with some observable trials and some independently
+unobservable trials is **not** fully evaluated. The diagnostic emits
+`unobservable_ground_truth:<stratum>` and refuses both
+`diagnostic_promotion_eligible` and `no_observed_safety_regression`, even
+if the observable subset looks clean. This deliberately conservative gate
+prevents missing ground truth from silently improving the apparent safety
+assessment. Unknown labels remain excluded from TP/FP/TN/FN scoring, and
+no diagnostic result permits Nav2 admission or physical localization.
