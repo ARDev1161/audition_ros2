@@ -159,7 +159,9 @@ def main():
         stamp=node.get_clock().now().to_msg()
         prepare_tf(stamp)
         acoustic.publish(audio_msg(5,stamp))
-        # Sequence 6 was the authoritative empty snapshot; reacquisition must\n        # advance the sequence rather than replay it (StreamFence rejects <=).\n        visual.publish(vision_msg(7,stamp,['face-new']))
+        # Sequence 6 was the authoritative empty snapshot; reacquisition must
+        # advance the sequence rather than replay it (StreamFence rejects <=).
+        visual.publish(vision_msg(7,stamp,['face-new']))
         fresh=find(lambda m:m.sequence_number>cleared.sequence_number
                    and len(m.hypotheses)==1
                    and m.hypotheses[0].visual_track_id=='face-new')
