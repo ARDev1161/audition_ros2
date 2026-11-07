@@ -89,11 +89,15 @@ def run():
         # Republish each identical stamped observation across several
         # executor spins: DDS scheduling may miss a single short burst under
         # CI load, but duplicates must NOT count as independent evidence.
-        # ~0.34s between the final arrivals satisfies the 180ms minimum,
-        # 750ms maximum gap and 900ms total confirmation window.
-        send(repeats=4)
-        send(delay=0.22, repeats=4)
-        send(delay=0.22, repeats=4)
+        # Avoid spending most of the 900ms window repeating the same
+        # observation. Under CI load four copies per sample could push the
+        # third arrival beyond the window even without any policy defect.
+        # Two copies per stamp preserve duplicate-rejection coverage, and
+        # 250ms inter-sample delay clears the 180ms minimum spacing while
+        # leaving substantially more room for executor scheduling jitter.
+        send(repeats=2)
+        send(delay=0.25, repeats=2)
+        send(delay=0.25, repeats=2)
         outcome = wait(node, result)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("bounded recovery", outcome.status, outcome.result.reason)
         assert outcome.result.acquired
