@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from field_evaluation import evaluate
 from acquisition_provenance import audit_acquisition_provenance
+from acquisition_independence import independence_blockers
 from simulation_provenance import verified_simulation_provenance
 
 
@@ -49,8 +50,13 @@ def main(argv=None):
             report["data_domain"] = "unverified"
             report["provenance_verified"] = False
         if args.acquisition_provenance is not None:
-            report["acquisition_provenance_audit"] = audit_acquisition_provenance(
-                args.acquisition_provenance, data)
+            audit = audit_acquisition_provenance(args.acquisition_provenance, data)
+            report["acquisition_provenance_audit"] = audit
+            new_blockers = independence_blockers(audit["independence_summary"])
+            if new_blockers:
+                safety = report["safety_diagnostic"]
+                safety["blockers"] = sorted(set(safety["blockers"]) | set(new_blockers))
+                safety["diagnostic_promotion_eligible"] = False
         else:
             report["acquisition_provenance_audit"] = {
                 "status": "not_provided",
