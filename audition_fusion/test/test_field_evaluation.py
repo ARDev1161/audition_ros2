@@ -29,7 +29,7 @@ def trial(id_, truth, strategies, *, observable=True, split="held_out",
 def example():
     pos = pair("source-1", "radar-1")
     impostor = pair("source-1", "radar-2")
-    return {
+    dataset = {
         "schema_version": 1, "dataset_id": "synthetic-contract-example",
         "trials": [
             trial("direct", pos, {
@@ -63,6 +63,8 @@ def example():
             }, split="development"),
         ],
     }
+    dataset["trials"][-1]["recording_sha256"] = "b" * 64
+    return dataset
 
 
 class FieldEvaluationTest(unittest.TestCase):
@@ -94,6 +96,12 @@ class FieldEvaluationTest(unittest.TestCase):
             t["split"]="development"
         with self.assertRaisesRegex(ValueError,"no eligible trials"):
             evaluate(item)
+
+    def test_recording_must_not_leak_between_splits(self):
+        fixture = example()
+        fixture["trials"][-1]["recording_sha256"] = "a" * 64
+        with self.assertRaisesRegex(ValueError, "recording appears"):
+            evaluate(fixture)
 
     def test_bad_labels_duplicates_missing_methods_and_unknown_fields(self):
         baseline=example()
