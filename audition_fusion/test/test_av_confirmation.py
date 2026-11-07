@@ -70,6 +70,24 @@ class ConfirmationTests(unittest.TestCase):
         self.assertEqual(state(self.g,[pair(a,a),pair(a,a,visual="other",unique=False)],a),{})
         self.assertEqual(result(self.g,pair(a+200_000_000,a+200_000_000),a+200_000_000).count,1)
 
+    def test_forged_unique_edges_sharing_audio_endpoint_fail_closed(self):
+        a=1_000_000_000
+        result(self.g,pair(a,a),a)
+        conflict=[pair(a+150_000_000,a+150_000_000),
+                  pair(a+150_000_000,a+150_000_000,visual="second")]
+        self.assertEqual(state(self.g,conflict,a+150_000_000),{})
+        self.assertEqual(result(self.g,pair(a+300_000_000,a+300_000_000),
+                                a+300_000_000).count,1)
+
+    def test_forged_unique_edges_sharing_visual_endpoint_fail_closed(self):
+        a=1_000_000_000
+        result(self.g,pair(a,a),a)
+        conflict=[pair(a+150_000_000,a+150_000_000),
+                  pair(a+150_000_000,a+150_000_000,name="second")]
+        self.assertEqual(state(self.g,conflict,a+150_000_000),{})
+        self.assertEqual(result(self.g,pair(a+300_000_000,a+300_000_000),
+                                a+300_000_000).count,1)
+
     def test_epoch_generation_and_clock_jump(self):
         a=1_000_000_000
         result(self.g,pair(a,a),a)
