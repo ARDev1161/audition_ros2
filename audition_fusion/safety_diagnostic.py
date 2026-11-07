@@ -72,7 +72,8 @@ def provenance_blockers(manifest):
         tid = row["trial_id"]
         if not isinstance(tid, str) or not tid or tid in seen:
             problems.append("provenance_trial_duplicate_or_invalid")
-        seen.add(tid)
+        else:
+            seen.add(tid)
         split = row["split"]
         if split not in ("development", "held_out"):
             problems.append("provenance_split_invalid")
