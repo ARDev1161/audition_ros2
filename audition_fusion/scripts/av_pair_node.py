@@ -39,7 +39,7 @@ class AvPairNode(Node):
         self.age_ns = int(self.declare_parameter('maximum_observation_age_ms',800).value)*1000000
         self.future_ns = 100000000
         self.matcher=PairMatcher(
-            maximum_skew_ms=float(self.declare_parameter('maximum_skew_ms',150).value),
+            maximum_skew_ms=float(self.declare_parameter('maximum_skew_ms',150.0).value),
             maximum_baseline_m=float(self.declare_parameter('maximum_sensor_separation_m',0.2).value),
             maximum_angle_rad=float(self.declare_parameter('maximum_pair_angle_rad',0.3).value),
             minimum_assumed_range_m=float(self.declare_parameter('minimum_assumed_range_m',1.0).value))
