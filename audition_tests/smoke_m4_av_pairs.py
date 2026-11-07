@@ -132,14 +132,14 @@ def main():
         stamp=node.get_clock().now().to_msg()
         # Camera rotates +90 degrees, requiring historical TF2 orientation.
         prepare_tf(stamp,camera_yaw=math.pi/2)
-        acoustic.publish(audio_msg(2,stamp))
-        visual.publish(vision_msg(2,stamp,['face-a','face-b'],local_yaw=-math.pi/2))
+        acoustic.publish(audio_msg(4,stamp))
+        visual.publish(vision_msg(4,stamp,['face-a','face-b'],local_yaw=-math.pi/2))
         ambiguous=find(lambda m:len(m.hypotheses)==2)
         assert not any(p.unique_match for p in ambiguous.hypotheses), 'ambiguity concealed'
         assert not any(p.temporally_confirmed for p in ambiguous.hypotheses), 'stale confirmation'
 
         stamp=node.get_clock().now().to_msg()
-        visual.publish(vision_msg(3,stamp,[]))
+        visual.publish(vision_msg(5,stamp,[]))
         cleared=find(lambda m:m.sequence_number>ambiguous.sequence_number
                     and not m.hypotheses)
         assert not cleared.hypotheses
