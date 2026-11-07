@@ -97,9 +97,10 @@ The CLI defaults to **held-out trials only**. `--all-splits` can be used
 for internal debugging, but is not an acceptance run. The input file must be
 valid UTF-8 JSON, at most 16 MiB, with no repeated keys, NaN or Infinity.
 `manifest_sha256` is included in the report, so the exact evaluated input
-can be audited. The evaluator does **not** check that the referenced
-recording bytes match the declared recording hash: this must be done by
-the recording ingestion/verification procedure before calling the scorer.
+can be audited. The scorer can optionally verify the referenced recording bytes
+against the declared SHA-256 before emitting a report; without that opt-in,
+it explicitly records `recording_bytes_not_verified` as a blocker.
+Even a valid digest does not authenticate the recording's physical origin.
 
 The root object must have exactly `schema_version: 1`, `dataset_id`
 and a nonempty `trials` array. Each trial has:
@@ -344,3 +345,50 @@ adds `data_domain_unverified`. These blockers are additional to all
 per-stratum and acquisition-group blockers. A successful acquisition audit
 never removes them. Neither condition can authorize metric 3D localization,
 `LocalizedSource` publication, Nav2 admission or hardware acceptance.
+
+
+### Streaming recording-byte verification (M4 integrity gate)
+
+The v1 trial manifest declares a SHA-256 for each raw recording, but
+an external metadata sidecar alone is **not** proof those bytes are present.
+An optional, separate recording index now permits byte-level verification:
+
+```bash
+python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
+    trials.json --acquisition-provenance acquisition.json \
+    --recording-index recording_index.json --recordings-root /data/captures \
+    > report.json
+```
+
+Index schema:
+
+```json
+{
+  "schema_version": 1,
+  "recordings": [
+    {"recording_sha256": "<64 lowercase hex digits>", "path": "session1/mic.wav"}
+  ]
+}
+```
+
+The index must contain **exactly** one unique path for each unique
+recording digest declared by all trials, including development rows,
+with no missing/extra digests or duplicate paths. Paths are relative to
+\`--recordings-root\`; absolute paths, \`..\`, \`.\`, backslashes, and empty
+components are rejected. Linux file-descriptor traversal rejects symlinks
+at every path component and non-regular files. Hashing is streamed in
+1 MiB chunks, not a whole-file in-memory load. A changed recording,
+mismatched digest or incomplete index exits nonzero **without a score**.
+The report records the index SHA-256, total verified bytes and unique
+recording count. It does not emit file content or treat hash verification
+as an authenticated sensor measurement.
+
+Without both \`--recording-index\` and \`--recordings-root\`,
+scoring remains available for synthetic contracts, but
+\`recording_artifact_audit.recording_bytes_verified\` is false and
+\`safety_diagnostic.blockers\` includes \`recording_bytes_not_verified\`.
+A successful byte check removes **only** this integrity blocker;
+synthetic/unverified-domain restrictions, ground-truth provenance,
+session/scene/subject independence, calibration and M4 physical acceptance
+remain separate gates. Nothing in this command enables metric coordinate
+publication, Nav2 motion, or field acceptance.

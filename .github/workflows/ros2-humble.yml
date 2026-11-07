@@ -79,6 +79,7 @@ jobs:
         run: |
           python3 -m unittest discover -s audition_fusion/test -p 'test_field_evaluation.py' -v
           python3 -m unittest discover -s audition_fusion/test -p 'test_acquisition_provenance.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_recording_artifact_audit.py' -v
           python3 -m unittest discover -s audition_fusion/test -p 'test_acquisition_robustness.py' -v
           python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
             audition_fusion/test/fixtures/m4_field_contract_example.json \
@@ -93,6 +94,8 @@ jobs:
           assert report['strategies']['temporal_fusion']['fp'] == 0
           assert report['strategies']['temporal_fusion']['fn'] == 1
           assert report['physical_validation_claim'] is False
+          assert report['recording_artifact_audit']['recording_bytes_verified'] is False
+          assert 'recording_bytes_not_verified' in report['safety_diagnostic']['blockers']
           safety = report['safety_diagnostic']
           assert safety['physical_localization_accepted'] is False
           assert safety['nav2_admission'] is False
