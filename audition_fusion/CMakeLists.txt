@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.8)
 project(audition_fusion VERSION 0.1.0)
 find_package(ament_cmake REQUIRED)
+install(PROGRAMS scripts/pose_evidence_node.py
+  DESTINATION lib/${PROJECT_NAME} RENAME pose_evidence_node)
 install(PROGRAMS scripts/av_pair_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME av_pair_node)
 install(PROGRAMS scripts/bearing_candidate_node.py
   DESTINATION lib/${PROJECT_NAME} RENAME bearing_candidate_node)
-install(FILES geometry.py association.py av_matching.py av_confirmation.py uncertainty.py stationarity.py diagnostic_pipeline.py pose_uncertainty.py ros_pose_adapter.py DESTINATION lib/${PROJECT_NAME})
+install(FILES geometry.py association.py av_matching.py av_confirmation.py uncertainty.py stationarity.py diagnostic_pipeline.py pose_uncertainty.py ros_pose_adapter.py pose_sample_cache.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(m4_uncertainty_test test/test_uncertainty.py)
@@ -13,6 +15,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(m4_diagnostic_pipeline_test test/test_diagnostic_pipeline.py)
   ament_add_pytest_test(m4_pose_uncertainty_test test/test_pose_uncertainty.py)
   ament_add_pytest_test(m4_ros_pose_adapter_test test/test_ros_pose_adapter.py)
+  ament_add_pytest_test(m4_pose_sample_cache_test test/test_pose_sample_cache.py)
   ament_add_pytest_test(m4_geometry_test test/test_geometry.py)
   ament_add_pytest_test(m4_association_test test/test_association.py)
   ament_add_pytest_test(m4_bearing_groundtruth_test test/test_bearing_groundtruth.py)
