@@ -45,6 +45,16 @@ class RadarTemporalTests(unittest.TestCase):
         fresh=step(self.g,[self.c],3)[self.key]
         self.assertTrue(fresh.temporally_correlated)
 
+    def test_persistent_aligned_impostor_still_correlates_not_identity(self):
+        # A false radar/audio association can stay geometrically plausible
+        # for three independent frames. Temporal corroboration is explicitly
+        # not a physical emitter-identity oracle.
+        impostor = candidate(radar='unrelated-static-object')
+        for n in range(3):
+            evidence = step(self.g, [impostor], n)[self.g.key(impostor)]
+        self.assertTrue(evidence.temporally_correlated)
+        self.assertNotIn('verified_identity', vars(evidence))
+
     def test_one_modal_replay_does_not_count(self):
         step(self.g,[self.c],0)
         e=step(self.g,[self.c],1,audio_stamp=START)[self.key]
