@@ -107,3 +107,29 @@ matching provenance should be marked `unknown-origin` and excluded
 from physical-validation claims. The field v1 scorer intentionally
 remains compatible with independently annotated real recordings; its
 output schema alone does not classify simulated versus physical sources.
+
+## Strict simulation-origin scoring (M4 provenance gate)
+
+For a simulation-derived manifest, use the **fail-closed** evaluation mode:
+
+```bash
+python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
+  /data/simulation-field-manifest.json \
+  --require-simulation-provenance > /data/simulation-report.json
+```
+
+This reads the adjacent `.provenance.json`, checks its exact schema, declared
+simulation domain, explicit prohibition of physical-validation claims, trial
+count, and SHA-256 of the scored manifest bytes. Missing, modified, malformed
+or mismatched sidecars are an error (exit 2), not an implicit claim of physical
+evidence. The report includes `data_domain: simulation`,
+`provenance_verified: true`, and the export lineage digest. The digest
+records lineage only; without external signatures it is **not** a proof of
+independent sensor truth or tamper-proof external attestation.
+
+For independently annotated physical field datasets, the existing evaluator
+remains usable without this flag; such reports explicitly say
+`data_domain: unverified` and `provenance_verified: false`. They are not
+automatically physical evidence just because the simulator flag is absent.
+Do not merge the simulated and physical metrics or interpret this contract
+gate as validation of measured localization accuracy.
