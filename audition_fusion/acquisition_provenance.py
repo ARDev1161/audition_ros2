@@ -146,7 +146,8 @@ def audit_acquisition_provenance(path, dataset):
                     tied += 1
             scene_gain[name][baseline] = {
                 "helped": helped, "harmed": harmed, "tied": tied}
-    return {\n        "held_out_scene_gain": scene_gain,
+    return {
+        "held_out_scene_gain": scene_gain,
         "held_out_scene_truth_class_exposure": scene_class_counts,
         "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,
