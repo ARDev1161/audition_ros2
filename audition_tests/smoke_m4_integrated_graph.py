@@ -149,6 +149,17 @@ def main():
         assert not any(p.hypotheses[0].temporally_confirmed
                        for p in pairs if len(p.hypotheses) == 1), (
             'one-view AV proposal marked confirmed')
+        # Even without an explicit producer retirement, the AV node must
+        # revoke the last hypothesis once either retained stream expires.
+        # This exercises the periodic timer, not only subscription callbacks.
+        last_live_sequence = max(p.sequence_number for p in pairs)
+        assert until(lambda: any(
+            p.sequence_number > last_live_sequence and not p.hypotheses
+            for p in pairs), seconds=3.), (
+                'AV TTL timer failed to revoke retained hypothesis',
+                [(p.sequence_number, len(p.hypotheses)) for p in pairs[-6:]])
+        # The downstream diagnostic bearing candidate is not authoritative.
+        # A producer retirement must still clear the downstream snapshot.
         # An authoritative empty canonical snapshot must revoke the last
         # AV hypothesis in the same combined graph, without awaiting TTL.
         last_pair_sequence = max(p.sequence_number for p in pairs)
