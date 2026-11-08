@@ -296,18 +296,13 @@ class AvPairNode(Node):
         expired = (self.audio_time is None or self.vision_time is None
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
                    or time.monotonic()-self.vision_time>self.age_ns/1e9)
-        if expired and (self.audio or self.visual or self.had_pairs
-                        or self.pending_audio is not None
-                        or self.pending_visual is not None):
-            # Expired evidence is not recoverable by a late TF2 update.
-            # Clear both deferred snapshots and their temporal history;
-            # otherwise a subsequent stream could pair with stale rays.
-            self.pending_audio=None
-            self.pending_visual=None
+        if expired and (self.audio or self.visual or self.had_pairs):
+            # A missing counterpart is not proof that a pending TF2
+            # observation has expired: retain still-fresh deferred samples.
+            # Revoke temporal confirmations, but do not drop deferred
+            # evidence before its own original timestamp exceeds the gate.
             self.audio=[]
             self.visual=[]
-            self.audio_time=None
-            self.vision_time=None
             self.temporal.reset()
             self.emit([])
 
