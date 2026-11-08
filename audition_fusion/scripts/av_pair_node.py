@@ -215,9 +215,17 @@ class AvPairNode(Node):
         self.publish_pairs()
 
     def publish_pairs(self):
+        now_ns=self.get_clock().now().nanoseconds
+        # Arrival-time TTL alone is insufficient: a snapshot may have been
+        # admitted near the end of its capture-time freshness budget. Do not
+        # emit a pair once either original observed timestamp is stale.
         expired = (self.audio_time is None or self.vision_time is None
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
-                   or time.monotonic()-self.vision_time>self.age_ns/1e9)
+                   or time.monotonic()-self.vision_time>self.age_ns/1e9
+                   or any(now_ns-r.stamp_ns>self.age_ns or
+                          r.stamp_ns>now_ns+self.future_ns for r in self.audio)
+                   or any(now_ns-r.stamp_ns>self.age_ns or
+                          r.stamp_ns>now_ns+self.future_ns for r in self.visual))
         # An unresolved TF2 snapshot is not an empty observation. Never
         # associate against a partial sensor snapshot or advance temporal
         # confirmations until every admitted ray has been transformed.
@@ -295,17 +303,25 @@ class AvPairNode(Node):
         # let a later observation inherit confirmations from stale evidence.
         expired = (self.audio_time is None or self.vision_time is None
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
-                   or time.monotonic()-self.vision_time>self.age_ns/1e9)
+                   or time.monotonic()-self.vision_time>self.age_ns/1e9
+                   or any(now_ns-r.stamp_ns>self.age_ns or
+                          r.stamp_ns>now_ns+self.future_ns for r in self.audio)
+                   or any(now_ns-r.stamp_ns>self.age_ns or
+                          r.stamp_ns>now_ns+self.future_ns for r in self.visual))
         if expired and (self.audio or self.visual or self.had_pairs):
             # Retire only stale sides. A fresh opposite-side observation
             # must survive while TF2 catches up or a counterpart arrives.
             # Pending snapshots keep their original timestamps and are
             # independently checked by fresh() on every retry.
             now=time.monotonic()
-            if self.audio_time is None or now-self.audio_time>self.age_ns/1e9:
+            if (self.audio_time is None or now-self.audio_time>self.age_ns/1e9
+                    or any(now_ns-r.stamp_ns>self.age_ns or
+                           r.stamp_ns>now_ns+self.future_ns for r in self.audio)):
                 self.audio=[]
                 self.audio_time=None
-            if self.vision_time is None or now-self.vision_time>self.age_ns/1e9:
+            if (self.vision_time is None or now-self.vision_time>self.age_ns/1e9
+                    or any(now_ns-r.stamp_ns>self.age_ns or
+                           r.stamp_ns>now_ns+self.future_ns for r in self.visual)):
                 self.visual=[]
                 self.vision_time=None
             self.temporal.reset()
