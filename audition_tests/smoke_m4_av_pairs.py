@@ -67,24 +67,13 @@ def main():
             tf.transform.rotation.z=math.sin(yaw/2.0)
             tf.transform.rotation.w=math.cos(yaw/2.0)
             tfpub.sendTransform(tf)
-        # A matched /tf publisher does not guarantee the listener has
-        # consumed its first transform. Re-broadcast the SAME stamped TF
-        # after discovery settles, before publishing sensor observations.
-        spin_for(.25)
-        for frame,x in [('robot_ci_av_mic',0.),('robot_ci_av_camera',.05)]:
-            tf=TransformStamped()
-            tf.header.stamp=stamp
-            tf.header.frame_id='odom'
-            tf.child_frame_id=frame
-            tf.transform.translation.x=x
-            yaw=camera_yaw if frame=='robot_ci_av_camera' else 0.0
-            tf.transform.rotation.z=math.sin(yaw/2.0)
-            tf.transform.rotation.w=math.cos(yaw/2.0)
-            tfpub.sendTransform(tf)
+        # Do not sleep before checking readiness: the AV admission gate
+        # rejects observations older than 800ms. Repeating a fixed-stamp TF
+        # after a blind delay can turn a healthy graph into a stale sample.
         # Dynamic TF2 messages are not durable. Re-broadcast until the
         # independent listener has actually resolved both frames at the
         # observation stamp. This avoids treating DDS discovery as TF readiness.
-        deadline=time.monotonic()+2.0
+        deadline=time.monotonic()+0.45
         frames=('robot_ci_av_mic','robot_ci_av_camera')
         while time.monotonic()<deadline:
             if all(probe_buffer.can_transform('odom',frame,Time.from_msg(stamp))
@@ -106,9 +95,14 @@ def main():
                                           [probe_buffer.can_transform(
                                               'odom',frame,Time.from_msg(stamp))
                                            for frame in frames])
-        # Allow the separate fusion-node listener to consume the last /tf
-        # sample before the corresponding sensor observation is published.
-        spin_for(.12)
+        # Give the fusion listener a bounded opportunity to receive TF2,
+        # without aging the sensor stamp past its 800ms admission window.
+        spin_for(.04)
+        age_ns=node.get_clock().now().nanoseconds-(
+            stamp.sec*1_000_000_000+stamp.nanosec)
+        assert 0 <= age_ns < 650_000_000, (
+            'TF preparation exceeded AV observation freshness budget',
+            age_ns, 'ns')
 
     def audio_msg(sequence,stamp):
         a=AcousticSourceArray()
