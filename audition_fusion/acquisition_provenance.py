@@ -109,7 +109,8 @@ def audit_acquisition_provenance(path, dataset):
                       "false_pair_scenes": len(groups["false_pair"])}
                for kind, groups in classes.items()}
         for name, classes in scene_exposure.items()}
-    return {\n        "held_out_scene_truth_class_exposure": scene_class_counts,
+    return {
+        "held_out_scene_truth_class_exposure": scene_class_counts,
         "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,
         "status": "crosschecked",
