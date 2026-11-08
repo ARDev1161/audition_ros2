@@ -23,9 +23,15 @@ def main():
     acoustic=node.create_publisher(AcousticSourceArray,NS+'sources',10)
     visual=node.create_publisher(VisualBearingObservationArray,NS+'vision/bearings',10)
     received=[]
+    visual_echo=[]
     node.create_subscription(
         AudioVisualPairHypothesisArray,NS+'fusion/av_pair_hypotheses',
         lambda m:received.append(m),10)
+    # Independent graph probe: distinguish a lost visual DDS sample from
+    # an AV-node admission/TF2/matching failure.
+    node.create_subscription(
+        VisualBearingObservationArray,NS+'vision/bearings',
+        lambda m:visual_echo.append((m.sequence_number,len(m.tracks))),10)
 
     def spin_for(dt):
         deadline=time.monotonic()+dt
@@ -39,7 +45,11 @@ def main():
                 return next(m for m in reversed(received) if predicate(m))
             rclpy.spin_once(node,timeout_sec=.05)
         raise AssertionError(('missing AV observation',len(received),
-              [(len(m.hypotheses),m.sequence_number) for m in received[-12:]]))
+              [(len(m.hypotheses),m.sequence_number) for m in received[-12:]],
+              'visual_echo',visual_echo[-12:],
+              'visual_subscribers',visual.get_subscription_count(),
+              'acoustic_subscribers',acoustic.get_subscription_count(),
+              'av_publishers',node.count_publishers(NS+'fusion/av_pair_hypotheses')))
 
     def prepare_tf(stamp,camera_yaw=0.0):
         for frame,x in [('robot_ci_av_mic',0.),('robot_ci_av_camera',.05)]:
