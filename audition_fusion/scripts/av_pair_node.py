@@ -297,14 +297,22 @@ class AvPairNode(Node):
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
                    or time.monotonic()-self.vision_time>self.age_ns/1e9)
         if expired and (self.audio or self.visual or self.had_pairs):
-            # A missing counterpart is not proof that a pending TF2
-            # observation has expired: retain still-fresh deferred samples.
-            # Revoke temporal confirmations, but do not drop deferred
-            # evidence before its own original timestamp exceeds the gate.
-            self.audio=[]
-            self.visual=[]
+            # Retire only stale sides. A fresh opposite-side observation
+            # must survive while TF2 catches up or a counterpart arrives.
+            # Pending snapshots keep their original timestamps and are
+            # independently checked by fresh() on every retry.
+            now=time.monotonic()
+            if self.audio_time is None or now-self.audio_time>self.age_ns/1e9:
+                self.audio=[]
+                self.audio_time=None
+            if self.vision_time is None or now-self.vision_time>self.age_ns/1e9:
+                self.visual=[]
+                self.vision_time=None
             self.temporal.reset()
-            self.emit([])
+            # A timer transition must invalidate prior published candidates,
+            # but must not discard the still-fresh counterpart.
+            if self.had_pairs:
+                self.emit([])
 
 
 def main():
