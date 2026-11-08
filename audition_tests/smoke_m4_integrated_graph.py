@@ -203,8 +203,23 @@ def main():
                          diagnostics())
         # No M4 consumer is entitled to publish authoritative localization.
         topics = dict(node.get_topic_names_and_types())
-        assert NS + 'localized_sources' not in topics
-        assert NS + 'cmd_vel' not in topics
+        # Diagnostic 2-D intersections must never silently become a Nav2
+        # metric source, costmap layer or robot motion command. Check both
+        # namespaced and absolute endpoints: a bad launch remap can escape NS.
+        forbidden_suffixes = (
+            '/localized_sources', '/cmd_vel', '/cmd_vel_nav',
+            '/local_costmap/costmap', '/global_costmap/costmap',
+        )
+        leaked = sorted(topic for topic in topics
+                        if any(topic == suffix or topic.endswith(suffix)
+                               for suffix in forbidden_suffixes))
+        assert not leaked, ('M4 graph exposed robot-facing output', leaked)
+        # The bearing candidate message is explicitly diagnostic; it has
+        # neither 3-D pose nor covariance nor a Nav2 admission flag.
+        from audition_msgs.msg import BearingIntersectionCandidate
+        fields = BearingIntersectionCandidate.get_fields_and_field_types()
+        assert {'x_m', 'y_m', 'baseline_m', 'parallax_rad'} <= set(fields)
+        assert not ({'z_m', 'pose', 'covariance', 'nav2_admission'} & set(fields))
         print('PASS: one-launch M4 DDS AV + TF bearing + pose; '
               'retirement, restart and replay fencing; no motion')
         return 0
