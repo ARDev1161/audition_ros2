@@ -575,3 +575,15 @@ blocker rather than an apparent zero error rate. The report includes
 `required_stratum_false_pair_truth_class_fraction_limit:STRATUM:CLASS`.
 The counts remain diagnostic only, not statistically independent field proof,
 physical localization, or Nav2 admission.
+
+### Acquisition-scene false-pair exposure
+
+`--maximum-false-pair-scenes-per-stratum N` optionally caps the number of
+unique claimed scene IDs containing at least one wrong temporal-fusion pair
+on observable held-out trials for each required stratum. Unlike a per-file
+limit, several recordings in one room count as one scene. The gate requires
+a valid acquisition-provenance sidecar; without it the report adds
+`required_false_pair_scenes_unverifiable`. Exceeding the bound adds
+`required_stratum_false_pair_scene_limit:NAME`. Scene labels are
+cross-checked but not independently authenticated; this diagnostic never
+constitutes physical localization acceptance or Nav2 admission.

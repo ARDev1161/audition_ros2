@@ -327,6 +327,36 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
 
+    def test_false_pair_scene_gate_rejects_missing_acquisition(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "direct",
+               "--maximum-false-pair-scenes-per-stratum", "0",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("required_false_pair_scenes_unverifiable",
+                      json.loads(result.stdout)["safety_diagnostic"]["blockers"])
+
+    def test_false_pair_scene_gate_counts_distinct_acquisition_scenes(self):
+        source = next(row for row in self.dataset["trials"]
+                      if row["split"] == "held_out" and row["truth"]["observable"])
+        source["predictions"]["temporal_fusion"] = {
+            "decision": "pair", "pair": {
+                "audio_id": "wrong-audio", "radar_id": "wrong-radar"}}
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--acquisition-provenance", str(self.audit_file),
+               "--required-stratum", source["stratum"],
+               "--maximum-false-pair-scenes-per-stratum", "0",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertGreaterEqual(report["required_strata_false_pair_scene_coverage"][source["stratum"]], 1)
+        self.assertIn("required_stratum_false_pair_scene_limit:" + source["stratum"],
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.
