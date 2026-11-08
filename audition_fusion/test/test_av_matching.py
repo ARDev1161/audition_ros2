@@ -107,6 +107,25 @@ class TestPairMatcher(unittest.TestCase):
         self.assertTrue(any(x.unique_match and x.audio.identity=='a' and x.visual.identity=='one' for x in matches))
         self.assertTrue(any(x.unique_match and x.audio.identity=='b' and x.visual.identity=='two' for x in matches))
 
+    def test_malformed_competitor_cannot_create_false_unique_pair(self):
+        # One valid visual ray matches audio; a second malformed ray is
+        # potentially a competing observation. Never silently drop it and
+        # promote the remaining pair to a unique association.
+        audio = [ray('speaker')]
+        valid = ray('face')
+        for malformed in (
+                ray('other', variance=float('nan')),
+                ray('other', variance=0.),
+                ray('other', direction=(2., 0., 0.)),
+                ray('other', origin=(float('inf'), 0., 0.)),
+                ray('other', activity=False)):
+            self.assertEqual(self.m.propose(audio, [valid, malformed]), [])
+            self.assertEqual(self.m.propose([valid, malformed], audio), [])
+        # A completely valid snapshot remains eligible, but ambiguous.
+        candidates = self.m.propose(audio, [valid, ray('other')])
+        self.assertEqual(len(candidates), 2)
+        self.assertFalse(any(p.unique_match for p in candidates))
+
     def test_duplicate_identity_and_bounds(self):
         self.assertFalse(self.m.propose([ray('a'),ray('a')],[ray('v')]))
         self.assertFalse(self.m.propose([ray(str(i)) for i in range(17)],[ray('v')]))
