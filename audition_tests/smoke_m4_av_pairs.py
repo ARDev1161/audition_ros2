@@ -6,7 +6,8 @@ import math
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
-from tf2_ros import TransformBroadcaster
+from tf2_ros import TransformBroadcaster, Buffer, TransformListener
+from rclpy.time import Time
 from audition_msgs.msg import (AcousticSource, AcousticSourceArray,
     VisualBearingObservation, VisualBearingObservationArray,
     AudioVisualPairHypothesisArray)
@@ -20,6 +21,10 @@ def main():
     rclpy.init()
     node=Node('m4_av_probe')
     tfpub=TransformBroadcaster(node)
+    # An independent listener verifies the graph can resolve the exact
+    # observation timestamp, not merely that DDS discovered a /tf subscriber.
+    probe_buffer=Buffer()
+    probe_listener=TransformListener(probe_buffer,node,spin_thread=False)
     acoustic=node.create_publisher(AcousticSourceArray,NS+'sources',10)
     visual=node.create_publisher(VisualBearingObservationArray,NS+'vision/bearings',10)
     received=[]
@@ -76,7 +81,34 @@ def main():
             tf.transform.rotation.z=math.sin(yaw/2.0)
             tf.transform.rotation.w=math.cos(yaw/2.0)
             tfpub.sendTransform(tf)
-        spin_for(.20)
+        # Dynamic TF2 messages are not durable. Re-broadcast until the
+        # independent listener has actually resolved both frames at the
+        # observation stamp. This avoids treating DDS discovery as TF readiness.
+        deadline=time.monotonic()+2.0
+        frames=('robot_ci_av_mic','robot_ci_av_camera')
+        while time.monotonic()<deadline:
+            if all(probe_buffer.can_transform('odom',frame,Time.from_msg(stamp))
+                   for frame in frames):
+                break
+            for frame,x in [('robot_ci_av_mic',0.),('robot_ci_av_camera',.05)]:
+                tf=TransformStamped()
+                tf.header.stamp=stamp
+                tf.header.frame_id='odom'
+                tf.child_frame_id=frame
+                tf.transform.translation.x=x
+                yaw=camera_yaw if frame=='robot_ci_av_camera' else 0.0
+                tf.transform.rotation.z=math.sin(yaw/2.0)
+                tf.transform.rotation.w=math.cos(yaw/2.0)
+                tfpub.sendTransform(tf)
+            spin_for(.08)
+        assert all(probe_buffer.can_transform('odom',frame,Time.from_msg(stamp))
+                   for frame in frames), ('probe TF2 unavailable at sample stamp',
+                                          [probe_buffer.can_transform(
+                                              'odom',frame,Time.from_msg(stamp))
+                                           for frame in frames])
+        # Allow the separate fusion-node listener to consume the last /tf
+        # sample before the corresponding sensor observation is published.
+        spin_for(.12)
 
     def audio_msg(sequence,stamp):
         a=AcousticSourceArray()
