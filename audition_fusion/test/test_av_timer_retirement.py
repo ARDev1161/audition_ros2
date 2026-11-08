@@ -32,6 +32,7 @@ class Harness:
         self.had_pairs = False
         self.reset_count = 0
         self.emitted = []
+        self.retries = []
         self.temporal = types.SimpleNamespace(reset=self.reset)
 
     def reset(self):
@@ -48,10 +49,12 @@ class Harness:
         self.had_pairs = bool(pairs)
 
     def on_audio(self, msg, retry=False):
-        raise AssertionError("expired audio must never be retried")
+        assert retry, "timer must not re-admit the stream fence"
+        self.retries.append(("audio", msg))
 
     def on_visual(self, msg, retry=False):
-        raise AssertionError("expired visual must never be retried")
+        assert retry, "timer must not re-admit the stream fence"
+        self.retries.append(("visual", msg))
 
 
 def ray(stamp):
@@ -121,6 +124,55 @@ class TestTimerRetirement(unittest.TestCase):
         self.assertEqual(len(h.audio), 1)
         self.assertEqual(len(h.visual), 1)
         self.assertEqual(h.reset_count, 0)
+        self.assertEqual(h.emitted, [])
+
+
+    def test_fresh_pending_tf_is_retried_without_refreshing_stamp(self):
+        h = Harness()
+        original = pending(1_900_000_000)
+        h.pending_audio = original
+        h.visual = [ray(1_900_000_000)]
+        h.vision_time = time.monotonic()
+        scope["on_timer"](h)
+        self.assertEqual(h.retries, [("audio", original)])
+        self.assertIsNone(h.pending_audio)
+        self.assertEqual(original.header.stamp, 1_900_000_000)
+        self.assertEqual(len(h.visual), 1)
+        self.assertEqual(h.emitted, [])
+
+    def test_expired_pending_audio_does_not_block_fresh_visual_retry(self):
+        h = Harness()
+        h.pending_audio = pending(1_000_000_000)
+        visual = pending(1_900_000_000)
+        h.pending_visual = visual
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.retries, [("visual", visual)])
+        self.assertIsNone(h.pending_audio)
+        self.assertIsNone(h.pending_visual)
+        self.assertEqual(h.emitted, [[]])
+        self.assertGreaterEqual(h.reset_count, 1)
+
+    def test_both_expired_pending_never_retry_or_reconfirm(self):
+        h = Harness()
+        h.pending_audio = pending(1_000_000_000)
+        h.pending_visual = pending(1_000_000_000)
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.retries, [])
+        self.assertIsNone(h.pending_audio)
+        self.assertIsNone(h.pending_visual)
+        self.assertEqual(h.emitted, [[]])
+        self.assertGreaterEqual(h.reset_count, 1)
+
+    def test_fresh_audio_and_visual_pending_both_retry(self):
+        h = Harness()
+        audio = pending(1_900_000_000)
+        visual = pending(1_900_000_000)
+        h.pending_audio = audio
+        h.pending_visual = visual
+        scope["on_timer"](h)
+        self.assertEqual(h.retries, [("audio", audio), ("visual", visual)])
         self.assertEqual(h.emitted, [])
 
 
