@@ -176,5 +176,58 @@ class TestTimerRetirement(unittest.TestCase):
         self.assertEqual(h.emitted, [])
 
 
+    def test_future_dated_audio_ray_is_retired_without_losing_visual(self):
+        h = Harness()
+        h.audio = [ray(2_200_000_000)]  # beyond permitted future skew
+        h.visual = [ray(1_900_000_000)]
+        h.audio_time = time.monotonic()
+        h.vision_time = time.monotonic()
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.audio, [])
+        self.assertIsNone(h.audio_time)
+        self.assertEqual(len(h.visual), 1)
+        self.assertEqual(h.emitted, [[]])
+        self.assertGreaterEqual(h.reset_count, 1)
+
+    def test_future_dated_visual_ray_is_retired_without_losing_audio(self):
+        h = Harness()
+        h.visual = [ray(2_200_000_000)]
+        h.audio = [ray(1_900_000_000)]
+        h.vision_time = time.monotonic()
+        h.audio_time = time.monotonic()
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.visual, [])
+        self.assertIsNone(h.vision_time)
+        self.assertEqual(len(h.audio), 1)
+        self.assertEqual(h.emitted, [[]])
+
+    def test_monotonic_timeout_retires_only_old_audio_snapshot(self):
+        h = Harness()
+        h.audio = [ray(1_900_000_000)]
+        h.visual = [ray(1_900_000_000)]
+        h.audio_time = time.monotonic() - 2.0
+        h.vision_time = time.monotonic()
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.audio, [])
+        self.assertIsNone(h.audio_time)
+        self.assertEqual(len(h.visual), 1)
+        self.assertEqual(h.emitted, [[]])
+
+    def test_revocation_is_not_republished_on_next_timer_tick(self):
+        h = Harness()
+        h.audio = [ray(1_000_000_000)]
+        h.visual = [ray(1_900_000_000)]
+        h.audio_time = time.monotonic()
+        h.vision_time = time.monotonic()
+        h.had_pairs = True
+        scope["on_timer"](h)
+        self.assertEqual(h.emitted, [[]])
+        scope["on_timer"](h)
+        self.assertEqual(h.emitted, [[]])
+
+
 if __name__ == "__main__":
     unittest.main()
