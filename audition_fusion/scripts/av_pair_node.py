@@ -218,7 +218,11 @@ class AvPairNode(Node):
         expired = (self.audio_time is None or self.vision_time is None
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
                    or time.monotonic()-self.vision_time>self.age_ns/1e9)
-        pairs = [] if expired else self.matcher.propose(self.audio,self.visual)
+        # An unresolved TF2 snapshot is not an empty observation. Never
+        # associate against a partial sensor snapshot or advance temporal
+        # confirmations until every admitted ray has been transformed.
+        unresolved_tf = self.pending_audio is not None or self.pending_visual is not None
+        pairs = [] if expired or unresolved_tf else self.matcher.propose(self.audio,self.visual)
         if not pairs and (self.audio or self.visual):
             self.get_logger().warning(
                 f'AV no pairing: audio={len(self.audio)} visual={len(self.visual)} '
@@ -232,9 +236,10 @@ class AvPairNode(Node):
         # A pending DDS counterpart can preserve evidence only while BOTH
         # input snapshots remain fresh. Use all retained rays rather than
         # assuming the first pair represents a multi-track snapshot.
-        pending = (not expired and not pairs and self.audio and self.visual
-                   and all(abs(a.stamp_ns-v.stamp_ns)>self.matcher.skew_ns
-                           for a in self.audio for v in self.visual))
+        pending = (not expired and (unresolved_tf or
+                   (not pairs and self.audio and self.visual
+                    and all(abs(a.stamp_ns-v.stamp_ns)>self.matcher.skew_ns
+                            for a in self.audio for v in self.visual))))
         self.emit(pairs, pending=bool(pending))
 
     def emit(self,pairs,pending=False):
