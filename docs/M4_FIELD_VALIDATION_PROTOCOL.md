@@ -536,3 +536,16 @@ Absent acquisition provenance blocks the gate with
 `required_stratum_insufficient_acquisition_groups:STRATUM:CLASS:DIMENSION`.
 These are consistency checks on self-reported IDs, not cryptographic proof
 of physical independence or a Nav2 admission signal.
+
+### Bounded false-association recording exposure
+
+The optional `--maximum-false-pair-recordings-per-stratum N` sets a
+prespecified upper bound on the number of **distinct held-out recording
+hashes** containing an incorrect `temporal_fusion` pair in each required
+stratum. Wrong pairs on both positive and negative independently observable
+truth count; unobservable trials and development trials do not. Multiple
+wrong trials from one recording count once. The report exposes
+`required_strata_false_pair_recordings` and the blocker
+`required_stratum_false_pair_recording_limit:NAME` when the bound is exceeded.
+This is an absolute diagnostic exposure count, not a calibrated false-pair
+rate, statistical confidence bound, or physical localization approval.

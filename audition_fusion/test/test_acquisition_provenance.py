@@ -225,6 +225,44 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertIn("required_acquisition_groups_unverifiable",
                       json.loads(result.stdout)["safety_diagnostic"]["blockers"])
 
+    def test_false_pair_recording_gate_counts_unique_held_out_files(self):
+        # Explicitly inject two wrong pairs from the same immutable recording.
+        rows = [row for row in self.dataset["trials"]
+                if row["split"] == "held_out" and row["truth"]["observable"]]
+        source = rows[0]
+        wrong = {"decision": "pair", "pair": {
+            "audio_id": "incorrect-audio", "radar_id": "incorrect-radar"}}
+        for i in range(2):
+            sample = json.loads(json.dumps(source))
+            sample["trial_id"] = "false-pair-replay-" + str(i)
+            sample["stratum"] = "adverse-replay"
+            sample["predictions"]["temporal_fusion"] = wrong
+            self.dataset["trials"].append(sample)
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        base = [sys.executable, str(SCRIPT), str(self.manifest),
+                "--required-stratum", "adverse-replay",
+                "--maximum-false-pair-recordings-per-stratum"]
+        blocked = subprocess.run(base + ["0", "--require-diagnostic-eligibility"],
+                                 capture_output=True, text=True)
+        self.assertEqual(blocked.returncode, 3, blocked.stderr)
+        report = json.loads(blocked.stdout)
+        self.assertEqual(report["required_strata_false_pair_recordings"]["adverse-replay"], 1)
+        self.assertIn("required_stratum_false_pair_recording_limit:adverse-replay",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+        permitted = subprocess.run(base + ["1"], capture_output=True, text=True)
+        self.assertEqual(permitted.returncode, 0, permitted.stderr)
+        self.assertNotIn("required_stratum_false_pair_recording_limit:adverse-replay",
+                         json.loads(permitted.stdout)["safety_diagnostic"]["blockers"])
+
+    def test_false_pair_limit_rejects_invalid_configuration(self):
+        for args in (["--maximum-false-pair-recordings-per-stratum", "0"],
+                     ["--required-stratum", "direct",
+                      "--maximum-false-pair-recordings-per-stratum", "-1"]):
+            result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest)] + args,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

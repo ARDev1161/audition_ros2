@@ -61,6 +61,9 @@ def main(argv=None):
     parser.add_argument("--minimum-acquisition-groups-per-truth-class", type=int,
                         default=0, metavar="N",
                         help="minimum independent claimed session/scene/subject IDs per truth class and required stratum")
+    parser.add_argument("--maximum-false-pair-recordings-per-stratum", type=int,
+                        default=None, metavar="N",
+                        help="maximum distinct held-out recordings with wrong temporal-fusion pairs per required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -82,6 +85,11 @@ def main(argv=None):
             raise ValueError("invalid minimum acquisition groups per truth class")
         if args.minimum_acquisition_groups_per_truth_class and not args.required_stratum:
             raise ValueError("--minimum-acquisition-groups-per-truth-class requires --required-stratum")
+        if args.maximum_false_pair_recordings_per_stratum is not None:
+            if not 0 <= args.maximum_false_pair_recordings_per_stratum <= 100000:
+                raise ValueError("invalid maximum false-pair recordings per stratum")
+            if not args.required_stratum:
+                raise ValueError("--maximum-false-pair-recordings-per-stratum requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -141,6 +149,23 @@ def main(argv=None):
                         if count < args.minimum_recordings_per_truth_class:
                             apply_diagnostic_blockers(report, {
                                 "required_stratum_insufficient_recordings:" + name + ":" + kind})
+            if args.maximum_false_pair_recordings_per_stratum is not None:
+                false_recordings = {name: set() for name in report["required_strata"]}
+                for trial in data["trials"]:
+                    if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+                        continue
+                    name = trial["stratum"]
+                    if name not in false_recordings:
+                        continue
+                    candidate = trial["predictions"]["temporal_fusion"]
+                    if candidate["decision"] == "pair" and candidate["pair"] != trial["truth"]["pair"]:
+                        false_recordings[name].add(trial["recording_sha256"])
+                report["required_strata_false_pair_recordings"] = {
+                    name: len(hashes) for name, hashes in sorted(false_recordings.items())}
+                for name, count in report["required_strata_false_pair_recordings"].items():
+                    if count > args.maximum_false_pair_recordings_per_stratum:
+                        apply_diagnostic_blockers(report, {
+                            "required_stratum_false_pair_recording_limit:" + name})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name
