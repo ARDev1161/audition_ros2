@@ -186,6 +186,16 @@ class AvPairNode(Node):
                    or time.monotonic()-self.audio_time>self.age_ns/1e9
                    or time.monotonic()-self.vision_time>self.age_ns/1e9)
         pairs = [] if expired else self.matcher.propose(self.audio,self.visual)
+        if not pairs and (self.audio or self.visual):
+            self.get_logger().warning(
+                f'AV no pairing: audio={len(self.audio)} visual={len(self.visual)} '
+                f'expired={expired} audio_age='
+                f'{None if self.audio_time is None else round(time.monotonic()-self.audio_time,3)} '
+                f'visual_age='
+                f'{None if self.vision_time is None else round(time.monotonic()-self.vision_time,3)} '
+                f'audio_stamp={[a.stamp_ns for a in self.audio]} '
+                f'visual_stamp={[v.stamp_ns for v in self.visual]}',
+                throttle_duration_sec=1.0)
         # A pending DDS counterpart can preserve evidence only while BOTH
         # input snapshots remain fresh. Use all retained rays rather than
         # assuming the first pair represents a multi-track snapshot.
