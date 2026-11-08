@@ -120,13 +120,16 @@ class PairMatcher:
             return []
         if len({(v.identity,v.generation) for v in visuals}) != len(visuals):
             return []
+        # Reject the entire admitted snapshot if any ray is malformed.
+        # Dropping a competing ray could falsely make another edge unique.
+        # Upstream ROS adapters filter inactive tracks before this boundary.
+        if not all(self.valid_ray(a) for a in audios):
+            return []
+        if not all(self.valid_ray(v) for v in visuals):
+            return []
         edges = []
         for a in audios:
-            if not self.valid_ray(a):
-                continue
             for v in visuals:
-                if not self.valid_ray(v):
-                    continue
                 if abs(a.stamp_ns - v.stamp_ns) > self.skew_ns:
                     continue
                 baseline = math.dist(a.origin,v.origin)
