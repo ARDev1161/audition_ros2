@@ -128,18 +128,22 @@ class AvPairNode(Node):
             return
         incoming=[]
         missing_tf=False
+        invalid_candidate=False
         seen=set()
         for s in msg.sources:
             key=s.source_id
             if key in seen:
-                incoming=[]
+                invalid_candidate=True
                 break
             seen.add(key)
-            if (s.state!=AcousticSource.ACTIVE or not s.has_direction
+            if s.state!=AcousticSource.ACTIVE:
+                continue
+            if (not s.has_direction
                     or not s.has_angular_variance or s.source_generation<=0
                     or (s.header.frame_id and s.header.frame_id!=msg.header.frame_id)
                     or not self.observe(msg.header.stamp,s.last_seen,now_ns)):
-                continue
+                invalid_candidate=True
+                break
             transformed=self.transform_ray(msg.header.frame_id,s.last_seen,s.direction_unit)
             if transformed is None:
                 missing_tf=True
@@ -151,7 +155,12 @@ class AvPairNode(Node):
                 f'AV audio snapshot rejected: tracks={len(msg.sources)} '
                 f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
                 throttle_duration_sec=2.0)
-        if missing_tf:
+        if invalid_candidate:
+            # An invalid active competitor could otherwise make the remaining
+            # association appear unique. Reject the entire sensor snapshot.
+            incoming=[]
+            self.temporal.reset()
+        if missing_tf and not invalid_candidate:
             self.pending_audio=msg
             incoming=[]  # Never publish a misleading partial source snapshot.
         self.audio=incoming if len(msg.sources)<=self.matcher.maximum_tracks else []
@@ -181,17 +190,21 @@ class AvPairNode(Node):
             return
         incoming=[]
         missing_tf=False
+        invalid_candidate=False
         seen=set()
         for s in msg.tracks:
             key=s.visual_track_id
             if key in seen:
-                incoming=[]
+                invalid_candidate=True
                 break
             seen.add(key)
-            if (not s.active or not s.activity_evidence or not s.has_angular_variance
+            if not s.active:
+                continue
+            if (not s.activity_evidence or not s.has_angular_variance
                     or s.visual_track_generation<=0
                     or not self.observe(msg.header.stamp,s.observed_at,now_ns)):
-                continue
+                invalid_candidate=True
+                break
             transformed=self.transform_ray(msg.header.frame_id,s.observed_at,s.direction_unit)
             if transformed is None:
                 missing_tf=True
@@ -204,7 +217,10 @@ class AvPairNode(Node):
                 f'AV visual snapshot rejected: tracks={len(msg.tracks)} '
                 f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
                 throttle_duration_sec=2.0)
-        if missing_tf:
+        if invalid_candidate:
+            incoming=[]
+            self.temporal.reset()
+        if missing_tf and not invalid_candidate:
             self.pending_visual=msg
             incoming=[]  # A missing ray can change association uniqueness.
         self.visual=incoming if len(msg.tracks)<=self.matcher.maximum_tracks else []
