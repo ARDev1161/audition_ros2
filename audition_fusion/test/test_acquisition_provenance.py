@@ -47,6 +47,20 @@ class AcquisitionProvenanceTests(unittest.TestCase):
             cmd += ["--acquisition-provenance", str(self.audit_file)]
         return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
+    def test_false_pair_scene_counts_are_derived_from_validated_snapshot(self):
+        source = self.dataset["trials"][0]
+        source["predictions"]["temporal_fusion"] = {
+            "decision": "pair", "pair": {
+                "audio_id": "wrong-audio", "radar_id": "wrong-radar"}}
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        verified = audit_acquisition_provenance(self.audit_file, self.dataset)
+        self.assertEqual(verified["held_out_false_pair_scene_counts"].get(source["stratum"]), 1)
+        # A later edit to the path cannot change the previously computed audit.
+        self.audit_file.write_text('{"trials":[]}', encoding="utf-8")
+        self.assertEqual(verified["held_out_false_pair_scene_counts"].get(source["stratum"]), 1)
+        with self.assertRaises(ValueError):
+            audit_acquisition_provenance(self.audit_file, self.dataset)
+
     def test_complete_audit_crosschecked_but_never_physically_validated(self):
         result = audit_acquisition_provenance(self.audit_file, self.dataset)
         self.assertTrue(result["crosscheck_passed"])

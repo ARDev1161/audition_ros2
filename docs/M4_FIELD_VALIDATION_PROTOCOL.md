@@ -600,3 +600,13 @@ otherwise `required_stratum_no_recording_gain:STRATUM:BASELINE` blocks
 eligibility. Missing and unobservable evidence cannot create gain.
 This is descriptive evidence, not a statistical significance test, proof of
 independent acquisitions, physical localization, or Nav2 authorization.
+
+### Single-snapshot acquisition provenance safety
+
+Scene-level false-pair exposure is now derived inside the strict acquisition
+audit from the **same bounded, parsed and cross-checked sidecar bytes** used
+for the provenance SHA-256 and trial identity checks. The CLI consumes the
+audit's `held_out_false_pair_scene_counts` rather than reopening the file.
+This removes a path replacement (TOCTOU) window in which unvalidated scene
+labels could affect the safety verdict after a successful audit. A valid
+snapshot remains unauthenticated physical provenance and never authorizes Nav2.

@@ -346,30 +346,11 @@ def main(argv=None):
                                     "required_stratum_insufficient_acquisition_groups:"
                                     + name + ":" + kind + ":" + field)
             if args.maximum_false_pair_scenes_per_stratum is not None:
-                # Audit has already validated trial identity, recording digest,
-                # split isolation and stable scene labels for each recording.
-                scene_by_trial = {row["trial_id"]: row["scene_id"]
-                                  for row in audit["trials"]} if "trials" in audit else None
-                # The audit result is a summary, not the original provenance
-                # records. Re-read only after strict audit validation succeeds.
-                if scene_by_trial is None:
-                    provenance = json.loads(args.acquisition_provenance.read_text(encoding="utf-8"),
-                                            object_pairs_hook=strict_object,
-                                            parse_constant=reject_constant)
-                    scene_by_trial = {row["trial_id"]: row["scene_id"]
-                                      for row in provenance["trials"]}
-                affected = {name: set() for name in sorted(set(args.required_stratum))}
-                for trial in data["trials"]:
-                    if trial["split"] != "held_out" or not trial["truth"]["observable"]:
-                        continue
-                    name = trial["stratum"]
-                    if name not in affected:
-                        continue
-                    prediction = trial["predictions"]["temporal_fusion"]
-                    if prediction["decision"] == "pair" and prediction["pair"] != trial["truth"]["pair"]:
-                        affected[name].add(scene_by_trial[trial["trial_id"]])
+                # Counts come from the exact validated provenance bytes;
+                # never re-read a mutable path after successful cross-check.
+                counts = audit["held_out_false_pair_scene_counts"]
                 report["required_strata_false_pair_scene_coverage"] = {
-                    name: len(scenes) for name, scenes in sorted(affected.items())}
+                    name: counts.get(name, 0) for name in sorted(set(args.required_stratum))}
                 for name, count in report["required_strata_false_pair_scene_coverage"].items():
                     if count > args.maximum_false_pair_scenes_per_stratum:
                         new_blockers.append("required_stratum_false_pair_scene_limit:" + name)

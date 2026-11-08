@@ -77,7 +77,20 @@ def audit_acquisition_provenance(path, dataset):
         stratum: {kind: {field: len(values) for field, values in fields.items()}
                   for kind, fields in classes.items()}
         for stratum, classes in groups.items()}
-    return {
+    # Derive scene-level false-pair exposure from the same validated bytes.
+    # Never re-open the provenance file after checking its SHA and trial IDs:
+    # the path could be replaced between validation and scoring (TOCTOU).
+    false_pair_scenes = {}
+    for trial in dataset["trials"]:
+        if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+            continue
+        prediction = trial["predictions"]["temporal_fusion"]
+        if prediction["decision"] == "pair" and prediction["pair"] != trial["truth"]["pair"]:
+            false_pair_scenes.setdefault(trial["stratum"], set()).add(
+                by_trial[trial["trial_id"]]["scene_id"])
+    false_pair_scene_counts = {
+        stratum: len(scenes) for stratum, scenes in sorted(false_pair_scenes.items())}
+    return {\n        "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,
         "status": "crosschecked",
         "crosscheck_passed": True,
