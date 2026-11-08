@@ -218,10 +218,13 @@ class AvPairNode(Node):
 
     def on_timer(self):
         self.clock()
-        if (self.had_pairs and
-                (self.audio_time is None or self.vision_time is None
-                 or time.monotonic()-self.audio_time>self.age_ns/1e9
-                 or time.monotonic()-self.vision_time>self.age_ns/1e9)):
+        # An expired input must revoke its retained temporal evidence even
+        # when the last published snapshot was empty (e.g. DDS skew). Do not
+        # let a later observation inherit confirmations from stale evidence.
+        expired = (self.audio_time is None or self.vision_time is None
+                   or time.monotonic()-self.audio_time>self.age_ns/1e9
+                   or time.monotonic()-self.vision_time>self.age_ns/1e9)
+        if expired and (self.audio or self.visual or self.had_pairs):
             self.audio=[]
             self.visual=[]
             self.temporal.reset()
