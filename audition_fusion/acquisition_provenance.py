@@ -109,7 +109,44 @@ def audit_acquisition_provenance(path, dataset):
                       "false_pair_scenes": len(groups["false_pair"])}
                for kind, groups in classes.items()}
         for name, classes in scene_exposure.items()}
-    return {
+    # Evaluate each acquisition scene once, not each event or recording.
+    # Group scores are computed only from observable held-out truth.
+    from paired_comparison import BASELINES, correct
+    by_scene = {}
+    for trial in dataset["trials"]:
+        if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+            continue
+        name = trial["stratum"]
+        scene = by_trial[trial["trial_id"]]["scene_id"]
+        entry = by_scene.setdefault(name, {}).setdefault(
+            scene, {baseline: [0, 0] for baseline in BASELINES})
+        truth = trial["truth"]["pair"]
+        expected_pair = None if truth is None else (truth["audio_id"], truth["radar_id"])
+        def is_correct(method):
+            item = trial["predictions"][method]
+            pair = item["pair"]
+            proposed = None if pair is None else (pair["audio_id"], pair["radar_id"])
+            return correct(expected_pair, (item["decision"], proposed))
+        candidate_correct = int(is_correct("temporal_fusion"))
+        for baseline in BASELINES:
+            entry[baseline][0] += candidate_correct
+            entry[baseline][1] += int(is_correct(baseline))
+    scene_gain = {}
+    for name, scenes in sorted(by_scene.items()):
+        scene_gain[name] = {}
+        for baseline in BASELINES:
+            helped = harmed = tied = 0
+            for scores in scenes.values():
+                candidate_score, baseline_score = scores[baseline]
+                if candidate_score > baseline_score:
+                    helped += 1
+                elif candidate_score < baseline_score:
+                    harmed += 1
+                else:
+                    tied += 1
+            scene_gain[name][baseline] = {
+                "helped": helped, "harmed": harmed, "tied": tied}
+    return {\n        "held_out_scene_gain": scene_gain,
         "held_out_scene_truth_class_exposure": scene_class_counts,
         "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,

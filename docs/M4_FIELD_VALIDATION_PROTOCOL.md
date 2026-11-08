@@ -621,3 +621,15 @@ missing acquisition provenance or a missing class blocks diagnostic eligibility.
 The scene exposure is computed from the same validated provenance snapshot,
 not a second read of a mutable file. This is descriptive safety evidence,
 not authentication of physical scenes, 3-D localization or Nav2 admission.
+
+### Independent-scene gain gate
+
+`--require-held-out-scene-gain` requires a strictly validated acquisition
+provenance sidecar and at least one more **distinct held-out acquisition
+scene helped than harmed** by temporal fusion versus each of audio-only,
+radar-only, and instant fusion in every named adverse stratum. All observable
+trials within one scene contribute to its aggregate comparison; a scene is
+counted once regardless of repeated recordings or trials. A missing scene,
+absent provenance, or non-positive scene-level gain blocks diagnostic
+eligibility. Scene IDs remain externally claimed, not independently
+attested; even a clean report never permits physical localization or Nav2.

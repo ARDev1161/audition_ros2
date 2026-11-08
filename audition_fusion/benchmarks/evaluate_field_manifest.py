@@ -76,6 +76,8 @@ def main(argv=None):
     parser.add_argument("--maximum-false-pair-scene-fraction-per-truth-class", type=float,
                         default=None, metavar="F",
                         help="bound wrong-pair scene fraction separately by positive/negative held-out truth")
+    parser.add_argument("--require-held-out-scene-gain", action="store_true",
+                        help="require more independent held-out scenes helped than harmed versus each baseline")
     parser.add_argument("--require-held-out-recording-gain", action="store_true",
                         help="require more distinct recordings helped than harmed versus each baseline in each required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
@@ -121,6 +123,8 @@ def main(argv=None):
                 raise ValueError("invalid maximum false-pair scenes per stratum")
             if not args.required_stratum:
                 raise ValueError("--maximum-false-pair-scenes-per-stratum requires --required-stratum")
+        if args.require_held_out_scene_gain and not args.required_stratum:
+            raise ValueError("--require-held-out-scene-gain requires --required-stratum")
         if args.require_held_out_recording_gain and not args.required_stratum:
             raise ValueError("--require-held-out-recording-gain requires --required-stratum")
         if args.maximum_false_pair_scene_fraction_per_truth_class is not None:
@@ -378,6 +382,18 @@ def main(argv=None):
                             "fraction": fraction}
                         if fraction is None or fraction > args.maximum_false_pair_scene_fraction_per_truth_class:
                             new_blockers.append("required_stratum_false_pair_scene_truth_class_fraction_limit:" + name + ":" + kind)
+            if args.require_held_out_scene_gain:
+                gains = audit["held_out_scene_gain"]
+                from paired_comparison import BASELINES
+                report["required_strata_scene_gain"] = {}
+                for name in sorted(set(args.required_stratum)):
+                    report["required_strata_scene_gain"][name] = {}
+                    for baseline in BASELINES:
+                        scores = gains.get(name, {}).get(baseline, {
+                            "helped": 0, "harmed": 0, "tied": 0})
+                        report["required_strata_scene_gain"][name][baseline] = scores
+                        if scores["helped"] <= scores["harmed"]:
+                            new_blockers.append("required_stratum_no_scene_gain:" + name + ":" + baseline)
             if new_blockers:
                 apply_diagnostic_blockers(report, new_blockers)
         else:
@@ -393,6 +409,8 @@ def main(argv=None):
             apply_diagnostic_blockers(report, {"acquisition_provenance_not_supplied"})
             if args.minimum_acquisition_groups_per_truth_class:
                 apply_diagnostic_blockers(report, {"required_acquisition_groups_unverifiable"})
+            if args.require_held_out_scene_gain:
+                apply_diagnostic_blockers(report, {"required_scene_gain_unverifiable"})
             if args.maximum_false_pair_scenes_per_stratum is not None:
                 apply_diagnostic_blockers(report, {"required_false_pair_scenes_unverifiable"})
             if args.maximum_false_pair_scene_fraction_per_truth_class is not None:

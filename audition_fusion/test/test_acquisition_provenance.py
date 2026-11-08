@@ -85,6 +85,29 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertIn("required_false_pair_scene_classes_unverifiable",
                       json.loads(result.stdout)["safety_diagnostic"]["blockers"])
 
+    def test_scene_gain_requires_provenance_and_cannot_claim_nav2(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "direct", "--require-held-out-scene-gain",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("required_scene_gain_unverifiable",
+                      json.loads(result.stdout)["safety_diagnostic"]["blockers"])
+        cmd += ["--acquisition-provenance", str(self.audit_file)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        for baseline in ("audio_only", "radar_only", "instant_fusion"):
+            self.assertIn(baseline, report["required_strata_scene_gain"]["direct"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_scene_gain_flag_needs_required_stratum(self):
+        result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest),
+                                 "--require-held-out-scene-gain"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires --required-stratum", result.stderr)
+
     def test_complete_audit_crosschecked_but_never_physically_validated(self):
         result = audit_acquisition_provenance(self.audit_file, self.dataset)
         self.assertTrue(result["crosscheck_passed"])
