@@ -52,7 +52,21 @@ def main():
             tf.transform.rotation.z=math.sin(yaw/2.0)
             tf.transform.rotation.w=math.cos(yaw/2.0)
             tfpub.sendTransform(tf)
-        spin_for(.22)
+        # A matched /tf publisher does not guarantee the listener has
+        # consumed its first transform. Re-broadcast the SAME stamped TF
+        # after discovery settles, before publishing sensor observations.
+        spin_for(.25)
+        for frame,x in [('robot_ci_av_mic',0.),('robot_ci_av_camera',.05)]:
+            tf=TransformStamped()
+            tf.header.stamp=stamp
+            tf.header.frame_id='odom'
+            tf.child_frame_id=frame
+            tf.transform.translation.x=x
+            yaw=camera_yaw if frame=='robot_ci_av_camera' else 0.0
+            tf.transform.rotation.z=math.sin(yaw/2.0)
+            tf.transform.rotation.w=math.cos(yaw/2.0)
+            tfpub.sendTransform(tf)
+        spin_for(.20)
 
     def audio_msg(sequence,stamp):
         a=AcousticSourceArray()
