@@ -357,6 +357,28 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                       report["safety_diagnostic"]["blockers"])
         self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
 
+    def test_recording_gain_requires_actual_held_out_advantage(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "direct", "--require-held-out-recording-gain",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        gain = report["required_strata_recording_gain"]["direct"]
+        for baseline in ("audio_only", "radar_only", "instant_fusion"):
+            self.assertEqual(set(gain[baseline]), {"helped", "harmed", "tied"})
+            self.assertEqual(sum(gain[baseline].values()),
+                             len({row["recording_sha256"] for row in self.dataset["trials"]
+                                  if row["stratum"] == "direct" and row["split"] == "held_out"
+                                  and row["truth"]["observable"]}))
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_recording_gain_requires_explicit_stratum(self):
+        result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest),
+                                 "--require-held-out-recording-gain"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

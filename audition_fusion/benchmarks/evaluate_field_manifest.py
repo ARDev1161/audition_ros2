@@ -73,6 +73,8 @@ def main(argv=None):
     parser.add_argument("--maximum-false-pair-scenes-per-stratum", type=int,
                         default=None, metavar="N",
                         help="maximum distinct claimed acquisition scenes with false temporal-fusion pairs")
+    parser.add_argument("--require-held-out-recording-gain", action="store_true",
+                        help="require more distinct recordings helped than harmed versus each baseline in each required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -116,6 +118,8 @@ def main(argv=None):
                 raise ValueError("invalid maximum false-pair scenes per stratum")
             if not args.required_stratum:
                 raise ValueError("--maximum-false-pair-scenes-per-stratum requires --required-stratum")
+        if args.require_held_out_recording_gain and not args.required_stratum:
+            raise ValueError("--require-held-out-recording-gain requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -249,6 +253,49 @@ def main(argv=None):
                         if fraction is None or fraction > args.maximum_false_pair_fraction_per_truth_class:
                             apply_diagnostic_blockers(report, {
                                 "required_stratum_false_pair_truth_class_fraction_limit:" + name + ":" + kind})
+            if args.require_held_out_recording_gain:
+                # One recording is one unit of evidence: repeated event trials
+                # cannot manufacture independent positive gain.
+                from paired_comparison import BASELINES, correct
+                by_recording = {name: {} for name in report["required_strata"]}
+                for trial in data["trials"]:
+                    if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+                        continue
+                    name = trial["stratum"]
+                    if name not in by_recording:
+                        continue
+                    digest = trial["recording_sha256"]
+                    record = by_recording[name].setdefault(digest, {baseline: [0, 0] for baseline in BASELINES})
+                    truth = trial["truth"]["pair"]
+                    true_pair = None if truth is None else (truth["audio_id"], truth["radar_id"])
+                    predictions = trial["predictions"]
+                    def scored(strategy):
+                        item = predictions[strategy]
+                        proposed = item["pair"]
+                        pair = None if proposed is None else (proposed["audio_id"], proposed["radar_id"])
+                        return correct(true_pair, (item["decision"], pair))
+                    candidate_ok = scored("temporal_fusion")
+                    for baseline in BASELINES:
+                        record[baseline][0] += int(candidate_ok)
+                        record[baseline][1] += int(scored(baseline))
+                report["required_strata_recording_gain"] = {}
+                for name, recordings in sorted(by_recording.items()):
+                    report["required_strata_recording_gain"][name] = {}
+                    for baseline in BASELINES:
+                        helped = harmed = tied = 0
+                        for scores in recordings.values():
+                            candidate_count, baseline_count = scores[baseline]
+                            if candidate_count > baseline_count:
+                                helped += 1
+                            elif candidate_count < baseline_count:
+                                harmed += 1
+                            else:
+                                tied += 1
+                        report["required_strata_recording_gain"][name][baseline] = {
+                            "helped": helped, "harmed": harmed, "tied": tied}
+                        if helped <= harmed:
+                            apply_diagnostic_blockers(report, {
+                                "required_stratum_no_recording_gain:" + name + ":" + baseline})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

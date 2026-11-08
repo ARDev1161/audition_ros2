@@ -587,3 +587,16 @@ a valid acquisition-provenance sidecar; without it the report adds
 `required_stratum_false_pair_scene_limit:NAME`. Scene labels are
 cross-checked but not independently authenticated; this diagnostic never
 constitutes physical localization acceptance or Nav2 admission.
+
+### Paired held-out recording-level gain
+
+With `--require-held-out-recording-gain` and one or more
+`--required-stratum` values, each observable held-out recording contributes
+one comparison unit against audio-only, radar-only, and instant fusion.
+Within each recording, count correct observable decisions for each strategy;
+recordings are classified as helped, harmed, or tied. Every required stratum
+must have **more helped than harmed recordings** against every baseline,
+otherwise `required_stratum_no_recording_gain:STRATUM:BASELINE` blocks
+eligibility. Missing and unobservable evidence cannot create gain.
+This is descriptive evidence, not a statistical significance test, proof of
+independent acquisitions, physical localization, or Nav2 authorization.
