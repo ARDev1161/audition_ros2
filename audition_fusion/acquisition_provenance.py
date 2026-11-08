@@ -59,7 +59,26 @@ def audit_acquisition_provenance(path, dataset):
     if mismatches:
         raise ValueError("acquisition provenance trial split/hash mismatch: "
                          + ", ".join(mismatches[:8]))
+    # Count independent claimed acquisition groups separately for positive
+    # and negative observable held-out truth; trial/recording counts cannot
+    # substitute for scene/session diversity.
+    by_trial = {row["trial_id"]: row for row in metadata["trials"]}
+    groups = {}
+    for trial in dataset["trials"]:
+        if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+            continue
+        kind = "negative" if trial["truth"]["pair"] is None else "positive"
+        entry = groups.setdefault(trial["stratum"], {}).setdefault(kind, {
+            "session_id": set(), "scene_id": set(), "subject_id": set()})
+        source = by_trial[trial["trial_id"]]
+        for field in entry:
+            entry[field].add(source[field])
+    class_group_counts = {
+        stratum: {kind: {field: len(values) for field, values in fields.items()}
+                  for kind, fields in classes.items()}
+        for stratum, classes in groups.items()}
     return {
+        "held_out_truth_class_groups": class_group_counts,
         "status": "crosschecked",
         "crosscheck_passed": True,
         "trial_count": len(expected),

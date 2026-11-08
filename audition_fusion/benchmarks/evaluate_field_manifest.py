@@ -58,6 +58,9 @@ def main(argv=None):
                         help="required held-out strata must have observable positive and negative truth")
     parser.add_argument("--minimum-recordings-per-truth-class", type=int, default=0,
                         metavar="N", help="minimum distinct held-out recording hashes per truth class in each required stratum")
+    parser.add_argument("--minimum-acquisition-groups-per-truth-class", type=int,
+                        default=0, metavar="N",
+                        help="minimum independent claimed session/scene/subject IDs per truth class and required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -75,6 +78,10 @@ def main(argv=None):
             raise ValueError("invalid minimum recordings per truth class")
         if args.minimum_recordings_per_truth_class and not args.required_stratum:
             raise ValueError("--minimum-recordings-per-truth-class requires --required-stratum")
+        if not 0 <= args.minimum_acquisition_groups_per_truth_class <= 100000:
+            raise ValueError("invalid minimum acquisition groups per truth class")
+        if args.minimum_acquisition_groups_per_truth_class and not args.required_stratum:
+            raise ValueError("--minimum-acquisition-groups-per-truth-class requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -169,6 +176,20 @@ def main(argv=None):
             new_blockers = independence_blockers(audit["independence_summary"])
             new_blockers += group_robustness_blockers(
                 audit["paired_group_sensitivity"])
+            if args.minimum_acquisition_groups_per_truth_class:
+                coverage = audit["held_out_truth_class_groups"]
+                report["required_strata_acquisition_group_coverage"] = {
+                    name: {kind: {field: coverage.get(name, {}).get(kind, {}).get(field, 0)
+                                  for field in ("session_id", "scene_id", "subject_id")}
+                           for kind in ("positive", "negative")}
+                    for name in sorted(set(args.required_stratum))}
+                for name, classes in report["required_strata_acquisition_group_coverage"].items():
+                    for kind, fields in classes.items():
+                        for field, count in fields.items():
+                            if count < args.minimum_acquisition_groups_per_truth_class:
+                                new_blockers.append(
+                                    "required_stratum_insufficient_acquisition_groups:"
+                                    + name + ":" + kind + ":" + field)
             if new_blockers:
                 apply_diagnostic_blockers(report, new_blockers)
         else:
@@ -182,6 +203,8 @@ def main(argv=None):
             # but a CLI score without external collection metadata is never
             # eligible even for diagnostic promotion.
             apply_diagnostic_blockers(report, {"acquisition_provenance_not_supplied"})
+            if args.minimum_acquisition_groups_per_truth_class:
+                apply_diagnostic_blockers(report, {"required_acquisition_groups_unverifiable"})
         report["manifest_sha256"] = hashlib.sha256(raw).hexdigest()
         report["manifest_name"] = args.manifest.name
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))

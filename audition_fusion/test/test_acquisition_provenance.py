@@ -192,6 +192,39 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("requires --required-stratum", result.stderr)
 
+    def test_acquisition_truth_class_groups_count_unique_claimed_ids(self):
+        audit = audit_acquisition_provenance(self.audit_file, self.dataset)
+        groups = audit["held_out_truth_class_groups"]
+        self.assertIn("direct", groups)
+        self.assertIn("positive", groups["direct"])
+        self.assertGreaterEqual(groups["direct"]["positive"]["session_id"], 1)
+        # Many trials from the same capture are one scene, not independent scenes.
+        self.assertEqual(groups["direct"]["positive"]["scene_id"], 1)
+
+    def test_required_acquisition_groups_block_single_scene(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--acquisition-provenance", str(self.audit_file),
+               "--required-stratum", "direct",
+               "--minimum-acquisition-groups-per-truth-class", "2",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["required_strata_acquisition_group_coverage"]["direct"]["positive"]["scene_id"], 1)
+        self.assertIn("required_stratum_insufficient_acquisition_groups:direct:positive:scene_id",
+                      report["safety_diagnostic"]["blockers"])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_acquisition_group_gate_requires_provenance(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "direct",
+               "--minimum-acquisition-groups-per-truth-class", "2",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("required_acquisition_groups_unverifiable",
+                      json.loads(result.stdout)["safety_diagnostic"]["blockers"])
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

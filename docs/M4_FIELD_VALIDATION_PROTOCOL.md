@@ -522,3 +522,17 @@ cannot inflate this count. The report includes
 omitting required strata is an input error (exit 2). Recording hashes are
 not independent sessions or proof of acquisition authenticity; separate
 session/scene/subject provenance and physical validation remain mandatory.
+
+### Independent acquisition groups by truth class
+
+The optional `--minimum-acquisition-groups-per-truth-class N` gate checks
+held-out positive and negative examples of each `--required-stratum` against
+**distinct claimed session, scene and subject IDs**, separately. Each of the
+three dimensions must have at least N groups for each truth class; repeated
+trials or distinct recordings from one scene cannot inflate coverage. The
+strict JSON report includes `required_strata_acquisition_group_coverage`.
+Absent acquisition provenance blocks the gate with
+`required_acquisition_groups_unverifiable`; insufficient groups produce
+`required_stratum_insufficient_acquisition_groups:STRATUM:CLASS:DIMENSION`.
+These are consistency checks on self-reported IDs, not cryptographic proof
+of physical independence or a Nav2 admission signal.
