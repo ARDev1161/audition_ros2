@@ -288,16 +288,33 @@ class AvPairNode(Node):
         now_ns=self.clock()
         # Retry only already-admitted snapshots; never re-admit replayed
         # sequence numbers, never extend their original sensor timestamps.
+        expired_pending=False
         if self.pending_audio is not None:
             msg=self.pending_audio
             self.pending_audio=None
             if self.fresh(msg.header.stamp,now_ns):
                 self.on_audio(msg,retry=True)
+            else:
+                # A timed-out TF2 snapshot is a revoked observation, not
+                # successful empty evidence. Do not carry pair confirmations.
+                self.audio=[]
+                self.audio_time=None
+                expired_pending=True
         if self.pending_visual is not None:
             msg=self.pending_visual
             self.pending_visual=None
             if self.fresh(msg.header.stamp,now_ns):
                 self.on_visual(msg,retry=True)
+            else:
+                self.visual=[]
+                self.vision_time=None
+                expired_pending=True
+        if expired_pending:
+            self.temporal.reset()
+            # Explicitly revoke the last candidate snapshot even if the
+            # opposite sensor remains fresh. No stale TF2 retry may revive it.
+            if self.had_pairs:
+                self.emit([])
         # An expired input must revoke its retained temporal evidence even
         # when the last published snapshot was empty (e.g. DDS skew). Do not
         # let a later observation inherit confirmations from stale evidence.
