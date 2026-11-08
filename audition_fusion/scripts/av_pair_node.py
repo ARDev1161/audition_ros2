@@ -153,6 +153,7 @@ class AvPairNode(Node):
                 throttle_duration_sec=2.0)
         if missing_tf:
             self.pending_audio=msg
+            incoming=[]  # Never publish a misleading partial source snapshot.
         self.audio=incoming if len(msg.sources)<=self.matcher.maximum_tracks else []
         self.audio_time=time.monotonic()
         self.publish_pairs()
@@ -205,6 +206,7 @@ class AvPairNode(Node):
                 throttle_duration_sec=2.0)
         if missing_tf:
             self.pending_visual=msg
+            incoming=[]  # A missing ray can change association uniqueness.
         self.visual=incoming if len(msg.tracks)<=self.matcher.maximum_tracks else []
         self.get_logger().info(
             f'AV visual admitted: seq={msg.sequence_number} tracks={len(msg.tracks)} '
