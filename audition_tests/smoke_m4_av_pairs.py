@@ -154,6 +154,25 @@ def main():
         assert acoustic.get_subscription_count() and visual.get_subscription_count(), 'node not discovered'
         assert tfpub.pub_tf.get_subscription_count(), 'TF2 not discovered'
 
+        # Warm up BOTH TF2 listeners before the first sensor snapshot. The
+        # probe's can_transform only proves its own listener is ready; the
+        # fusion process has an independent TF2 buffer and executor. A fresh
+        # observation timestamp is generated AFTER warmup, so startup time
+        # cannot silently consume the 800ms sensor-age budget.
+        warmup_stamp=node.get_clock().now().to_msg()
+        prepare_tf(warmup_stamp)
+        warmup_deadline=time.monotonic()+0.20
+        while time.monotonic()<warmup_deadline:
+            tf=TransformStamped()
+            tf.header.stamp=warmup_stamp
+            tf.header.frame_id='odom'
+            tf.child_frame_id='robot_ci_av_mic'
+            tf.transform.rotation.w=1.0
+            tfpub.sendTransform(tf)
+            tf.child_frame_id='robot_ci_av_camera'
+            tf.transform.translation.x=.05
+            tfpub.sendTransform(tf)
+            spin_for(.04)
         stamp=node.get_clock().now().to_msg()
         prepare_tf(stamp)
         acoustic.publish(audio_msg(1,stamp))
