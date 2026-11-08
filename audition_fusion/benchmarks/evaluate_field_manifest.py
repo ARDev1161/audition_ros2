@@ -64,6 +64,9 @@ def main(argv=None):
     parser.add_argument("--maximum-false-pair-recordings-per-stratum", type=int,
                         default=None, metavar="N",
                         help="maximum distinct held-out recordings with wrong temporal-fusion pairs per required stratum")
+    parser.add_argument("--maximum-false-pair-recording-fraction", type=float,
+                        default=None, metavar="F",
+                        help="maximum fraction of distinct observable held-out recordings with wrong pairs per required stratum")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -90,6 +93,12 @@ def main(argv=None):
                 raise ValueError("invalid maximum false-pair recordings per stratum")
             if not args.required_stratum:
                 raise ValueError("--maximum-false-pair-recordings-per-stratum requires --required-stratum")
+        if args.maximum_false_pair_recording_fraction is not None:
+            import math
+            if not math.isfinite(args.maximum_false_pair_recording_fraction) or not (0 <= args.maximum_false_pair_recording_fraction <= 1):
+                raise ValueError("invalid maximum false-pair recording fraction")
+            if not args.required_stratum:
+                raise ValueError("--maximum-false-pair-recording-fraction requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -166,6 +175,32 @@ def main(argv=None):
                     if count > args.maximum_false_pair_recordings_per_stratum:
                         apply_diagnostic_blockers(report, {
                             "required_stratum_false_pair_recording_limit:" + name})
+            if args.maximum_false_pair_recording_fraction is not None:
+                exposure = {name: {"observable": set(), "false_pair": set()}
+                            for name in report["required_strata"]}
+                for trial in data["trials"]:
+                    if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+                        continue
+                    name = trial["stratum"]
+                    if name not in exposure:
+                        continue
+                    digest = trial["recording_sha256"]
+                    exposure[name]["observable"].add(digest)
+                    candidate = trial["predictions"]["temporal_fusion"]
+                    if candidate["decision"] == "pair" and candidate["pair"] != trial["truth"]["pair"]:
+                        exposure[name]["false_pair"].add(digest)
+                report["required_strata_false_pair_recording_fraction"] = {}
+                for name, groups in sorted(exposure.items()):
+                    denominator = len(groups["observable"])
+                    numerator = len(groups["false_pair"])
+                    fraction = numerator / denominator if denominator else None
+                    report["required_strata_false_pair_recording_fraction"][name] = {
+                        "observable_recordings": denominator,
+                        "false_pair_recordings": numerator,
+                        "fraction": fraction}
+                    if fraction is None or fraction > args.maximum_false_pair_recording_fraction:
+                        apply_diagnostic_blockers(report, {
+                            "required_stratum_false_pair_recording_fraction_limit:" + name})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

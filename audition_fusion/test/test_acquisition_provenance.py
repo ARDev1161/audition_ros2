@@ -263,6 +263,45 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
 
+    def test_false_pair_recording_fraction_uses_unique_held_out_denominator(self):
+        source = next(row for row in self.dataset["trials"]
+                      if row["split"] == "held_out" and row["truth"]["observable"])
+        for i in range(3):
+            sample = json.loads(json.dumps(source))
+            sample["trial_id"] = "fraction-repeat-" + str(i)
+            sample["stratum"] = "fraction-test"
+            sample["predictions"]["temporal_fusion"] = {
+                "decision": "pair", "pair": {
+                    "audio_id": "wrong", "radar_id": "wrong"}}
+            self.dataset["trials"].append(sample)
+        self.manifest.write_text(json.dumps(self.dataset), encoding="utf-8")
+        base = [sys.executable, str(SCRIPT), str(self.manifest),
+                "--required-stratum", "fraction-test",
+                "--maximum-false-pair-recording-fraction"]
+        blocked = subprocess.run(base + ["0.5", "--require-diagnostic-eligibility"],
+                                 capture_output=True, text=True)
+        self.assertEqual(blocked.returncode, 3, blocked.stderr)
+        report = json.loads(blocked.stdout)
+        counts = report["required_strata_false_pair_recording_fraction"]["fraction-test"]
+        self.assertEqual(counts, {"observable_recordings": 1,
+                                  "false_pair_recordings": 1, "fraction": 1.0})
+        self.assertIn("required_stratum_false_pair_recording_fraction_limit:fraction-test",
+                      report["safety_diagnostic"]["blockers"])
+        allowed = subprocess.run(base + ["1"], capture_output=True, text=True)
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        self.assertNotIn("required_stratum_false_pair_recording_fraction_limit:fraction-test",
+                         json.loads(allowed.stdout)["safety_diagnostic"]["blockers"])
+
+    def test_false_pair_fraction_rejects_invalid_bounds_and_missing_strata(self):
+        for args in (["--maximum-false-pair-recording-fraction", "0.5"],
+                     ["--required-stratum", "direct",
+                      "--maximum-false-pair-recording-fraction", "nan"],
+                     ["--required-stratum", "direct",
+                      "--maximum-false-pair-recording-fraction", "1.1"]):
+            result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest)] + args,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

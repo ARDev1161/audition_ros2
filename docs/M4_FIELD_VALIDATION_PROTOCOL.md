@@ -549,3 +549,16 @@ wrong trials from one recording count once. The report exposes
 `required_stratum_false_pair_recording_limit:NAME` when the bound is exceeded.
 This is an absolute diagnostic exposure count, not a calibrated false-pair
 rate, statistical confidence bound, or physical localization approval.
+
+### Fraction of recordings affected by wrong pairs
+
+The opt-in `--maximum-false-pair-recording-fraction F` (0–1) requires
+prespecified `--required-stratum` names. For each stratum, it divides the
+number of **distinct observable held-out recording hashes** containing at
+least one wrong `temporal_fusion` pair by all distinct observable held-out
+recording hashes in that stratum. Replayed trials cannot dilute the fraction.
+Missing observable denominators block promotion, not silently pass. The JSON
+report includes numerator, denominator and fraction under
+`required_strata_false_pair_recording_fraction`. This is a descriptive
+sample fraction, **not** an independent-session estimate, confidence bound,
+physical localization acceptance or permission to feed Nav2.
