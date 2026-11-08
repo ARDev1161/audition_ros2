@@ -90,7 +90,8 @@ def audit_acquisition_provenance(path, dataset):
                 by_trial[trial["trial_id"]]["scene_id"])
     false_pair_scene_counts = {
         stratum: len(scenes) for stratum, scenes in sorted(false_pair_scenes.items())}
-    return {\n        "held_out_false_pair_scene_counts": false_pair_scene_counts,
+    return {
+        "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,
         "status": "crosschecked",
         "crosscheck_passed": True,
