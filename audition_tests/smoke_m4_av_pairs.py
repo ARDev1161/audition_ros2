@@ -134,6 +134,15 @@ def main():
         spin_for(.08)
         assert not any(m.hypotheses for m in received), 'paired without vision'
         visual.publish(vision_msg(1,stamp,['face-a']))
+        # First prove the producer's DDS sample is visible independently of
+        # the fusion node. An AV timeout alone cannot distinguish transport
+        # failure from TF2/admission/association rejection.
+        deadline=time.monotonic()+1.5
+        while (1,1) not in visual_echo and time.monotonic()<deadline:
+            rclpy.spin_once(node,timeout_sec=.05)
+        assert (1,1) in visual_echo, (
+            'visual DDS delivery failed',visual_echo[-12:],
+            visual.get_subscription_count())
         first=find(lambda m:len(m.hypotheses)==1 and
                    m.hypotheses[0].visual_track_id=='face-a')
         assert first.hypotheses[0].unique_match, 'single reciprocal pair not unique'
