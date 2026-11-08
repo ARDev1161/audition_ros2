@@ -55,6 +55,10 @@ class AvPairNode(Node):
         self.vision_fence=StreamFence()
         self.audio=[]
         self.visual=[]
+        # A TF2 transform can arrive after the DDS observation. Retain only
+        # the newest admitted snapshot per stream, bounded by the age gate.
+        self.pending_audio=None
+        self.pending_visual=None
         self.audio_time=None
         self.vision_time=None
         self.had_pairs=False
@@ -75,6 +79,8 @@ class AvPairNode(Node):
             self.vision_fence.reset()
             self.audio=[]
             self.visual=[]
+            self.pending_audio=None
+            self.pending_visual=None
             self.audio_time=None
             self.vision_time=None
             self.temporal.reset()
@@ -107,11 +113,13 @@ class AvPairNode(Node):
         return (self.fresh(array_stamp,now_ns) and self.fresh(sample_stamp,now_ns)
                 and ns(sample_stamp)<=ns(array_stamp))
 
-    def on_audio(self,msg):
+    def on_audio(self,msg,retry=False):
         now_ns=self.clock()
+        if not retry:
+            self.pending_audio=None
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
             return
-        if not self.audio_fence.accept(msg.scene_session_id,msg.sequence_number,ns(msg.header.stamp)):
+        if not retry and not self.audio_fence.accept(msg.scene_session_id,msg.sequence_number,ns(msg.header.stamp)):
             return
         if len(msg.sources)>self.matcher.maximum_tracks:
             self.audio=[]
@@ -119,6 +127,7 @@ class AvPairNode(Node):
             self.publish_pairs()
             return
         incoming=[]
+        missing_tf=False
         seen=set()
         for s in msg.sources:
             key=s.source_id
@@ -132,7 +141,9 @@ class AvPairNode(Node):
                     or not self.observe(msg.header.stamp,s.last_seen,now_ns)):
                 continue
             transformed=self.transform_ray(msg.header.frame_id,s.last_seen,s.direction_unit)
-            if transformed is not None:
+            if transformed is None:
+                missing_tf=True
+            else:
                 incoming.append(Ray(s.source_id,s.source_generation,ns(s.last_seen),
                                     transformed[0],transformed[1],s.angular_variance_rad2))
         if msg.sources and not incoming:
@@ -140,18 +151,22 @@ class AvPairNode(Node):
                 f'AV audio snapshot rejected: tracks={len(msg.sources)} '
                 f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
                 throttle_duration_sec=2.0)
+        if missing_tf:
+            self.pending_audio=msg
         self.audio=incoming if len(msg.sources)<=self.matcher.maximum_tracks else []
         self.audio_time=time.monotonic()
         self.publish_pairs()
 
-    def on_visual(self,msg):
+    def on_visual(self,msg,retry=False):
         now_ns=self.clock()
+        if not retry:
+            self.pending_visual=None
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
             self.get_logger().warning(
                 f'AV visual envelope rejected: fresh={self.fresh(msg.header.stamp,now_ns)} '
                 f'frame={msg.header.frame_id!r} stamp={ns(msg.header.stamp)} now={now_ns}')
             return
-        if not self.vision_fence.accept(msg.vision_session_id,msg.sequence_number,ns(msg.header.stamp)):
+        if not retry and not self.vision_fence.accept(msg.vision_session_id,msg.sequence_number,ns(msg.header.stamp)):
             self.get_logger().warning(
                 f'AV visual fence rejected: session={msg.vision_session_id!r} '
                 f'seq={msg.sequence_number} stamp={ns(msg.header.stamp)} '
@@ -164,6 +179,7 @@ class AvPairNode(Node):
             self.publish_pairs()
             return
         incoming=[]
+        missing_tf=False
         seen=set()
         for s in msg.tracks:
             key=s.visual_track_id
@@ -176,7 +192,9 @@ class AvPairNode(Node):
                     or not self.observe(msg.header.stamp,s.observed_at,now_ns)):
                 continue
             transformed=self.transform_ray(msg.header.frame_id,s.observed_at,s.direction_unit)
-            if transformed is not None:
+            if transformed is None:
+                missing_tf=True
+            else:
                 incoming.append(Ray(s.visual_track_id,s.visual_track_generation,
                     ns(s.observed_at),transformed[0],transformed[1],
                     s.angular_variance_rad2,s.activity_evidence))
@@ -185,6 +203,8 @@ class AvPairNode(Node):
                 f'AV visual snapshot rejected: tracks={len(msg.tracks)} '
                 f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
                 throttle_duration_sec=2.0)
+        if missing_tf:
+            self.pending_visual=msg
         self.visual=incoming if len(msg.tracks)<=self.matcher.maximum_tracks else []
         self.get_logger().info(
             f'AV visual admitted: seq={msg.sequence_number} tracks={len(msg.tracks)} '
@@ -250,7 +270,19 @@ class AvPairNode(Node):
         self.had_pairs=bool(pairs)
 
     def on_timer(self):
-        self.clock()
+        now_ns=self.clock()
+        # Retry only already-admitted snapshots; never re-admit replayed
+        # sequence numbers, never extend their original sensor timestamps.
+        if self.pending_audio is not None:
+            msg=self.pending_audio
+            self.pending_audio=None
+            if self.fresh(msg.header.stamp,now_ns):
+                self.on_audio(msg,retry=True)
+        if self.pending_visual is not None:
+            msg=self.pending_visual
+            self.pending_visual=None
+            if self.fresh(msg.header.stamp,now_ns):
+                self.on_visual(msg,retry=True)
         # An expired input must revoke its retained temporal evidence even
         # when the last published snapshot was empty (e.g. DDS skew). Do not
         # let a later observation inherit confirmations from stale evidence.
