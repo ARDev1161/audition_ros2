@@ -472,7 +472,7 @@ jobs:
           export ROS_DOMAIN_ID=124
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          ros2 launch audition_bringup m4_av_pairs.launch.py \
+          PYTHONUNBUFFERED=1 RCUTILS_LOGGING_BUFFERED_STREAM=0 ros2 launch audition_bringup m4_av_pairs.launch.py \
             audition_namespace:=robot_ci/av world_frame:=odom \
             > /tmp/audition_m4_av.log 2>&1 &
           launch_pid=$!
