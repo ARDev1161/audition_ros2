@@ -90,7 +90,10 @@ class AvPairNode(Node):
         try:
             transform=self.tf_buffer.lookup_transform(
                 self.frame,frame,Time.from_msg(stamp),timeout=Duration(seconds=0.0))
-        except TransformException:
+        except TransformException as exc:
+            self.get_logger().warning(
+                f'AV TF2 lookup rejected frame={frame!r} world={self.frame!r}: {exc}',
+                throttle_duration_sec=2.0)
             return None
         origin=transform.transform.translation
         result=rotated(vector,transform.transform.rotation)
@@ -132,6 +135,11 @@ class AvPairNode(Node):
             if transformed is not None:
                 incoming.append(Ray(s.source_id,s.source_generation,ns(s.last_seen),
                                     transformed[0],transformed[1],s.angular_variance_rad2))
+        if msg.sources and not incoming:
+            self.get_logger().warning(
+                f'AV audio snapshot rejected: tracks={len(msg.sources)} '
+                f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
+                throttle_duration_sec=2.0)
         self.audio=incoming if len(msg.sources)<=self.matcher.maximum_tracks else []
         self.audio_time=time.monotonic()
         self.publish_pairs()
@@ -164,6 +172,11 @@ class AvPairNode(Node):
                 incoming.append(Ray(s.visual_track_id,s.visual_track_generation,
                     ns(s.observed_at),transformed[0],transformed[1],
                     s.angular_variance_rad2,s.activity_evidence))
+        if msg.tracks and not incoming:
+            self.get_logger().warning(
+                f'AV visual snapshot rejected: tracks={len(msg.tracks)} '
+                f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
+                throttle_duration_sec=2.0)
         self.visual=incoming if len(msg.tracks)<=self.matcher.maximum_tracks else []
         self.vision_time=time.monotonic()
         self.publish_pairs()
