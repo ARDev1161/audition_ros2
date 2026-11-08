@@ -610,3 +610,14 @@ audit's `held_out_false_pair_scene_counts` rather than reopening the file.
 This removes a path replacement (TOCTOU) window in which unvalidated scene
 labels could affect the safety verdict after a successful audit. A valid
 snapshot remains unauthenticated physical provenance and never authorizes Nav2.
+
+### Class-conditional scene-level false association
+
+`--maximum-false-pair-scene-fraction-per-truth-class F` limits the
+fraction of **distinct claimed scenes** with a wrong temporal-fusion pair,
+separately for observable positive and negative held-out truth in each
+required adverse stratum. Both classes require a nonzero scene denominator;
+missing acquisition provenance or a missing class blocks diagnostic eligibility.
+The scene exposure is computed from the same validated provenance snapshot,
+not a second read of a mutable file. This is descriptive safety evidence,
+not authentication of physical scenes, 3-D localization or Nav2 admission.

@@ -90,7 +90,26 @@ def audit_acquisition_provenance(path, dataset):
                 by_trial[trial["trial_id"]]["scene_id"])
     false_pair_scene_counts = {
         stratum: len(scenes) for stratum, scenes in sorted(false_pair_scenes.items())}
-    return {
+    # Class-conditional scene exposure: a single negative scene must not be
+    # diluted by many positive scenes in the same adverse stratum.
+    scene_exposure = {}
+    for trial in dataset["trials"]:
+        if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+            continue
+        kind = "negative" if trial["truth"]["pair"] is None else "positive"
+        group = scene_exposure.setdefault(trial["stratum"], {}).setdefault(
+            kind, {"observable": set(), "false_pair": set()})
+        scene = by_trial[trial["trial_id"]]["scene_id"]
+        group["observable"].add(scene)
+        candidate = trial["predictions"]["temporal_fusion"]
+        if candidate["decision"] == "pair" and candidate["pair"] != trial["truth"]["pair"]:
+            group["false_pair"].add(scene)
+    scene_class_counts = {
+        name: {kind: {"observable_scenes": len(groups["observable"]),
+                      "false_pair_scenes": len(groups["false_pair"])}
+               for kind, groups in classes.items()}
+        for name, classes in scene_exposure.items()}
+    return {\n        "held_out_scene_truth_class_exposure": scene_class_counts,
         "held_out_false_pair_scene_counts": false_pair_scene_counts,
         "held_out_truth_class_groups": class_group_counts,
         "status": "crosschecked",

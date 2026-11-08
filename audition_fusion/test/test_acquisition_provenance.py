@@ -61,6 +61,30 @@ class AcquisitionProvenanceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit_acquisition_provenance(self.audit_file, self.dataset)
 
+    def test_scene_truth_class_fraction_requires_both_classes(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--acquisition-provenance", str(self.audit_file),
+               "--required-stratum", "reflection",
+               "--maximum-false-pair-scene-fraction-per-truth-class", "1",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        classes = report["required_strata_false_pair_scene_fraction_by_truth_class"]["reflection"]
+        self.assertIn("positive", classes)
+        self.assertIn("negative", classes)
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_scene_truth_class_fraction_rejects_missing_provenance(self):
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "direct",
+               "--maximum-false-pair-scene-fraction-per-truth-class", "0.5",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("required_false_pair_scene_classes_unverifiable",
+                      json.loads(result.stdout)["safety_diagnostic"]["blockers"])
+
     def test_complete_audit_crosschecked_but_never_physically_validated(self):
         result = audit_acquisition_provenance(self.audit_file, self.dataset)
         self.assertTrue(result["crosscheck_passed"])
