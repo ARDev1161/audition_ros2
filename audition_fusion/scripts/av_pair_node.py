@@ -169,17 +169,16 @@ class AvPairNode(Node):
         self.publish_pairs()
 
     def publish_pairs(self):
-        if (self.audio_time is None or self.vision_time is None
-                or time.monotonic()-self.audio_time>self.age_ns/1e9
-                or time.monotonic()-self.vision_time>self.age_ns/1e9):
-            pairs=[]
-        else:
-            pairs=self.matcher.propose(self.audio,self.visual)
-        # DDS producers are asynchronous: temporarily missing the next
-        # matching sample must not erase bounded independent evidence.
-        pending = (not pairs and self.audio and self.visual
-                   and abs(self.audio[0].stamp_ns - self.visual[0].stamp_ns)
-                       > self.matcher.skew_ns)
+        expired = (self.audio_time is None or self.vision_time is None
+                   or time.monotonic()-self.audio_time>self.age_ns/1e9
+                   or time.monotonic()-self.vision_time>self.age_ns/1e9)
+        pairs = [] if expired else self.matcher.propose(self.audio,self.visual)
+        # A pending DDS counterpart can preserve evidence only while BOTH
+        # input snapshots remain fresh. Use all retained rays rather than
+        # assuming the first pair represents a multi-track snapshot.
+        pending = (not expired and not pairs and self.audio and self.visual
+                   and all(abs(a.stamp_ns-v.stamp_ns)>self.matcher.skew_ns
+                           for a in self.audio for v in self.visual))
         self.emit(pairs, pending=bool(pending))
 
     def emit(self,pairs,pending=False):
