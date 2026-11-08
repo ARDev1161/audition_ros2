@@ -302,6 +302,31 @@ class AcquisitionProvenanceTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
 
+    def test_false_pair_truth_class_fraction_cannot_hide_negative_failures(self):
+        # A zero denominator must block rather than be reported as zero errors.
+        cmd = [sys.executable, str(SCRIPT), str(self.manifest),
+               "--required-stratum", "reflection",
+               "--maximum-false-pair-fraction-per-truth-class", "1",
+               "--require-diagnostic-eligibility"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(result.stdout)
+        classes = report["required_strata_false_pair_fraction_by_truth_class"]["reflection"]
+        for kind in ("positive", "negative"):
+            self.assertIn("observable_recordings", classes[kind])
+            self.assertIn("false_pair_recordings", classes[kind])
+        self.assertFalse(report["safety_diagnostic"]["nav2_admission"])
+
+    def test_false_pair_truth_class_fraction_rejects_bad_configuration(self):
+        for args in (["--maximum-false-pair-fraction-per-truth-class", "0"],
+                     ["--required-stratum", "direct",
+                      "--maximum-false-pair-fraction-per-truth-class", "nan"],
+                     ["--required-stratum", "direct",
+                      "--maximum-false-pair-fraction-per-truth-class", "1.01"]):
+            result = subprocess.run([sys.executable, str(SCRIPT), str(self.manifest)] + args,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+
     def test_strict_cli_exit_code_blocks_unverified_field_evidence(self):
         # Default scoring is useful for diagnostics, but automation requiring
         # eligible evidence must not mistake a JSON report for acceptance.

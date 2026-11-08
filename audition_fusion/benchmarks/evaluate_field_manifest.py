@@ -67,6 +67,9 @@ def main(argv=None):
     parser.add_argument("--maximum-false-pair-recording-fraction", type=float,
                         default=None, metavar="F",
                         help="maximum fraction of distinct observable held-out recordings with wrong pairs per required stratum")
+    parser.add_argument("--maximum-false-pair-fraction-per-truth-class", type=float,
+                        default=None, metavar="F",
+                        help="maximum wrong-pair recording fraction separately for positive and negative held-out truth")
     parser.add_argument("--require-diagnostic-eligibility", action="store_true",
                         help="exit 3 if any diagnostic blocker remains (never physical admission)")
     args = parser.parse_args(argv)
@@ -99,6 +102,12 @@ def main(argv=None):
                 raise ValueError("invalid maximum false-pair recording fraction")
             if not args.required_stratum:
                 raise ValueError("--maximum-false-pair-recording-fraction requires --required-stratum")
+        if args.maximum_false_pair_fraction_per_truth_class is not None:
+            import math
+            if not math.isfinite(args.maximum_false_pair_fraction_per_truth_class) or not (0 <= args.maximum_false_pair_fraction_per_truth_class <= 1):
+                raise ValueError("invalid maximum false-pair fraction per truth class")
+            if not args.required_stratum:
+                raise ValueError("--maximum-false-pair-fraction-per-truth-class requires --required-stratum")
         # Predeclared adverse strata must actually be represented by
         # independently observable held-out trials. A missing stratum is
         # an explicit diagnostic blocker, not an empty success.
@@ -201,6 +210,37 @@ def main(argv=None):
                     if fraction is None or fraction > args.maximum_false_pair_recording_fraction:
                         apply_diagnostic_blockers(report, {
                             "required_stratum_false_pair_recording_fraction_limit:" + name})
+            if args.maximum_false_pair_fraction_per_truth_class is not None:
+                exposure_by_class = {
+                    name: {kind: {"observable": set(), "false_pair": set()}
+                           for kind in ("positive", "negative")}
+                    for name in report["required_strata"]}
+                for trial in data["trials"]:
+                    if trial["split"] != "held_out" or not trial["truth"]["observable"]:
+                        continue
+                    name = trial["stratum"]
+                    if name not in exposure_by_class:
+                        continue
+                    kind = "negative" if trial["truth"]["pair"] is None else "positive"
+                    groups = exposure_by_class[name][kind]
+                    digest = trial["recording_sha256"]
+                    groups["observable"].add(digest)
+                    candidate = trial["predictions"]["temporal_fusion"]
+                    if candidate["decision"] == "pair" and candidate["pair"] != trial["truth"]["pair"]:
+                        groups["false_pair"].add(digest)
+                report["required_strata_false_pair_fraction_by_truth_class"] = {}
+                for name, classes in sorted(exposure_by_class.items()):
+                    report["required_strata_false_pair_fraction_by_truth_class"][name] = {}
+                    for kind, groups in classes.items():
+                        denominator = len(groups["observable"])
+                        numerator = len(groups["false_pair"])
+                        fraction = numerator / denominator if denominator else None
+                        report["required_strata_false_pair_fraction_by_truth_class"][name][kind] = {
+                            "observable_recordings": denominator,
+                            "false_pair_recordings": numerator, "fraction": fraction}
+                        if fraction is None or fraction > args.maximum_false_pair_fraction_per_truth_class:
+                            apply_diagnostic_blockers(report, {
+                                "required_stratum_false_pair_truth_class_fraction_limit:" + name + ":" + kind})
             if missing:
                 apply_diagnostic_blockers(report, {
                     "required_stratum_missing_or_unobservable:" + name

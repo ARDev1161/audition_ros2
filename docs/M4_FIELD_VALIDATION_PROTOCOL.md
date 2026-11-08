@@ -562,3 +562,16 @@ report includes numerator, denominator and fraction under
 `required_strata_false_pair_recording_fraction`. This is a descriptive
 sample fraction, **not** an independent-session estimate, confidence bound,
 physical localization acceptance or permission to feed Nav2.
+
+### Class-conditional false-association exposure
+
+The optional `--maximum-false-pair-fraction-per-truth-class F` evaluates
+unique observable held-out recording hashes **separately** for positive and
+negative truth in every required stratum. This prevents a large population of
+positive examples from concealing false associations on negative examples.
+Each class must have a nonzero denominator; missing truth is a diagnostic
+blocker rather than an apparent zero error rate. The report includes
+`required_strata_false_pair_fraction_by_truth_class`; failures add
+`required_stratum_false_pair_truth_class_fraction_limit:STRATUM:CLASS`.
+The counts remain diagnostic only, not statistically independent field proof,
+physical localization, or Nav2 admission.
