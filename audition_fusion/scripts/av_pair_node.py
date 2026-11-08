@@ -147,8 +147,16 @@ class AvPairNode(Node):
     def on_visual(self,msg):
         now_ns=self.clock()
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
+            self.get_logger().warning(
+                f'AV visual envelope rejected: fresh={self.fresh(msg.header.stamp,now_ns)} '
+                f'frame={msg.header.frame_id!r} stamp={ns(msg.header.stamp)} now={now_ns}')
             return
         if not self.vision_fence.accept(msg.vision_session_id,msg.sequence_number,ns(msg.header.stamp)):
+            self.get_logger().warning(
+                f'AV visual fence rejected: session={msg.vision_session_id!r} '
+                f'seq={msg.sequence_number} stamp={ns(msg.header.stamp)} '
+                f'current_session={self.vision_fence.session!r} '
+                f'current_seq={self.vision_fence.sequence}')
             return
         if len(msg.tracks)>self.matcher.maximum_tracks:
             self.visual=[]
@@ -178,6 +186,9 @@ class AvPairNode(Node):
                 f'frame={msg.header.frame_id!r} fresh={self.fresh(msg.header.stamp,now_ns)}',
                 throttle_duration_sec=2.0)
         self.visual=incoming if len(msg.tracks)<=self.matcher.maximum_tracks else []
+        self.get_logger().info(
+            f'AV visual admitted: seq={msg.sequence_number} tracks={len(msg.tracks)} '
+            f'rays={len(self.visual)} audio_rays={len(self.audio)}')
         self.vision_time=time.monotonic()
         self.publish_pairs()
 
