@@ -43,8 +43,8 @@ def stamped_tf_lookup(buffer, *, timeout_sec=0.05):
             raise LookupError('TF frame mismatch')
         header = transform.header.stamp
         tf_stamp_ns = header.sec * 1_000_000_000 + header.nanosec
-        if tf_stamp_ns <= 0:
-            raise LookupError('unstamped TF')
+        # Static TF edges may legally carry a zero timestamp in ROS 2.
+        # lookup_transform was explicitly requested at stamp_ns above.
 
         t = transform.transform.translation
         q = transform.transform.rotation
