@@ -113,11 +113,31 @@ class AvPairNode(Node):
         return (self.fresh(array_stamp,now_ns) and self.fresh(sample_stamp,now_ns)
                 and ns(sample_stamp)<=ns(array_stamp))
 
+    def revoke_audio(self):
+        """Invalidate the audio side without discarding valid visual evidence."""
+        self.audio=[]
+        self.audio_time=None
+        self.pending_audio=None
+        self.temporal.reset()
+        self.publish_pairs()
+
+    def revoke_visual(self):
+        """Invalidate the visual side without discarding valid audio evidence."""
+        self.visual=[]
+        self.vision_time=None
+        self.pending_visual=None
+        self.temporal.reset()
+        self.publish_pairs()
+
     def on_audio(self,msg,retry=False):
         now_ns=self.clock()
         if not retry:
             self.pending_audio=None
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
+            # Invalid envelopes must not leave a previously confirmed pair
+            # alive until the timer fires. Preserve the independent sensor.
+            if not retry:
+                self.revoke_audio()
             return
         if not retry and not self.audio_fence.accept(msg.scene_session_id,msg.sequence_number,ns(msg.header.stamp)):
             return
@@ -172,6 +192,8 @@ class AvPairNode(Node):
         if not retry:
             self.pending_visual=None
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
+            if not retry:
+                self.revoke_visual()
             self.get_logger().warning(
                 f'AV visual envelope rejected: fresh={self.fresh(msg.header.stamp,now_ns)} '
                 f'frame={msg.header.frame_id!r} stamp={ns(msg.header.stamp)} now={now_ns}')
