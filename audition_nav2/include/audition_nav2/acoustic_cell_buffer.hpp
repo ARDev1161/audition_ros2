@@ -72,7 +72,8 @@ class AcousticCellBuffer {
       const auto& s = entry.second;
       const double col = std::floor((s.x_m - grid.origin_x) / grid.resolution);
       const double row = std::floor((s.y_m - grid.origin_y) / grid.resolution);
-      if (col >= 0 && row >= 0 && col < grid.width && row < grid.height)
+      if (std::isfinite(col) && std::isfinite(row) &&
+          col >= 0 && row >= 0 && col < grid.width && row < grid.height)
         next[{static_cast<unsigned>(col), static_cast<unsigned>(row)}] = cost_;
     }
     // Previous grid coordinates cannot be used to clear a shifted master map.
@@ -120,7 +121,10 @@ class AcousticCellBuffer {
   std::size_t source_count() const { return sources_.size(); }
  private:
   static bool valid(const GridGeometry& g) {
+    // Bound map area as well as dimensions: an adversarial geometry must not
+    // cause unbounded downstream master-map iteration or index arithmetic.
     return g.width && g.height && g.width <= 100000 && g.height <= 100000 &&
+           static_cast<std::uint64_t>(g.width) * g.height <= 4000000ULL &&
            std::isfinite(g.resolution) && g.resolution > 0 &&
            std::isfinite(g.origin_x) && std::isfinite(g.origin_y);
   }
