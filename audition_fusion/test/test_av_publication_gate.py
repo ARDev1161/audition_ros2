@@ -110,7 +110,26 @@ class TestPublicationGate(unittest.TestCase):
         h = Harness()
         h.visual = []
         self.assertEqual(self.publish(h), ([], False))
-        self.assertEqual(h.matcher.calls, 1)
+        self.assertEqual(h.matcher.calls, 0)
+
+    def test_missing_audio_never_calls_permissive_matcher(self):
+        h = Harness()
+        h.audio = []
+        h.matcher.propose = lambda *_: self.fail('matcher must not run without audio')
+        self.assertEqual(self.publish(h), ([], False))
+
+    def test_missing_visual_never_calls_permissive_matcher(self):
+        h = Harness()
+        h.visual = []
+        h.matcher.propose = lambda *_: self.fail('matcher must not run without vision')
+        self.assertEqual(self.publish(h), ([], False))
+
+    def test_both_missing_never_calls_matcher(self):
+        h = Harness()
+        h.audio = []
+        h.visual = []
+        h.matcher.propose = lambda *_: self.fail('matcher must not run without evidence')
+        self.assertEqual(self.publish(h), ([], False))
 
 
 if __name__ == "__main__":
