@@ -178,6 +178,40 @@ class TestClockRollback(unittest.TestCase):
             self.assertEqual(h.published, [], callback)
             self.assertEqual(h.temporal.resets, 0, callback)
 
+    def test_production_callbacks_ignore_replayed_sequence_without_mutation(self):
+        # Execute the production DDS rejection path with a fresh envelope.
+        # In particular, a replay must not replace a pending TF2 snapshot.
+        for callback, fence_name, session_name in (
+                ("on_audio", "audio_fence", "scene_session_id"),
+                ("on_visual", "vision_fence", "vision_session_id")):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            namespace = {}
+            exec(compile(ast.Module(body=[handler], type_ignores=[]),
+                         str(SOURCE), "exec"), namespace)
+            h = Harness(1_000_000_000, 1_000_000_000)
+            h.clock = lambda: h.current
+            h.fresh = lambda stamp, now_ns: True
+            h.get_logger = lambda: types.SimpleNamespace(
+                warning=lambda *args, **kwargs: None)
+            fence = types.SimpleNamespace(accept=lambda *args: False,
+                                          session="session", sequence=7)
+            setattr(h, fence_name, fence)
+            msg = types.SimpleNamespace(
+                header=types.SimpleNamespace(
+                    stamp=types.SimpleNamespace(sec=1, nanosec=0),
+                    frame_id="sensor"),
+                sequence_number=7)
+            setattr(msg, session_name, "session")
+            before = (h.audio, h.visual, h.pending_audio, h.pending_visual,
+                      h.audio_time, h.vision_time)
+            namespace[callback](h, msg)
+            after = (h.audio, h.visual, h.pending_audio, h.pending_visual,
+                     h.audio_time, h.vision_time)
+            self.assertEqual(before, after, callback)
+            self.assertEqual(h.published, [], callback)
+            self.assertEqual(h.temporal.resets, 0, callback)
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
