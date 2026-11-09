@@ -19,11 +19,13 @@ class SoftCostCells:
         self.max_cells = max_cells
         self.maximum_cost = maximum_cost
         self._owned = {}
+        self._last_clock = None
 
     def clear(self):
         """Return cells previously owned, for explicit clearing by the adapter."""
         removed = tuple(sorted(self._owned))
         self._owned.clear()
+        self._last_clock = None
         return removed
 
     def reconcile(self, sources, now_ns, *, transform=None):
@@ -34,7 +36,15 @@ class SoftCostCells:
         """
         previous = self._owned
         next_cells = {}
-        if callable(transform) and type(now_ns) is int and now_ns > 0:
+        # A ROS /clock rewind invalidates all observations from the old epoch.
+        # Clear owned cells, but never republish stale evidence in this cycle.
+        rewound = (type(now_ns) is int and self._last_clock is not None
+                   and now_ns < self._last_clock)
+        if type(now_ns) is int and now_ns > 0:
+            self._last_clock = now_ns
+        else:
+            self._last_clock = None
+        if not rewound and callable(transform) and type(now_ns) is int and now_ns > 0:
             for source in sources:
                 if not eligible(source, now_ns):
                     continue
