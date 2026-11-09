@@ -246,6 +246,42 @@ class TestClockRollback(unittest.TestCase):
             self.assertEqual(len(h.published), 1, callback)
             self.assertIsNone(getattr(h, "pending_" + field), callback)
 
+    def test_overcapacity_does_not_preserve_old_confirmation(self):
+        # A rejected snapshot must not leave temporal confirmations alive,
+        # even if the opposite modality remains available.
+        for callback, collection in (("on_audio", "sources"),
+                                     ("on_visual", "tracks")):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            namespace = {
+                "ns": lambda stamp: stamp.sec * 1000000000 + stamp.nanosec,
+                "time": types.SimpleNamespace(monotonic=lambda: 42.0)}
+            exec(compile(ast.Module(body=[handler], type_ignores=[]),
+                         str(SOURCE), "exec"), namespace)
+            h = Harness(1_000_000_000, 1_000_000_000)
+            h.clock = lambda: h.current
+            h.fresh = lambda stamp, now_ns: True
+            h.matcher = types.SimpleNamespace(maximum_tracks=1)
+            h.get_logger = lambda: types.SimpleNamespace(
+                warning=lambda *args, **kwargs: None)
+            setattr(h, "audio_fence" if callback == "on_audio"
+                    else "vision_fence",
+                    types.SimpleNamespace(accept=lambda *args: True))
+            msg = types.SimpleNamespace(
+                header=types.SimpleNamespace(
+                    stamp=types.SimpleNamespace(sec=1, nanosec=0),
+                    frame_id="sensor"),
+                sequence_number=1)
+            setattr(msg, "scene_session_id" if callback == "on_audio"
+                    else "vision_session_id", "session")
+            setattr(msg, collection, [object(), object()])
+            opposite = h.visual if callback == "on_audio" else h.audio
+            namespace[callback](h, msg)
+            self.assertEqual(h.temporal.resets, 1)
+            self.assertEqual(len(h.published), 1)
+            self.assertIs(h.visual if callback == "on_audio" else h.audio,
+                          opposite)
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
