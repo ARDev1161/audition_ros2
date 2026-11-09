@@ -71,5 +71,21 @@ int main() {
   assert(extreme_cells.own_cells.size() == 1);
   extreme_cells = extremes.tick(max_time, g);
   assert(extreme_cells.own_cells.empty());
+  // Huge but finite metric coordinates must not produce integer casts from
+  // nonfinite projected indices (UB under some compiler configurations).
+  AcousticCellBuffer projection(2, 100);
+  assert(projection.ingest({41, 100, 200, 1e308, 1e308, true}, 100));
+  auto projected = projection.tick(100, {10, 10, 1e-300, 0., 0.});
+  assert(projected.own_cells.empty());
+  // Reject an enormous map geometry rather than exposing it downstream.
+  assert(projection.ingest({42, 110, 200, 1., 1., true}, 110));
+  projected = projection.tick(110, {100000, 100000, 1., 0., 0.});
+  assert(projected.own_cells.empty() && projection.source_count() == 0);
+  // Invalid geometry must clear previously owned indices on the old grid.
+  AcousticCellBuffer invalid_grid(2, 100);
+  assert(invalid_grid.ingest({43, 100, 200, 1., 1., true}, 100));
+  assert(invalid_grid.tick(100, g).own_cells.size() == 1);
+  auto cleared = invalid_grid.tick(110, {100000, 100000, 1., 0., 0.});
+  assert(cleared.retired_cells.count(std::make_pair(1u, 1u)));
   return 0;
 }
