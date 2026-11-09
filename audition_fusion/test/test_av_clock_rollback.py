@@ -100,30 +100,32 @@ class TestClockRollback(unittest.TestCase):
         self.assertEqual(h.temporal.resets, 1)
         self.assertEqual(len(h.published), 1)
 
-    def test_invalid_envelope_handlers_call_revocation(self):
-        # Inspect the production callbacks, not a rewritten validation
-        # helper: malformed envelopes must revoke only their own sensor.
-        for callback, revoker in (("on_audio", "revoke_audio"),
-                                  ("on_visual", "revoke_visual")):
+    def test_rejected_envelope_cannot_clear_pending_retry(self):
+        # Production callback order: freshness and DDS replay checks must
+        # precede any mutation of the pending TF2 snapshot.
+        for callback, fence in (("on_audio", "audio_fence"),
+                                ("on_visual", "vision_fence")):
             handler = next(n for n in node.body
                            if isinstance(n, ast.FunctionDef) and n.name == callback)
-            calls = [n for n in ast.walk(handler)
-                     if isinstance(n, ast.Call)
-                     and isinstance(n.func, ast.Attribute)
-                     and isinstance(n.func.value, ast.Name)
-                     and n.func.value.id == "self"
-                     and n.func.attr == revoker]
-            self.assertEqual(len(calls), 1, callback)
-            # The revocation must occur only on a new invalid envelope,
-            # never on a TF2 retry that already passed the DDS fence.
-            guard = next(n for n in ast.walk(handler)
-                         if isinstance(n, ast.If)
-                         and isinstance(n.test, ast.UnaryOp)
-                         and isinstance(n.test.op, ast.Not)
-                         and isinstance(n.test.operand, ast.Name)
-                         and n.test.operand.id == "retry"
-                         and any(call in ast.walk(n) for call in calls))
-            self.assertIsNotNone(guard)
+            body = handler.body
+            pending_mutations = [i for i, statement in enumerate(body)
+                                 if isinstance(statement, ast.If)
+                                 and isinstance(statement.test, ast.UnaryOp)
+                                 and isinstance(statement.test.operand, ast.Name)
+                                 and statement.test.operand.id == "retry"
+                                 and any(isinstance(n, ast.Attribute)
+                                         and n.attr.startswith("pending_")
+                                         for n in ast.walk(statement))]
+            self.assertEqual(len(pending_mutations), 1, callback)
+            mutation_index = pending_mutations[0]
+            preceding = body[:mutation_index]
+            self.assertTrue(any(isinstance(n, ast.Call)
+                                and isinstance(n.func, ast.Attribute)
+                                and n.func.attr == "fresh"
+                                for stmt in preceding for n in ast.walk(stmt)))
+            self.assertTrue(any(isinstance(n, ast.Attribute)
+                                and n.attr == fence
+                                for stmt in preceding for n in ast.walk(stmt)))
 
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
