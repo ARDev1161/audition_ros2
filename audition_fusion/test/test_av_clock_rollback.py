@@ -151,6 +151,31 @@ class TestClockRollback(unittest.TestCase):
             self.assertFalse(any(isinstance(n, ast.Assign)
                                  for n in first_guard.body))
 
+    def test_production_callbacks_ignore_stale_without_state_mutation(self):
+        # Execute the production early-rejection path, rather than only
+        # inspecting its AST. A delayed packet must not clear a newer
+        # accepted snapshot or a pending TF2 transform.
+        for callback in ("on_audio", "on_visual"):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            namespace = {}
+            exec(compile(ast.Module(body=[handler], type_ignores=[]),
+                         str(SOURCE), "exec"), namespace)
+            h = Harness(1_000_000_000, 1_000_000_000)
+            h.fresh = lambda stamp, now_ns: False
+            msg = types.SimpleNamespace(
+                header=types.SimpleNamespace(
+                    stamp=types.SimpleNamespace(sec=1, nanosec=0),
+                    frame_id="sensor"))
+            before = (h.audio, h.visual, h.pending_audio, h.pending_visual,
+                      h.audio_time, h.vision_time)
+            namespace[callback](h, msg)
+            after = (h.audio, h.visual, h.pending_audio, h.pending_visual,
+                     h.audio_time, h.vision_time)
+            self.assertEqual(before, after, callback)
+            self.assertEqual(h.published, [], callback)
+            self.assertEqual(h.temporal.resets, 0, callback)
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
