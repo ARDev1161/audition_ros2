@@ -49,6 +49,12 @@ def eligible(source, now_ns, *, max_variance_m2=1.0):
         return False
     if any(c[i]*c[j] < c[k]*c[k]-1e-9 for i,j,k in ((0,4,1),(0,8,2),(4,8,5))):
         return False
+    # Pairwise minors alone do not guarantee a 3x3 covariance is PSD.
+    determinant = (c[0]*(c[4]*c[8]-c[5]*c[7])
+                   - c[1]*(c[3]*c[8]-c[5]*c[6])
+                   + c[2]*(c[3]*c[7]-c[4]*c[6]))
+    if determinant < -1e-9:
+        return False
     return True
 
 
