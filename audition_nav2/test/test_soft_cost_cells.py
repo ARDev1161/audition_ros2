@@ -42,6 +42,19 @@ class SoftCostCellsTests(unittest.TestCase):
         cells = SoftCostCells(resolution_m=1, max_cells=1)
         self.assertEqual(cells.reconcile([source('a'),source('b')], T, transform=lambda s:(1.,1.) if s.source_id=='a' else (2.,2.)), ({}, ()))
 
+    def test_clock_rewind_clears_even_when_source_appears_valid(self):
+        cells = SoftCostCells(resolution_m=1)
+        tf = lambda s: (2.,3.)
+        cells.reconcile([source()], T+50, transform=tf)
+        # An older clock epoch must never preserve previously painted cells.
+        self.assertEqual(cells.reconcile([source()], T, transform=tf), ({}, ((2,3),)))
+        self.assertEqual(cells.reconcile([], T+1, transform=tf), ({}, ()))
+
+    def test_bad_clock_revokes_all_owned_cells(self):
+        cells = SoftCostCells(resolution_m=1)
+        cells.reconcile([source()], T, transform=lambda s:(2.,3.))
+        self.assertEqual(cells.reconcile([source()], 0, transform=lambda s:(2.,3.)), ({}, ((2,3),)))
+
     def test_same_cell_combines_nonlethal(self):
         cells = SoftCostCells(resolution_m=1, maximum_cost=252)
         self.assertEqual(cells.reconcile([source('a'),source('b')], T, transform=lambda s:(1.,1.)), ({(1,1):252}, ()))
