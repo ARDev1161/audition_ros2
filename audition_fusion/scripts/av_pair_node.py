@@ -131,16 +131,14 @@ class AvPairNode(Node):
 
     def on_audio(self,msg,retry=False):
         now_ns=self.clock()
-        if not retry:
-            self.pending_audio=None
+        # A replayed or stale envelope is not an authoritative revocation:
+        # reject it before touching a valid pending TF2 retry or live rays.
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
-            # Invalid envelopes must not leave a previously confirmed pair
-            # alive until the timer fires. Preserve the independent sensor.
-            if not retry:
-                self.revoke_audio()
             return
         if not retry and not self.audio_fence.accept(msg.scene_session_id,msg.sequence_number,ns(msg.header.stamp)):
             return
+        if not retry:
+            self.pending_audio=None
         if len(msg.sources)>self.matcher.maximum_tracks:
             self.audio=[]
             self.audio_time=time.monotonic()
@@ -189,11 +187,7 @@ class AvPairNode(Node):
 
     def on_visual(self,msg,retry=False):
         now_ns=self.clock()
-        if not retry:
-            self.pending_visual=None
         if not self.fresh(msg.header.stamp,now_ns) or not msg.header.frame_id or msg.header.frame_id.startswith('/'):
-            if not retry:
-                self.revoke_visual()
             self.get_logger().warning(
                 f'AV visual envelope rejected: fresh={self.fresh(msg.header.stamp,now_ns)} '
                 f'frame={msg.header.frame_id!r} stamp={ns(msg.header.stamp)} now={now_ns}')
@@ -205,6 +199,8 @@ class AvPairNode(Node):
                 f'current_session={self.vision_fence.session!r} '
                 f'current_seq={self.vision_fence.sequence}')
             return
+        if not retry:
+            self.pending_visual=None
         if len(msg.tracks)>self.matcher.maximum_tracks:
             self.visual=[]
             self.vision_time=time.monotonic()
