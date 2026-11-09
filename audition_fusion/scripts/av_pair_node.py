@@ -140,6 +140,9 @@ class AvPairNode(Node):
         if not retry:
             self.pending_audio=None
         if len(msg.sources)>self.matcher.maximum_tracks:
+            # Over-capacity is invalid evidence, not a new empty observation.
+            # Never carry confirmations across a rejected sensor snapshot.
+            self.temporal.reset()
             self.audio=[]
             self.audio_time=time.monotonic()
             self.publish_pairs()
@@ -202,6 +205,9 @@ class AvPairNode(Node):
         if not retry:
             self.pending_visual=None
         if len(msg.tracks)>self.matcher.maximum_tracks:
+            # Over-capacity is invalid evidence, not a new empty observation.
+            # Never carry confirmations across a rejected sensor snapshot.
+            self.temporal.reset()
             self.visual=[]
             self.vision_time=time.monotonic()
             self.publish_pairs()
