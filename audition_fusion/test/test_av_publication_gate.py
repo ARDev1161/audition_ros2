@@ -104,6 +104,12 @@ class TestPublicationGate(unittest.TestCase):
         h = Harness()
         h.visual[0].stamp_ns = 1_500_000_000
         self.assertEqual(self.publish(h), ([], True))
+        self.assertEqual(h.matcher.calls, 0)
+
+    def test_mixed_skew_keeps_matcher_available_for_aligned_evidence(self):
+        h = Harness()
+        h.visual.append(types.SimpleNamespace(stamp_ns=1_500_000_000))
+        self.assertEqual(self.publish(h), (["candidate"], False))
         self.assertEqual(h.matcher.calls, 1)
 
     def test_missing_counterpart_never_produces_candidate(self):
