@@ -29,6 +29,8 @@ jobs:
             ros-humble-action-msgs \
             ros-humble-rclcpp \
             ros-humble-rclcpp-components \
+            ros-humble-nav2-costmap-2d \
+            ros-humble-pluginlib \
             ros-humble-launch-ros
       - name: M5 metric admission contract (ROS-independent)
         run: |
