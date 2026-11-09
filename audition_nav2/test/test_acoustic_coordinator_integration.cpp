@@ -32,7 +32,8 @@ int main() {
 
   // Disabled by default. No implicit acoustic authorization.
   assert(!coordinator.ingest_validated({1, 100, 200, 1, 1, true}, 110));
-  assert(!coordinator.tick(110, grid).rebuild_required);
+  // First grid establishment may request a full reset even with no sources.
+  assert(coordinator.tick(110, grid).update.own_cells.empty());
   coordinator.enable();
   assert(!coordinator.ingest_validated({1, 100, 200, 1, 1, false}, 110));
   assert(coordinator.ingest_validated({1, 100, 200, 1, 1, true}, 110));
