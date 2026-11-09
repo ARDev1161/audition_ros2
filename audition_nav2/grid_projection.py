@@ -83,6 +83,12 @@ class AcousticGridProjection:
             if type(cost) is not int or not 1 <= cost <= 252:
                 invalid = True
                 break
+            # Malformed coordinates invalidate the entire update. An ordinary
+            # finite point outside the rolling map is simply out of view.
+            if (type(x) not in (int, float) or type(y) not in (int, float)
+                    or not math.isfinite(x) or not math.isfinite(y)):
+                invalid = True
+                break
             cell = geometry.cell((x, y))
             if cell is None:
                 continue
