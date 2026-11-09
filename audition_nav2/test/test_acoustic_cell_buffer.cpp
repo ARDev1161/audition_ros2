@@ -46,5 +46,18 @@ int main() {
   assert(!bounded.ingest({5, 100, 300, 1., 1., true}, 110));
   bounded.tick(301, g);
   assert(bounded.ingest({5, 301, 400, 1., 1., true}, 301));
+  // A malicious producer cannot pin soft costs indefinitely or replay ancient
+  // observations. Bounded TTL/age are enforced independently of timer cadence.
+  AcousticCellBuffer horizons(2, 100, 1000, 100);
+  assert(!horizons.ingest({21, 100, 1101, 1., 1., true}, 110)); // TTL too long
+  assert(!horizons.ingest({21, 100, 200, 1., 1., true}, 201)); // too old
+  assert(horizons.ingest({21, 110, 210, 1., 1., true}, 110));
+  auto h = horizons.tick(110, g);
+  assert(h.own_cells.count(std::make_pair(1u,1u)));
+  h = horizons.tick(210, g);
+  assert(h.own_cells.empty() && h.retired_cells.count(std::make_pair(1u,1u)));
+  assert(!horizons.ingest({21, 110, 210, 1., 1., true}, 211));
+  try { AcousticCellBuffer invalid(2, 100, 0, 100); assert(false); }
+  catch (const std::invalid_argument&) {}
   return 0;
 }
