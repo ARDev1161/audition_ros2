@@ -44,12 +44,26 @@ class AcousticCellBuffer {
   LayerUpdate tick(std::int64_t now_ns, const GridGeometry& grid) {
     LayerUpdate result;
     if (!valid(grid) || now_ns <= 0) {
+      // Invalid geometry is NOT a new clock epoch. Retire acoustic ownership
+      // and fail closed, but retain replay barriers until their original TTL.
+      // Otherwise a delayed observation could recreate a revoked cost as soon
+      // as the grid becomes valid again. A nonpositive clock is different:
+      // the clock domain is unusable and must be re-established externally.
       result.retired_cells = keys(owned_);
       owned_.clear();
       sources_.clear();
-      latest_stamp_.clear();
-      last_clock_ = 0;
       geometry_valid_ = false;
+      if (now_ns <= 0) {
+        latest_stamp_.clear();
+        last_clock_ = 0;
+      } else {
+        if (last_clock_ && now_ns < last_clock_) latest_stamp_.clear();
+        last_clock_ = now_ns;
+        for (auto it = latest_stamp_.begin(); it != latest_stamp_.end();) {
+          if (it->second.second <= now_ns) it = latest_stamp_.erase(it);
+          else ++it;
+        }
+      }
       return result;
     }
     const bool rewind = last_clock_ && now_ns < last_clock_;
