@@ -100,6 +100,31 @@ class TestClockRollback(unittest.TestCase):
         self.assertEqual(h.temporal.resets, 1)
         self.assertEqual(len(h.published), 1)
 
+    def test_invalid_envelope_handlers_call_revocation(self):
+        # Inspect the production callbacks, not a rewritten validation
+        # helper: malformed envelopes must revoke only their own sensor.
+        for callback, revoker in (("on_audio", "revoke_audio"),
+                                  ("on_visual", "revoke_visual")):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            calls = [n for n in ast.walk(handler)
+                     if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Attribute)
+                     and isinstance(n.func.value, ast.Name)
+                     and n.func.value.id == "self"
+                     and n.func.attr == revoker]
+            self.assertEqual(len(calls), 1, callback)
+            # The revocation must occur only on a new invalid envelope,
+            # never on a TF2 retry that already passed the DDS fence.
+            guard = next(n for n in ast.walk(handler)
+                         if isinstance(n, ast.If)
+                         and isinstance(n.test, ast.UnaryOp)
+                         and isinstance(n.test.op, ast.Not)
+                         and isinstance(n.test.operand, ast.Name)
+                         and n.test.operand.id == "retry"
+                         and any(call in ast.walk(n) for call in calls))
+            self.assertIsNotNone(guard)
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
