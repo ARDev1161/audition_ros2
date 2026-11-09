@@ -163,6 +163,7 @@ class TestClockRollback(unittest.TestCase):
                          str(SOURCE), "exec"), namespace)
             h = Harness(1_000_000_000, 1_000_000_000)
             h.fresh = lambda stamp, now_ns: False
+            h.get_logger = lambda: types.SimpleNamespace(warning=lambda *args, **kwargs: None)
             msg = types.SimpleNamespace(
                 header=types.SimpleNamespace(
                     stamp=types.SimpleNamespace(sec=1, nanosec=0),
