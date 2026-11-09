@@ -24,7 +24,8 @@ class SoftCostCellsTests(unittest.TestCase):
         tf = lambda s: (2.,3.)
         cells.reconcile([source()], T, transform=tf)
         self.assertEqual(cells.reconcile([], T+1, transform=tf), ({}, ((2,3),)))
-        cells.reconcile([source()], T, transform=tf)
+        # Keep clock monotonic: a rewind is tested separately below.
+        cells.reconcile([source()], T+1, transform=tf)
         self.assertEqual(cells.reconcile([source()], T+100, transform=tf), ({}, ((2,3),)))
 
     def test_reject_unvalidated_and_diagnostic_objects(self):
