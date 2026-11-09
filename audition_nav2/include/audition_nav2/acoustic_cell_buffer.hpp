@@ -30,9 +30,13 @@ struct LayerUpdate {
 };
 class AcousticCellBuffer {
  public:
-  explicit AcousticCellBuffer(std::size_t max_sources = 32, std::uint8_t cost = 100)
-      : max_sources_(max_sources), cost_(cost) {
-    if (!max_sources_ || max_sources_ > 256 || !cost_ || cost_ > 252)
+  explicit AcousticCellBuffer(std::size_t max_sources = 32, std::uint8_t cost = 100,
+                              std::int64_t max_ttl_ns = 5000000000LL,
+                              std::int64_t max_age_ns = 1000000000LL)
+      : max_sources_(max_sources), cost_(cost), max_ttl_ns_(max_ttl_ns),
+        max_age_ns_(max_age_ns) {
+    if (!max_sources_ || max_sources_ > 256 || !cost_ || cost_ > 252 ||
+        max_ttl_ns_ <= 0 || max_age_ns_ <= 0)
       throw std::invalid_argument("invalid acoustic bounds");
   }
   // Called periodically even with no new messages. Coordinates MUST already
@@ -86,7 +90,9 @@ class AcousticCellBuffer {
     if (now_ns <= 0 || (last_clock_ && now_ns < last_clock_)) return false;
     if (!s.physically_validated || !s.source_id || s.stamp_ns <= 0 ||
         s.stamp_ns > now_ns || s.expires_ns <= now_ns ||
-        s.expires_ns <= s.stamp_ns || !std::isfinite(s.x_m) ||
+        s.expires_ns <= s.stamp_ns ||
+        s.expires_ns - s.stamp_ns > max_ttl_ns_ ||
+        now_ns - s.stamp_ns > max_age_ns_ || !std::isfinite(s.x_m) ||
         !std::isfinite(s.y_m)) return false;
     auto old = sources_.find(s.source_id);
     // Preserve a bounded watermark after TTL/revocation to reject replayed
@@ -125,6 +131,8 @@ class AcousticCellBuffer {
   }
   std::size_t max_sources_;
   std::uint8_t cost_;
+  std::int64_t max_ttl_ns_;
+  std::int64_t max_age_ns_;
   std::map<std::uint64_t, MetricCell> sources_;
   std::map<std::uint64_t, std::pair<std::int64_t, std::int64_t>> latest_stamp_;
   std::map<std::pair<unsigned, unsigned>, std::uint8_t> owned_;
