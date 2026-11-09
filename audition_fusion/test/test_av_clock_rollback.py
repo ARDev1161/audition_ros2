@@ -162,6 +162,7 @@ class TestClockRollback(unittest.TestCase):
             exec(compile(ast.Module(body=[handler], type_ignores=[]),
                          str(SOURCE), "exec"), namespace)
             h = Harness(1_000_000_000, 1_000_000_000)
+            h.clock = lambda: h.current
             h.fresh = lambda stamp, now_ns: False
             h.get_logger = lambda: types.SimpleNamespace(warning=lambda *args, **kwargs: None)
             msg = types.SimpleNamespace(
