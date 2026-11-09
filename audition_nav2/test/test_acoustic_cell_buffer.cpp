@@ -28,5 +28,23 @@ int main() {
   assert(r.own_cells.empty() && r.retired_cells.count(std::make_pair(2u,3u)));
   assert(b.source_count() == 0);
   assert(!b.ingest({5, 100, 150, 0., 0., true}, 0));
+  // Reordered observations cannot resurrect a revoked source before TTL.
+  AcousticCellBuffer replay(2, 80);
+  assert(replay.ingest({11, 100, 300, 1., 1., true}, 110));
+  replay.revoke(11);
+  assert(!replay.ingest({11, 99, 301, 1., 1., true}, 111));
+  assert(!replay.ingest({11, 100, 301, 1., 1., true}, 111));
+  assert(replay.ingest({11, 111, 310, 2., 2., true}, 111));
+  replay.tick(311, g);
+  assert(replay.source_count() == 0);
+  // Replay history is bounded even when distinct IDs are revoked repeatedly.
+  AcousticCellBuffer bounded(1, 80);
+  for (std::uint64_t id = 1; id <= 4; ++id) {
+    assert(bounded.ingest({id, 100, 300, 1., 1., true}, 110));
+    bounded.revoke(id);
+  }
+  assert(!bounded.ingest({5, 100, 300, 1., 1., true}, 110));
+  bounded.tick(301, g);
+  assert(bounded.ingest({5, 301, 400, 1., 1., true}, 301));
   return 0;
 }
