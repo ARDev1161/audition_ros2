@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.8)
+project(audition_nav2)
+find_package(ament_cmake REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rclcpp REQUIRED)
+add_library(acoustic_costmap_layer SHARED src/acoustic_costmap_layer.cpp)
+target_compile_features(acoustic_costmap_layer PUBLIC cxx_std_17)
+target_include_directories(acoustic_costmap_layer PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(acoustic_costmap_layer nav2_costmap_2d pluginlib rclcpp)
+pluginlib_export_plugin_description_file(nav2_costmap_2d acoustic_layer_plugin.xml)
+install(TARGETS acoustic_costmap_layer DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include)
+ament_package()
