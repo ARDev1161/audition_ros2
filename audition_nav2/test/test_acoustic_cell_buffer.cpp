@@ -1,5 +1,6 @@
 #include "audition_nav2/acoustic_cell_buffer.hpp"
 #include <cassert>
+#include <limits>
 using namespace audition_nav2;
 int main() {
   AcousticCellBuffer b(2, 100);
@@ -59,5 +60,16 @@ int main() {
   assert(!horizons.ingest({21, 110, 210, 1., 1., true}, 211));
   try { AcousticCellBuffer invalid(2, 100, 0, 100); (void)invalid; assert(false); }
   catch (const std::invalid_argument&) {}
+  // Exercise extreme but representable signed timestamps under UBSan.
+  // The TTL difference must be computed without signed overflow.
+  AcousticCellBuffer extremes(2, 100, 1000, 100);
+  const auto max_time = std::numeric_limits<std::int64_t>::max();
+  assert(!extremes.ingest({31, 1, max_time, 1., 1., true}, max_time - 1));
+  assert(!extremes.ingest({31, 1, max_time, 1., 1., true}, max_time));
+  assert(extremes.ingest({31, max_time - 50, max_time, 1., 1., true}, max_time - 25));
+  auto extreme_cells = extremes.tick(max_time - 25, g);
+  assert(extreme_cells.own_cells.size() == 1);
+  extreme_cells = extremes.tick(max_time, g);
+  assert(extreme_cells.own_cells.empty());
   return 0;
 }
