@@ -43,6 +43,7 @@ class AcousticCellBuffer {
       result.retired_cells = keys(owned_);
       owned_.clear();
       sources_.clear();
+      latest_stamp_.clear();
       last_clock_ = 0;
       geometry_valid_ = false;
       return result;
@@ -51,10 +52,15 @@ class AcousticCellBuffer {
     last_clock_ = now_ns;
     const bool changed = !geometry_valid_ || !same(grid, geometry_);
     result.geometry_changed = changed;
-    if (rewind) sources_.clear();
+    if (rewind) { sources_.clear(); latest_stamp_.clear(); }
     for (auto it = sources_.begin(); it != sources_.end();) {
       if (it->second.expires_ns <= now_ns || it->second.stamp_ns > now_ns)
         it = sources_.erase(it);
+      else ++it;
+    }
+    // Retain replay barriers through their original TTL, then prune them.
+    for (auto it = latest_stamp_.begin(); it != latest_stamp_.end();) {
+      if (it->second.second <= now_ns) it = latest_stamp_.erase(it);
       else ++it;
     }
     std::map<std::pair<unsigned, unsigned>, std::uint8_t> next;
@@ -83,9 +89,19 @@ class AcousticCellBuffer {
         s.expires_ns <= s.stamp_ns || !std::isfinite(s.x_m) ||
         !std::isfinite(s.y_m)) return false;
     auto old = sources_.find(s.source_id);
-    if (old != sources_.end() && s.stamp_ns <= old->second.stamp_ns) return false;
+    // Preserve a bounded watermark after TTL/revocation to reject replayed
+    // observations; a source may be reused only after its watermark expires.
+    auto seen = latest_stamp_.find(s.source_id);
+    if (seen != latest_stamp_.end() && s.stamp_ns <= seen->second.first)
+      return false;
     if (old == sources_.end() && sources_.size() >= max_sources_) return false;
+    if (seen == latest_stamp_.end() && latest_stamp_.size() >= max_sources_ * 4) {
+      // Bounded replay history: fail closed for unseen IDs rather than evicting
+      // a live replay barrier under pressure.
+      return false;
+    }
     sources_[s.source_id] = s;
+    latest_stamp_[s.source_id] = {s.stamp_ns, s.expires_ns};
     return true;
   }
   void revoke(std::uint64_t id) { sources_.erase(id); }
@@ -110,6 +126,7 @@ class AcousticCellBuffer {
   std::size_t max_sources_;
   std::uint8_t cost_;
   std::map<std::uint64_t, MetricCell> sources_;
+  std::map<std::uint64_t, std::pair<std::int64_t, std::int64_t>> latest_stamp_;
   std::map<std::pair<unsigned, unsigned>, std::uint8_t> owned_;
   GridGeometry geometry_{};
   bool geometry_valid_ = false;
