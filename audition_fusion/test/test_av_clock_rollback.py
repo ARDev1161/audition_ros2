@@ -127,6 +127,30 @@ class TestClockRollback(unittest.TestCase):
                                 and n.attr == fence
                                 for stmt in preceding for n in ast.walk(stmt)))
 
+    def test_rejected_envelopes_cannot_revoke_newer_sensor_state(self):
+        # A stale, malformed or replayed envelope must not erase a newer
+        # accepted observation. Check the actual production callback AST.
+        for callback, revoker in (("on_audio", "revoke_audio"),
+                                  ("on_visual", "revoke_visual")):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            revocations = [n for n in ast.walk(handler)
+                           if isinstance(n, ast.Call)
+                           and isinstance(n.func, ast.Attribute)
+                           and n.func.attr == revoker]
+            self.assertFalse(revocations, callback)
+            # The first callback guard must reject malformed/expired
+            # envelopes without mutating evidence or the pending TF retry.
+            first_guard = next(n for n in handler.body if isinstance(n, ast.If))
+            self.assertTrue(any(isinstance(n, ast.Call)
+                                and isinstance(n.func, ast.Attribute)
+                                and n.func.attr == "fresh"
+                                for n in ast.walk(first_guard.test)))
+            self.assertTrue(any(isinstance(n, ast.Return)
+                                for n in first_guard.body))
+            self.assertFalse(any(isinstance(n, ast.Assign)
+                                 for n in first_guard.body))
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
