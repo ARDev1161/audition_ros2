@@ -1,5 +1,8 @@
 #pragma once
 #include <memory>
+#include <mutex>
+#include <cstdint>
+#include "rclcpp/rclcpp.hpp"
 #include "nav2_costmap_2d/layer.hpp"
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
 
@@ -17,6 +20,11 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   void reset() override;
   bool isClearable() override { return true; }
  private:
+  // Expire ownership on a wall-clock cadence even without incoming messages.
+  // No acoustic observation source is wired yet; the timer is fail-closed.
+  void expireOnTimer();
+  std::mutex mutex_;
+  rclcpp::TimerBase::SharedPtr expiry_timer_;
   AcousticLayerCoordinator coordinator_;
 };
 }  // namespace audition_nav2
