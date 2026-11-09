@@ -118,6 +118,11 @@ class AcousticCellBuffer {
     return true;
   }
   void revoke(std::uint64_t id) { sources_.erase(id); }
+  // Fail-closed when authorization, TF, or the upstream metric-evidence gate
+  // becomes unavailable. The next tick retires our cells on the SAME grid.
+  // Preserve replay watermarks: a delayed packet must not restore a revoked
+  // cost merely because the upstream evidence gate was temporarily disabled.
+  void revoke_all() { sources_.clear(); }
   std::size_t source_count() const { return sources_.size(); }
  private:
   static bool valid(const GridGeometry& g) {
