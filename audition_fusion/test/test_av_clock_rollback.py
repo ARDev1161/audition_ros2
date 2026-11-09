@@ -14,7 +14,10 @@ tree = ast.parse(SOURCE.read_text())
 node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "AvPairNode")
 method = next(n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "clock")
 scope = {}
-exec(compile(ast.Module(body=[method], type_ignores=[]), str(SOURCE), "exec"), scope)
+revoke_methods = [n for n in node.body if isinstance(n, ast.FunctionDef)
+                  and n.name in ("revoke_audio", "revoke_visual")]
+exec(compile(ast.Module(body=[method, *revoke_methods], type_ignores=[]),
+             str(SOURCE), "exec"), scope)
 
 
 class Fence:
@@ -55,6 +58,11 @@ class Harness:
     def emit(self, pairs):
         self.published.append(pairs)
 
+    def publish_pairs(self):
+        # Production publication is independently tested; verify revocation
+        # triggers a new publication rather than waiting for a timer.
+        self.published.append(("publish", tuple(self.audio), tuple(self.visual)))
+
 
 class TestClockRollback(unittest.TestCase):
     def test_rewind_revokes_all_sensor_evidence(self):
@@ -69,6 +77,28 @@ class TestClockRollback(unittest.TestCase):
         self.assertIsNone(h.vision_time)
         self.assertEqual(h.published, [[]])
         self.assertEqual(h.last_clock_ns, 1_000_000_000)
+
+    def test_malformed_audio_envelope_revokes_only_audio_side(self):
+        h = Harness(1_000_000_000, 1_000_000_000)
+        visual = h.visual
+        scope["revoke_audio"](h)
+        self.assertEqual(h.audio, [])
+        self.assertIsNone(h.audio_time)
+        self.assertIsNone(h.pending_audio)
+        self.assertIs(h.visual, visual)
+        self.assertEqual(h.temporal.resets, 1)
+        self.assertEqual(len(h.published), 1)
+
+    def test_malformed_visual_envelope_revokes_only_visual_side(self):
+        h = Harness(1_000_000_000, 1_000_000_000)
+        audio = h.audio
+        scope["revoke_visual"](h)
+        self.assertEqual(h.visual, [])
+        self.assertIsNone(h.vision_time)
+        self.assertIsNone(h.pending_visual)
+        self.assertIs(h.audio, audio)
+        self.assertEqual(h.temporal.resets, 1)
+        self.assertEqual(len(h.published), 1)
 
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
