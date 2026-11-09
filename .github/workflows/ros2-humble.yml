@@ -47,6 +47,11 @@ jobs:
             audition_nav2/test/test_acoustic_master_merge.cpp \
             -o /tmp/test_acoustic_master_merge
           /tmp/test_acoustic_master_merge
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_dirty_bounds.cpp \
+            -o /tmp/test_acoustic_dirty_bounds
+          /tmp/test_acoustic_dirty_bounds
 
       - name: Build all packages
         shell: bash
