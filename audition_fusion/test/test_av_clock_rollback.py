@@ -282,6 +282,40 @@ class TestClockRollback(unittest.TestCase):
             self.assertIs(h.visual if callback == "on_audio" else h.audio,
                           opposite)
 
+    def test_overcapacity_rejects_without_transforming_untrusted_tracks(self):
+        # The bounded fast-path must run before per-track parsing or TF2.
+        # Malformed excess entries cannot trigger arbitrary transformations.
+        for callback, collection in (("on_audio", "sources"),
+                                     ("on_visual", "tracks")):
+            handler = next(n for n in node.body
+                           if isinstance(n, ast.FunctionDef) and n.name == callback)
+            namespace = {
+                "ns": lambda stamp: stamp.sec * 1000000000 + stamp.nanosec,
+                "time": types.SimpleNamespace(monotonic=lambda: 42.0)}
+            exec(compile(ast.Module(body=[handler], type_ignores=[]),
+                         str(SOURCE), "exec"), namespace)
+            h = Harness(1_000_000_000, 1_000_000_000)
+            h.clock = lambda: h.current
+            h.fresh = lambda stamp, now_ns: True
+            h.matcher = types.SimpleNamespace(maximum_tracks=1)
+            h.get_logger = lambda: types.SimpleNamespace(
+                warning=lambda *args, **kwargs: None)
+            h.transform_ray = lambda *args: self.fail("overcapacity reached TF2")
+            setattr(h, "audio_fence" if callback == "on_audio"
+                    else "vision_fence",
+                    types.SimpleNamespace(accept=lambda *args: True))
+            msg = types.SimpleNamespace(
+                header=types.SimpleNamespace(
+                    stamp=types.SimpleNamespace(sec=1, nanosec=0),
+                    frame_id="sensor"),
+                sequence_number=1)
+            setattr(msg, "scene_session_id" if callback == "on_audio"
+                    else "vision_session_id", "session")
+            setattr(msg, collection, [object(), object()])
+            namespace[callback](h, msg)
+            self.assertEqual(h.temporal.resets, 1)
+            self.assertEqual(len(h.published), 1)
+
     def test_forward_time_preserves_all_evidence(self):
         h = Harness(1_000_000_000, 2_000_000_000)
         audio, visual = h.audio, h.visual
