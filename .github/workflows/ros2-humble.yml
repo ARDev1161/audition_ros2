@@ -30,6 +30,11 @@ jobs:
             ros-humble-rclcpp \
             ros-humble-rclcpp-components \
             ros-humble-launch-ros
+      - name: M5 metric admission contract (ROS-independent)
+        run: |
+          python3 -m unittest discover -s audition_nav2/test -p 'test_*.py' -v
+          python3 -m py_compile audition_nav2/nav_admission.py
+
       - name: Build all packages
         shell: bash
         run: |
