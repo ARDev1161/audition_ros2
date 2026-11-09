@@ -50,7 +50,7 @@ int main() {
   // observations. Bounded TTL/age are enforced independently of timer cadence.
   AcousticCellBuffer horizons(2, 100, 1000, 100);
   assert(!horizons.ingest({21, 100, 1101, 1., 1., true}, 110)); // TTL too long
-  assert(!horizons.ingest({21, 100, 200, 1., 1., true}, 201)); // too old
+  assert(!horizons.ingest({21, 100, 300, 1., 1., true}, 201)); // too old
   assert(horizons.ingest({21, 110, 210, 1., 1., true}, 110));
   auto h = horizons.tick(110, g);
   assert(h.own_cells.count(std::make_pair(1u,1u)));
