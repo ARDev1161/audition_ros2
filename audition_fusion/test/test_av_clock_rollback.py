@@ -158,7 +158,7 @@ class TestClockRollback(unittest.TestCase):
         for callback in ("on_audio", "on_visual"):
             handler = next(n for n in node.body
                            if isinstance(n, ast.FunctionDef) and n.name == callback)
-            namespace = {}
+            namespace = {"ns": lambda stamp: stamp.sec * 1000000000 + stamp.nanosec}
             exec(compile(ast.Module(body=[handler], type_ignores=[]),
                          str(SOURCE), "exec"), namespace)
             h = Harness(1_000_000_000, 1_000_000_000)
@@ -186,7 +186,7 @@ class TestClockRollback(unittest.TestCase):
                 ("on_visual", "vision_fence", "vision_session_id")):
             handler = next(n for n in node.body
                            if isinstance(n, ast.FunctionDef) and n.name == callback)
-            namespace = {}
+            namespace = {"ns": lambda stamp: stamp.sec * 1000000000 + stamp.nanosec}
             exec(compile(ast.Module(body=[handler], type_ignores=[]),
                          str(SOURCE), "exec"), namespace)
             h = Harness(1_000_000_000, 1_000_000_000)
