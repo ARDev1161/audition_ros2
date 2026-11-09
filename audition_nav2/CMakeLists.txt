@@ -13,4 +13,16 @@ ament_target_dependencies(acoustic_costmap_layer nav2_costmap_2d pluginlib rclcp
 pluginlib_export_plugin_description_file(nav2_costmap_2d acoustic_layer_plugin.xml)
 install(TARGETS acoustic_costmap_layer DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_acoustic_costmap_plugin
+    test/test_acoustic_costmap_plugin.cpp)
+  if(TARGET test_acoustic_costmap_plugin)
+    target_compile_features(test_acoustic_costmap_plugin PUBLIC cxx_std_17)
+    target_include_directories(test_acoustic_costmap_plugin PRIVATE include)
+    target_link_libraries(test_acoustic_costmap_plugin acoustic_costmap_layer)
+    ament_target_dependencies(test_acoustic_costmap_plugin
+      nav2_costmap_2d pluginlib rclcpp)
+  endif()
+endif()
 ament_package()
