@@ -88,12 +88,18 @@ class AcousticCellBuffer {
   }
   bool ingest(const MetricCell& s, std::int64_t now_ns) {
     if (now_ns <= 0 || (last_clock_ && now_ns < last_clock_)) return false;
+    // Subtract timestamps as unsigned integers only after ordering checks.
+    // Signed subtraction can overflow on adversarial INT64_MAX timestamps.
     if (!s.physically_validated || !s.source_id || s.stamp_ns <= 0 ||
         s.stamp_ns > now_ns || s.expires_ns <= now_ns ||
-        s.expires_ns <= s.stamp_ns ||
-        s.expires_ns - s.stamp_ns > max_ttl_ns_ ||
-        now_ns - s.stamp_ns > max_age_ns_ || !std::isfinite(s.x_m) ||
+        s.expires_ns <= s.stamp_ns || !std::isfinite(s.x_m) ||
         !std::isfinite(s.y_m)) return false;
+    const auto ttl = static_cast<std::uint64_t>(s.expires_ns) -
+                     static_cast<std::uint64_t>(s.stamp_ns);
+    const auto age = static_cast<std::uint64_t>(now_ns) -
+                     static_cast<std::uint64_t>(s.stamp_ns);
+    if (ttl > static_cast<std::uint64_t>(max_ttl_ns_) ||
+        age > static_cast<std::uint64_t>(max_age_ns_)) return false;
     auto old = sources_.find(s.source_id);
     // Preserve a bounded watermark after TTL/revocation to reject replayed
     // observations; a source may be reused only after its watermark expires.
