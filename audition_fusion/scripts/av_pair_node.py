@@ -249,8 +249,13 @@ class AvPairNode(Node):
         # Missing sensor evidence cannot authorize even a diagnostic pair.
         # Do not invoke a matcher on a one-sided snapshot: an alternate
         # implementation might return a permissive or cached candidate.
+        # Disjoint capture times cannot be promoted by a permissive or
+        # cached matcher. Retain the evidence as pending until aligned.
+        all_skewed = (bool(self.audio and self.visual) and
+                      all(abs(a.stamp_ns-v.stamp_ns)>self.matcher.skew_ns
+                          for a in self.audio for v in self.visual))
         pairs = ([] if expired or unresolved_tf or not self.audio or not self.visual
-                 else self.matcher.propose(self.audio,self.visual))
+                 or all_skewed else self.matcher.propose(self.audio,self.visual))
         if not pairs and (self.audio or self.visual):
             self.get_logger().warning(
                 f'AV no pairing: audio={len(self.audio)} visual={len(self.visual)} '
