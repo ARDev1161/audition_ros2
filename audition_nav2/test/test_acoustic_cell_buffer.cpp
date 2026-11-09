@@ -87,6 +87,23 @@ int main() {
   assert(invalid_grid.tick(100, g).own_cells.size() == 1);
   auto cleared = invalid_grid.tick(110, {100000, 100000, 1., 0., 0.});
   assert(cleared.retired_cells.count(std::make_pair(1u, 1u)));
+  // Invalid/oversized geometry must not erase replay watermarks. After
+  // recovery, delayed packets from the retired epoch must remain rejected.
+  AcousticCellBuffer grid_recovery(2, 90);
+  assert(grid_recovery.ingest({61, 100, 300, 2., 2., true}, 110));
+  assert(grid_recovery.tick(110, g).own_cells.size() == 1);
+  auto lost_grid = grid_recovery.tick(120, {100000, 100000, 1., 0., 0.});
+  assert(lost_grid.retired_cells.count(std::make_pair(2u, 2u)));
+  assert(grid_recovery.source_count() == 0);
+  assert(!grid_recovery.ingest({61, 100, 300, 2., 2., true}, 121));
+  auto recovered_grid = grid_recovery.tick(121, g);
+  assert(recovered_grid.geometry_changed);
+  assert(recovered_grid.own_cells.empty());
+  assert(grid_recovery.ingest({61, 122, 300, 3., 3., true}, 122));
+  assert(grid_recovery.tick(122, g).own_cells.count(std::make_pair(3u, 3u)));
+  grid_recovery.tick(301, {100000, 100000, 1., 0., 0.});
+  assert(grid_recovery.ingest({62, 301, 400, 4., 4., true}, 301));
+  assert(grid_recovery.tick(301, g).own_cells.count(std::make_pair(4u, 4u)));
   // Upstream TF loss / operator rollback must revoke all active costs even
   // without an Ended message. Old packets cannot resurrect revoked cells.
   AcousticCellBuffer rollback(2, 90);
