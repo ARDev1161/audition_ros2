@@ -87,5 +87,22 @@ int main() {
   assert(invalid_grid.tick(100, g).own_cells.size() == 1);
   auto cleared = invalid_grid.tick(110, {100000, 100000, 1., 0., 0.});
   assert(cleared.retired_cells.count(std::make_pair(1u, 1u)));
+  // Upstream TF loss / operator rollback must revoke all active costs even
+  // without an Ended message. Old packets cannot resurrect revoked cells.
+  AcousticCellBuffer rollback(2, 90);
+  assert(rollback.ingest({51, 100, 300, 1., 2., true}, 110));
+  assert(rollback.ingest({52, 101, 300, 3., 4., true}, 110));
+  assert(rollback.tick(110, g).own_cells.size() == 2);
+  rollback.revoke_all();
+  assert(rollback.source_count() == 0);
+  auto rollback_update = rollback.tick(111, g);
+  assert(rollback_update.own_cells.empty());
+  assert(rollback_update.retired_cells.size() == 2);
+  assert(!rollback.ingest({51, 100, 300, 1., 2., true}, 112));
+  assert(!rollback.ingest({52, 101, 300, 3., 4., true}, 112));
+  // A genuinely newer, independently validated observation may be admitted
+  // only after the external metric/TF authorization gate is restored.
+  assert(rollback.ingest({51, 113, 300, 1., 2., true}, 113));
+  assert(rollback.tick(113, g).own_cells.size() == 1);
   return 0;
 }
