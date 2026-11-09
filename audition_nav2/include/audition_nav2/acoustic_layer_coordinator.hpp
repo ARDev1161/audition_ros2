@@ -50,6 +50,7 @@ class AcousticLayerCoordinator {
   }
  private:
   AcousticCellBuffer buffer_;
-  bool enabled_ = true;
+  // Optional acoustic navigation is fail-closed until explicitly authorized.
+  bool enabled_ = false;
 };
 }  // namespace audition_nav2
