@@ -33,7 +33,7 @@ jobs:
       - name: M5 metric admission contract (ROS-independent)
         run: |
           python3 -m unittest discover -s audition_nav2/test -p 'test_*.py' -v
-          python3 -m py_compile audition_nav2/nav_admission.py audition_nav2/evidence_cache.py audition_nav2/soft_cost_cells.py audition_nav2/stamped_tf_gate.py audition_nav2/ros_tf_adapter.py audition_nav2/grid_projection.py audition_nav2/advisory_gate.py
+          python3 -m py_compile audition_nav2/nav_admission.py audition_nav2/evidence_cache.py audition_nav2/soft_cost_cells.py audition_nav2/stamped_tf_gate.py audition_nav2/ros_tf_adapter.py audition_nav2/grid_projection.py audition_nav2/advisory_gate.py audition_nav2/layer_policy.py
 
       - name: Build all packages
         shell: bash
