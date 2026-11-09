@@ -57,7 +57,7 @@ int main() {
   h = horizons.tick(210, g);
   assert(h.own_cells.empty() && h.retired_cells.count(std::make_pair(1u,1u)));
   assert(!horizons.ingest({21, 110, 210, 1., 1., true}, 211));
-  try { AcousticCellBuffer invalid(2, 100, 0, 100); assert(false); }
+  try { AcousticCellBuffer invalid(2, 100, 0, 100); (void)invalid; assert(false); }
   catch (const std::invalid_argument&) {}
   return 0;
 }
