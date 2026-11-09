@@ -246,7 +246,7 @@ class AvPairNode(Node):
         # associate against a partial sensor snapshot or advance temporal
         # confirmations until every admitted ray has been transformed.
         unresolved_tf = self.pending_audio is not None or self.pending_visual is not None
-        pairs = [] if expired or unresolved_tf else self.matcher.propose(self.audio,self.visual)
+        # Missing sensor evidence cannot authorize even a diagnostic pair.\n        # Do not invoke a matcher on a one-sided snapshot: an alternate\n        # implementation might return a permissive or cached candidate.\n        pairs = ([] if expired or unresolved_tf or not self.audio or not self.visual\n                 else self.matcher.propose(self.audio,self.visual))
         if not pairs and (self.audio or self.visual):
             self.get_logger().warning(
                 f'AV no pairing: audio={len(self.audio)} visual={len(self.visual)} '
