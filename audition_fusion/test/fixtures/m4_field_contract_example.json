@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "dataset_id": "synthetic-manifest-contract-example",
+  "trials": [
+    {
+      "trial_id": "positive-direct",
+      "stratum": "direct",
+      "split": "held_out",
+      "recording_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "truth": {
+        "observable": true,
+        "pair": {
+          "audio_id": "speaker-1",
+          "radar_id": "radar-1"
+        }
+      },
+      "predictions": {
+        "audio_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "radar_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "instant_fusion": {
+          "decision": "pair",
+          "pair": {
+            "audio_id": "speaker-1",
+            "radar_id": "radar-1"
+          }
+        },
+        "temporal_fusion": {
+          "decision": "pair",
+          "pair": {
+            "audio_id": "speaker-1",
+            "radar_id": "radar-1"
+          }
+        }
+      }
+    },
+    {
+      "trial_id": "negative-bystander",
+      "stratum": "aligned-impostor",
+      "split": "held_out",
+      "recording_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "truth": {
+        "observable": true,
+        "pair": null
+      },
+      "predictions": {
+        "audio_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "radar_only": {
+          "decision": "none",
+          "pair": null
+        },
+        "instant_fusion": {
+          "decision": "pair",
+          "pair": {
+            "audio_id": "speaker-1",
+            "radar_id": "bystander-1"
+          }
+        },
+        "temporal_fusion": {
+          "decision": "none",
+          "pair": null
+        }
+      }
+    },
+    {
+      "trial_id": "positive-incorrect-association",
+      "stratum": "identity-swap",
+      "split": "held_out",
+      "recording_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "truth": {
+        "observable": true,
+        "pair": {
+          "audio_id": "speaker-1",
+          "radar_id": "radar-1"
+        }
+      },
+      "predictions": {
+        "audio_only": {
+          "decision": "none",
+          "pair": null
+        },
+        "radar_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "instant_fusion": {
+          "decision": "pair",
+          "pair": {
+            "audio_id": "speaker-1",
+            "radar_id": "bystander-1"
+          }
+        },
+        "temporal_fusion": {
+          "decision": "none",
+          "pair": null
+        }
+      }
+    },
+    {
+      "trial_id": "unknown-identity",
+      "stratum": "occluded",
+      "split": "held_out",
+      "recording_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "truth": {
+        "observable": false,
+        "pair": null
+      },
+      "predictions": {
+        "audio_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "radar_only": {
+          "decision": "abstain",
+          "pair": null
+        },
+        "instant_fusion": {
+          "decision": "none",
+          "pair": null
+        },
+        "temporal_fusion": {
+          "decision": "abstain",
+          "pair": null
+        }
+      }
+    }
+  ]
+}

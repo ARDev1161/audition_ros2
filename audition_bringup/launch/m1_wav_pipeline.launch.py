@@ -18,6 +18,8 @@ def generate_launch_description():
                               description="Relative namespace, e.g. robot_a/audition"),
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
         DeclareLaunchArgument("frames_per_message", default_value="160"),
+        DeclareLaunchArgument("loop", default_value="false",
+                              description="Repeat WAV replay for continuous CI or diagnostic input"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled",
                               description="disabled, mono (strict 16kHz single channel; no direction), or odas"),
         DeclareLaunchArgument("scene_config", default_value=PathJoinSubstitution([
@@ -36,7 +38,7 @@ def generate_launch_description():
                 "wav_path": wav_path,
                 "frame_id": LaunchConfiguration("frame_id"),
                 "frames_per_message": LaunchConfiguration("frames_per_message"),
-                "loop": False,
+                "loop": LaunchConfiguration("loop"),
             }],
             output="screen",
         ),
