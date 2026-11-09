@@ -6,6 +6,10 @@ using namespace audition_nav2;
 int main() {
   const GridGeometry g{8, 8, 1.0, 0.0, 0.0};
   AcousticLayerCoordinator layer(4, 80);
+  // No implicit opt-in: a fresh coordinator cannot paint a costmap.
+  assert(!layer.ingest_validated({1, 100, 200, 2, 3, true}, 110));
+  assert(layer.source_count() == 0);
+  layer.enable();
   assert(!layer.ingest_validated({1, 100, 200, 2, 3, false}, 110));
   assert(layer.ingest_validated({1, 100, 200, 2, 3, true}, 110));
   auto a = layer.tick(110, g);
