@@ -69,6 +69,25 @@ class LayerPolicyTests(unittest.TestCase):
         self.assertTrue(policy.ingest(metric('a'), NOW))
         self.assertFalse(policy.ingest(metric('b'), NOW))
 
+    def test_nonfinite_transform_retracts_all_sources(self):
+        policy = AcousticLayerPolicy()
+        self.assertTrue(policy.ingest(metric('a'), NOW))
+        self.assertTrue(policy.ingest(metric('b'), NOW))
+        policy.tick(GRID, NOW, transform=lambda s: (2., 3.) if s.source_id == 'a' else (4., 5.))
+        cells, removed, _ = policy.tick(
+            GRID, NOW+1,
+            transform=lambda s: (2., 3.) if s.source_id == 'a' else (float('nan'), 5.))
+        self.assertEqual(cells, {})
+        self.assertEqual(removed, ((2,3), (4,5)))
+
+    def test_outside_map_finite_source_is_not_a_failure(self):
+        policy = AcousticLayerPolicy()
+        policy.ingest(metric('a'), NOW)
+        policy.ingest(metric('b'), NOW)
+        cells, _, _ = policy.tick(
+            GRID, NOW, transform=lambda s: (2.,3.) if s.source_id == 'a' else (100.,100.))
+        self.assertEqual(cells, {(2,3):100})
+
     def test_invalid_cost_never_lethal(self):
         with self.assertRaises(ValueError):
             AcousticLayerPolicy(maximum_cost=253)
