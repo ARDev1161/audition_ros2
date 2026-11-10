@@ -40,9 +40,9 @@ class AcousticLayerCoordinator {
       // Explicit source revocation still requires an ordered timestamp.
       // A bearing-only or unverified packet must not impersonate a metric
       // source and revoke its independently confirmed ownership. Only a
-      // previously metric-authorized stream can report TF/metric loss.
+      // a metric-provenance stream can report TF/metric loss. The adapter
+      // must authenticate that provenance independently of this struct.
       if (evidence.provenance == MetricProvenance::IndependentlyVerifiedMetric &&
-          evidence.independent_metric_confirmation &&
           now_ns > 0 && evidence.cell.source_id != 0 &&
           evidence.cell.stamp_ns > 0 && evidence.cell.stamp_ns <= now_ns) {
         buffer_.revoke_if_not_older(evidence.cell.source_id,
