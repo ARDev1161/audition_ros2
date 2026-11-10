@@ -3,6 +3,7 @@
 // Nav2 must reset the requested region from its underlying layers before
 // AcousticMasterMerge::apply overlays our current soft costs.
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include "audition_nav2/acoustic_cell_buffer.hpp"
@@ -17,8 +18,11 @@ class AcousticDirtyBounds {
   // Force full rebuild on geometry changes, because indices from a previous
   // rolling map/resize cannot be used to identify old world-space costs.
   static CellBounds compute(const LayerUpdate& update, const GridGeometry& grid) {
-    if (!grid.width || !grid.height ||
-        static_cast<std::uint64_t>(grid.width) * grid.height > 4000000ULL)
+    if (!grid.width || !grid.height || grid.width > 100000 ||
+        grid.height > 100000 ||
+        static_cast<std::uint64_t>(grid.width) * grid.height > 4000000ULL ||
+        !std::isfinite(grid.resolution) || grid.resolution <= 0 ||
+        !std::isfinite(grid.origin_x) || !std::isfinite(grid.origin_y))
       return {};
     if (update.geometry_changed) return {0, 0, grid.width, grid.height};
     CellBounds out;
