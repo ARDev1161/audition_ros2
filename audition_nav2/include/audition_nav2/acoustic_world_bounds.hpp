@@ -45,6 +45,9 @@ class AcousticWorldBounds {
   static bool expand(const WorldBounds& own, double* min_x, double* min_y,
                      double* max_x, double* max_y) {
     if (!own.valid || !min_x || !min_y || !max_x || !max_y ||
+        !std::isfinite(own.min_x) || !std::isfinite(own.min_y) ||
+        !std::isfinite(own.max_x) || !std::isfinite(own.max_y) ||
+        own.min_x >= own.max_x || own.min_y >= own.max_y ||
         !std::isfinite(*min_x) || !std::isfinite(*min_y) ||
         !std::isfinite(*max_x) || !std::isfinite(*max_y) ||
         *min_x > *max_x || *min_y > *max_y) return false;
