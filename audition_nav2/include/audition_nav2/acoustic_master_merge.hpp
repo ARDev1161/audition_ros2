@@ -17,6 +17,10 @@ class AcousticMasterMerge {
   // A malformed producer must not turn the Nav2 update callback into an
   // unbounded traversal. This is an admission limit, not a map-size limit.
   static constexpr std::size_t kMaxOverlayCells = 4096;
+  // Bound synchronous baseline reconstruction in Nav2's update thread.
+  // A larger dirty window must be handled by a separately budgeted adapter;
+  // never partially copy it or silently retain old acoustic costs.
+  static constexpr std::uint64_t kMaxRebuildCells = 65536;
   // Nav2 constants: FREE_SPACE=0, LETHAL_OBSTACLE=254, NO_INFORMATION=255.
   // Unknown cells are never turned into evidence of free/occupied space.
   // Only a bounded acoustic soft cost may be added to a known master cell.
@@ -49,7 +53,9 @@ class AcousticMasterMerge {
     if (count > 4000000ULL || count > baseline_size ||
         count > destination_size ||
         min_i >= max_i || min_j >= max_j ||
-        max_i > geometry.width || max_j > geometry.height)
+        max_i > geometry.width || max_j > geometry.height ||
+        static_cast<std::uint64_t>(max_i - min_i) * (max_j - min_j) >
+            kMaxRebuildCells)
       return false;
     // Reject overlapping allocations, not only identical pointers. Compare
     // integer addresses to avoid undefined relational pointer comparisons.
