@@ -34,7 +34,7 @@ class AcousticLayerCoordinator {
       // ownership immediately, without releasing its anti-replay watermark.
       // This is intentionally conservative: an invalid TF or lost metric
       // confirmation must never leave the previous cost active until TTL.
-      if (evidence.cell.source_id != 0) buffer_.revoke(evidence.cell.source_id);
+      if (evidence.cell.source_id != 0) buffer_.revoke_if_not_older(evidence.cell.source_id, evidence.cell.stamp_ns);
       return false;
     }
     return buffer_.ingest(evidence.cell, now_ns);
