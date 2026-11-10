@@ -34,7 +34,15 @@ class AcousticLayerCoordinator {
       // ownership immediately, without releasing its anti-replay watermark.
       // This is intentionally conservative: an invalid TF or lost metric
       // confirmation must never leave the previous cost active until TTL.
-      if (evidence.cell.source_id != 0) buffer_.revoke_if_not_older(evidence.cell.source_id, evidence.cell.stamp_ns);
+      // A rejected packet is not necessarily a trustworthy revocation.
+      // Never accept future-dated or clock-invalid invalidations: those
+      // could advance a replay barrier beyond the receiver's current time.
+      // Explicit source revocation still requires an ordered timestamp.
+      if (now_ns > 0 && evidence.cell.source_id != 0 &&
+          evidence.cell.stamp_ns > 0 && evidence.cell.stamp_ns <= now_ns) {
+        buffer_.revoke_if_not_older(evidence.cell.source_id,
+                                    evidence.cell.stamp_ns);
+      }
       return false;
     }
     return buffer_.ingest(evidence.cell, now_ns);
