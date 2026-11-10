@@ -185,7 +185,7 @@ int main() {
         composed.data(), composed.size(), &additions));
     assert(additions == 0 && composed == previous);
   }
-  for (const auto invalid_index :
+  for (const auto& invalid_index :
        {std::pair<unsigned, unsigned>{grid.width, 0},
         std::pair<unsigned, unsigned>{0, grid.height}}) {
     LayerUpdate malformed = acoustic;
