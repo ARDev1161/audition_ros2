@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include "audition_nav2/acoustic_cell_buffer.hpp"
+#include "audition_nav2/acoustic_metric_admission.hpp"
 #include "audition_nav2/acoustic_dirty_bounds.hpp"
 #include "audition_nav2/acoustic_master_merge.hpp"
 
@@ -24,6 +25,11 @@ class AcousticLayerCoordinator {
   // Caller owns authorization and timestamped TF: no bearing-only path.
   bool ingest_validated(const MetricCell& observation, std::int64_t now_ns) {
     return enabled_ && buffer_.ingest(observation, now_ns);
+  }
+  // Subscriber-facing API: provenance and stamped TF are mandatory.
+  bool ingest_evidence(const StampedMetricEvidence& evidence, std::int64_t now_ns) {
+    return enabled_ && AcousticMetricAdmission::admit(evidence, now_ns) &&
+           buffer_.ingest(evidence.cell, now_ns);
   }
   void disable() { enabled_ = false; buffer_.revoke_all(); }
   void enable() { enabled_ = true; }
