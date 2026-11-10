@@ -46,7 +46,8 @@ class AcousticWorldBounds {
                      double* max_x, double* max_y) {
     if (!own.valid || !min_x || !min_y || !max_x || !max_y ||
         !std::isfinite(*min_x) || !std::isfinite(*min_y) ||
-        !std::isfinite(*max_x) || !std::isfinite(*max_y)) return false;
+        !std::isfinite(*max_x) || !std::isfinite(*max_y) ||
+        *min_x > *max_x || *min_y > *max_y) return false;
     *min_x = std::min(*min_x, own.min_x);
     *min_y = std::min(*min_y, own.min_y);
     *max_x = std::max(*max_x, own.max_x);
