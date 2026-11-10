@@ -57,6 +57,20 @@ int main() {
       assert(cell.max_y > shifted.origin_y + (j + 1) * shifted.resolution);
     }
   }
+  // A malformed caller-provided rectangle must not poison other Nav2 layers.
+  // WorldBounds is a public value type; valid=true alone is not trustworthy.
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const WorldBounds malformed[] = {
+      {nan, 0., 1., 1., true}, {0., nan, 1., 1., true},
+      {0., 0., inf, 1., true}, {0., 0., 1., -inf, true},
+      {2., 0., 1., 1., true}, {0., 2., 1., 1., true},
+      {1., 0., 1., 1., true}, {0., 1., 1., 1., true}};
+  for (const auto& invalid : malformed) {
+    double min_x = -3., min_y = -2., max_x = 4., max_y = 5.;
+    assert(!AcousticWorldBounds::expand(invalid, &min_x, &min_y,
+                                        &max_x, &max_y));
+    assert(min_x == -3. && min_y == -2. && max_x == 4. && max_y == 5.);
+  }
   x0 = inf;
   assert(!AcousticWorldBounds::expand(w, &x0, &y0, &x1, &y1));
   assert(x0 == inf);
