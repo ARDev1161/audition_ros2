@@ -31,6 +31,8 @@ void AcousticCostmapLayer::expireOnTimer() {
 void AcousticCostmapLayer::updateBounds(double, double, double,
                                        double* min_x, double* min_y,
                                        double* max_x, double* max_y) {
+  // Reject incomplete callbacks without modifying another layer's bounds.
+  if (!min_x || !min_y || !max_x || !max_y) return;
   std::lock_guard<std::mutex> lock(mutex_);
   // No trusted metric subscriber or master reconstruction contract exists.
   // Keep the coordinator disabled, but exercise its real geometry/TTL path
