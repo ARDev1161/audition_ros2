@@ -57,6 +57,16 @@ class AcousticMasterMerge {
         static_cast<std::uint64_t>(max_i - min_i) * (max_j - min_j) >
             kMaxRebuildCells)
       return false;
+    // A reconstructed master must never be modified on behalf of a malformed
+    // producer. Validate the entire overlay BEFORE the first baseline copy.
+    // The in-place apply() path remains tolerant of individual invalid cells
+    // because it is also used for defensive, best-effort overlay admission.
+    for (const auto& cell : update.own_cells) {
+      if (cell.first.first >= geometry.width ||
+          cell.first.second >= geometry.height ||
+          cell.second == 0 || cell.second > 252)
+        return false;
+    }
     // Reject overlapping allocations, not only identical pointers. Compare
     // integer addresses to avoid undefined relational pointer comparisons.
     const auto src = reinterpret_cast<std::uintptr_t>(baseline);
