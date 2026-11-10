@@ -1,6 +1,7 @@
 #pragma once
 // M5 admission boundary for future ROS2 evidence subscribers.
 // Bearing, AV association and diagnostic intersections are NEVER metric proof.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -22,6 +23,9 @@ struct StampedMetricEvidence {
 };
 class AcousticMetricAdmission final {
  public:
+  // Caller-supplied age limits cannot relax the hard TF freshness ceiling.
+  static constexpr std::int64_t kMaxTransformAgeNs = 250000000LL;
+  static constexpr std::int64_t kMaxStampSkewNs = 50000000LL;
   static bool admit(const StampedMetricEvidence& e, std::int64_t now_ns) {
     if (e.provenance != MetricProvenance::IndependentlyVerifiedMetric ||
         !e.independent_metric_confirmation || !e.cell.physically_validated ||
@@ -40,8 +44,10 @@ class AcousticMetricAdmission final {
           static_cast<std::uint64_t>(e.cell.stamp_ns)
         : static_cast<std::uint64_t>(e.cell.stamp_ns) -
           static_cast<std::uint64_t>(e.transform_stamp_ns);
-    const auto bound = static_cast<std::uint64_t>(e.transform_age_limit_ns);
-    return tf_age <= bound && observation_tf_gap <= bound;
+    const auto bound = static_cast<std::uint64_t>(
+        std::min(e.transform_age_limit_ns, kMaxTransformAgeNs));
+    return tf_age <= bound &&
+           observation_tf_gap <= std::min(bound, static_cast<std::uint64_t>(kMaxStampSkewNs));
   }
 };
 }  // namespace audition_nav2
