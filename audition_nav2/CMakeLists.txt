@@ -33,4 +33,14 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND)
 else()
   message(STATUS "audition_nav2: Nav2/pluginlib/rclcpp absent; optional costmap plugin not built")
 endif()
+# The merge contract is ROS-independent: exercise it even in CI images
+# without Nav2. The standalone assert-based executable returns nonzero on
+# contract violations, and is registered with CTest.
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_acoustic_master_merge test/test_acoustic_master_merge.cpp)
+  target_compile_features(test_acoustic_master_merge PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_master_merge PRIVATE include)
+  add_test(NAME acoustic_master_merge_contract COMMAND test_acoustic_master_merge)
+endif()
 ament_package()
