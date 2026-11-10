@@ -82,3 +82,47 @@ TEST(AcousticCostmapPlugin, RejectsUninitializedEvidenceAndNoImplicitEnable) {
   EXPECT_TRUE(cycle.update.own_cells.empty());
   EXPECT_EQ(coordinator.source_count(), 0u);
 }
+
+TEST(AcousticCostmapPlugin, IncompleteBoundsNeverMutateOtherLayers) {
+  pluginlib::ClassLoader<nav2_costmap_2d::Layer> loader(
+      "nav2_costmap_2d", "nav2_costmap_2d::Layer");
+  auto layer = loader.createSharedInstance("audition_nav2::AcousticCostmapLayer");
+  ASSERT_NE(layer, nullptr);
+  for (int missing = 0; missing < 4; ++missing) {
+    double values[4] = {-5.0, -6.0, 7.0, 8.0};
+    double* bounds[4] = {&values[0], &values[1], &values[2], &values[3]};
+    bounds[missing] = nullptr;
+    layer->updateBounds(0, 0, 0, bounds[0], bounds[1], bounds[2], bounds[3]);
+    EXPECT_DOUBLE_EQ(values[0], -5.0);
+    EXPECT_DOUBLE_EQ(values[1], -6.0);
+    EXPECT_DOUBLE_EQ(values[2], 7.0);
+    EXPECT_DOUBLE_EQ(values[3], 8.0);
+  }
+}
+
+TEST(AcousticCostmapPlugin, FailClosedAcrossClippedAndInvalidUpdateWindows) {
+  pluginlib::ClassLoader<nav2_costmap_2d::Layer> loader(
+      "nav2_costmap_2d", "nav2_costmap_2d::Layer");
+  auto layer = loader.createSharedInstance("audition_nav2::AcousticCostmapLayer");
+  ASSERT_NE(layer, nullptr);
+  nav2_costmap_2d::Costmap2D master(19, 13, 0.25, -2.5, 1.0, 0);
+  for (unsigned y = 0; y < 13; ++y) {
+    for (unsigned x = 0; x < 19; ++x) {
+      const unsigned kind = (x + 7 * y) % 4;
+      master.setCost(x, y, kind == 0 ? 254 : kind == 1 ? 255 :
+                             kind == 2 ? 175 : 0);
+    }
+  }
+  const std::vector<std::uint8_t> expected(
+      master.getCharMap(), master.getCharMap() + 19 * 13);
+  const int windows[][4] = {{0, 0, 19, 13}, {4, 3, 7, 8},
+                             {0, 0, 0, 0}, {18, 12, 19, 13},
+                             {9, 9, 3, 3}, {-2, -2, 2, 2}};
+  for (const auto& window : windows) {
+    layer->updateCosts(master, window[0], window[1], window[2], window[3]);
+    layer->reset();
+    EXPECT_EQ(std::vector<std::uint8_t>(
+                  master.getCharMap(), master.getCharMap() + 19 * 13),
+              expected);
+  }
+}
