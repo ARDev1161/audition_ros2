@@ -137,5 +137,27 @@ int main() {
   // only after the external metric/TF authorization gate is restored.
   assert(rollback.ingest({51, 113, 300, 1., 2., true}, 113));
   assert(rollback.tick(113, g).own_cells.size() == 1);
+  // Two independent sources may project to the same cell. Revoking or
+  // expiring only one must never erase the other source's soft cost.
+  AcousticCellBuffer overlap(3, 90);
+  assert(overlap.ingest({71, 100, 150, 2., 2., true}, 110));
+  assert(overlap.ingest({72, 101, 250, 2., 2., true}, 110));
+  auto shared = overlap.tick(110, g);
+  assert(shared.own_cells.size() == 1);
+  assert(shared.changed_cells.count(std::make_pair(2u, 2u)) == 1);
+  overlap.revoke(71);
+  shared = overlap.tick(111, g);
+  assert(shared.own_cells.size() == 1);
+  assert(shared.changed_cells.empty() && shared.retired_cells.empty());
+  shared = overlap.tick(151, g);
+  assert(shared.own_cells.size() == 1);
+  assert(shared.changed_cells.empty() && shared.retired_cells.empty());
+  overlap.revoke(72);
+  shared = overlap.tick(152, g);
+  assert(shared.own_cells.empty());
+  assert(shared.retired_cells.count(std::make_pair(2u, 2u)) == 1);
+  assert(overlap.ingest({73, 153, 200, 2., 2., true}, 153));
+  shared = overlap.tick(153, g);
+  assert(shared.changed_cells.count(std::make_pair(2u, 2u)) == 1);
   return 0;
 }
