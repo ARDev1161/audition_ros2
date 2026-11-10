@@ -17,6 +17,55 @@ class AcousticMasterMerge {
   // Nav2 constants: FREE_SPACE=0, LETHAL_OBSTACLE=254, NO_INFORMATION=255.
   // Unknown cells are never turned into evidence of free/occupied space.
   // Only a bounded acoustic soft cost may be added to a known master cell.
+  // Transactional alternative for adapters that can provide an independently
+  // reconstructed, non-acoustic master snapshot. Rebuild the requested region
+  // from that snapshot on EVERY cycle, including an empty/expired overlay.
+  // Never accept aliasing: copying from the previous acoustic master would
+  // retain stale soft costs and violate TTL clearing.
+  //
+  // Returns false on malformed input without touching destination. A true
+  // result means the region was rebuilt even if no acoustic cost was added.
+  static bool compose_from_baseline(
+      const LayerUpdate& update, const GridGeometry& geometry,
+      unsigned min_i, unsigned min_j, unsigned max_i, unsigned max_j,
+      const std::uint8_t* baseline, std::size_t baseline_size,
+      std::uint8_t* destination, std::size_t destination_size,
+      std::size_t* acoustic_changes = nullptr) {
+    if (acoustic_changes) *acoustic_changes = 0;
+    if (!baseline || !destination || baseline == destination ||
+        !std::isfinite(geometry.resolution) ||
+        !std::isfinite(geometry.origin_x) ||
+        !std::isfinite(geometry.origin_y) ||
+        geometry.resolution <= 0.0 ||
+        geometry.width == 0 || geometry.height == 0 ||
+        geometry.width > 100000 || geometry.height > 100000)
+      return false;
+    const auto count = static_cast<std::uint64_t>(geometry.width) *
+                       geometry.height;
+    if (count > 4000000ULL || count > baseline_size ||
+        count > destination_size ||
+        min_i >= max_i || min_j >= max_j ||
+        max_i > geometry.width || max_j > geometry.height)
+      return false;
+    // Reject overlapping allocations, not only identical pointers. Compare
+    // integer addresses to avoid undefined relational pointer comparisons.
+    const auto src = reinterpret_cast<std::uintptr_t>(baseline);
+    const auto dst = reinterpret_cast<std::uintptr_t>(destination);
+    if (src > std::numeric_limits<std::uintptr_t>::max() - count ||
+        dst > std::numeric_limits<std::uintptr_t>::max() - count ||
+        (src < dst + count && dst < src + count))
+      return false;
+    for (unsigned j = min_j; j < max_j; ++j) {
+      const auto row = static_cast<std::size_t>(j) * geometry.width;
+      std::copy(baseline + row + min_i, baseline + row + max_i,
+                destination + row + min_i);
+    }
+    const auto changes = apply(update, geometry, min_i, min_j, max_i, max_j,
+                               destination, destination_size);
+    if (acoustic_changes) *acoustic_changes = changes;
+    return true;
+  }
+
   static std::size_t apply(
       const LayerUpdate& update, const GridGeometry& geometry,
       unsigned min_i, unsigned min_j, unsigned max_i, unsigned max_j,
