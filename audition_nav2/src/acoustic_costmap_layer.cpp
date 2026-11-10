@@ -2,6 +2,8 @@
 #include "pluginlib/class_list_macros.hpp"
 #include <chrono>
 #include <functional>
+#include "audition_nav2/acoustic_world_bounds.hpp"
+#include "nav2_costmap_2d/layered_costmap.hpp"
 
 namespace audition_nav2 {
 void AcousticCostmapLayer::onInitialize() {
@@ -27,8 +29,24 @@ void AcousticCostmapLayer::expireOnTimer() {
   coordinator_.revoke_all();
 }
 void AcousticCostmapLayer::updateBounds(double, double, double,
-                                       double*, double*, double*, double*) {
-  // No dirty bounds while inactive; never modify another layer's bounds.
+                                       double* min_x, double* min_y,
+                                       double* max_x, double* max_y) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  // No trusted metric subscriber or master reconstruction contract exists.
+  // Keep the coordinator disabled, but exercise its real geometry/TTL path
+  // from the Nav2 update loop. No acoustic costs can be generated here.
+  if (!layered_costmap_) return;
+  const auto* map = layered_costmap_->getCostmap();
+  if (!map) return;
+  const GridGeometry geometry{
+      map->getSizeInCellsX(), map->getSizeInCellsY(),
+      map->getResolution(), map->getOriginX(), map->getOriginY()};
+  const auto node = node_.lock();
+  if (!node) return;
+  const auto cycle = coordinator_.tick(node->now().nanoseconds(), geometry);
+  if (!cycle.rebuild_required) return;
+  const auto bounds = AcousticWorldBounds::from_cells(cycle.dirty, geometry);
+  AcousticWorldBounds::expand(bounds, min_x, min_y, max_x, max_y);
 }
 void AcousticCostmapLayer::updateCosts(nav2_costmap_2d::Costmap2D&,
                                       int, int, int, int) {
