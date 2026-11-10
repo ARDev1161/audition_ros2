@@ -14,6 +14,9 @@
 namespace audition_nav2 {
 class AcousticMasterMerge {
  public:
+  // A malformed producer must not turn the Nav2 update callback into an
+  // unbounded traversal. This is an admission limit, not a map-size limit.
+  static constexpr std::size_t kMaxOverlayCells = 4096;
   // Nav2 constants: FREE_SPACE=0, LETHAL_OBSTACLE=254, NO_INFORMATION=255.
   // Unknown cells are never turned into evidence of free/occupied space.
   // Only a bounded acoustic soft cost may be added to a known master cell.
@@ -33,6 +36,7 @@ class AcousticMasterMerge {
       std::size_t* acoustic_changes = nullptr) {
     if (acoustic_changes) *acoustic_changes = 0;
     if (!baseline || !destination || baseline == destination ||
+        update.own_cells.size() > kMaxOverlayCells ||
         !std::isfinite(geometry.resolution) ||
         !std::isfinite(geometry.origin_x) ||
         !std::isfinite(geometry.origin_y) ||
@@ -70,7 +74,8 @@ class AcousticMasterMerge {
       const LayerUpdate& update, const GridGeometry& geometry,
       unsigned min_i, unsigned min_j, unsigned max_i, unsigned max_j,
       std::uint8_t* master, std::size_t master_size) {
-    if (!master || !std::isfinite(geometry.resolution) ||
+    if (!master || update.own_cells.size() > kMaxOverlayCells ||
+        !std::isfinite(geometry.resolution) ||
         !std::isfinite(geometry.origin_x) ||
         !std::isfinite(geometry.origin_y) || geometry.resolution <= 0.0 ||
         geometry.width == 0 || geometry.height == 0 ||
