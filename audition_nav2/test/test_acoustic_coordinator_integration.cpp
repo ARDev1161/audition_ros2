@@ -58,8 +58,8 @@ int main() {
 
   // Moving a single source dirties only the old and new cells; other
   // sources remain in the full overlay without expanding the rebuild bounds.
-  assert(coordinator.ingest_validated({1, 160, 200, 1, 2, true}, 160));
-  auto moved = coordinator.tick(160, grid);
+  assert(coordinator.ingest_validated({1, 159, 200, 1, 2, true}, 159));
+  auto moved = coordinator.tick(159, grid);
   assert(moved.rebuild_required);
   assert(moved.update.retired_cells.count({1, 1}) == 1);
   assert(moved.update.changed_cells.count({1, 2}) == 1);
