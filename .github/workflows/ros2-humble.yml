@@ -56,6 +56,11 @@ jobs:
           /tmp/test_acoustic_dirty_bounds
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
             -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_world_bounds.cpp \
+            -o /tmp/test_acoustic_world_bounds
+          /tmp/test_acoustic_world_bounds
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
             audition_nav2/test/test_acoustic_layer_coordinator.cpp \
             -o /tmp/test_acoustic_layer_coordinator
           /tmp/test_acoustic_layer_coordinator
