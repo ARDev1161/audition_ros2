@@ -38,7 +38,12 @@ class AcousticLayerCoordinator {
       // Never accept future-dated or clock-invalid invalidations: those
       // could advance a replay barrier beyond the receiver's current time.
       // Explicit source revocation still requires an ordered timestamp.
-      if (now_ns > 0 && evidence.cell.source_id != 0 &&
+      // A bearing-only or unverified packet must not impersonate a metric
+      // source and revoke its independently confirmed ownership. Only a
+      // previously metric-authorized stream can report TF/metric loss.
+      if (evidence.provenance == MetricProvenance::IndependentlyVerifiedMetric &&
+          evidence.independent_metric_confirmation &&
+          now_ns > 0 && evidence.cell.source_id != 0 &&
           evidence.cell.stamp_ns > 0 && evidence.cell.stamp_ns <= now_ns) {
         buffer_.revoke_if_not_older(evidence.cell.source_id,
                                     evidence.cell.stamp_ns);
