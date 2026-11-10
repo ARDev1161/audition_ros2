@@ -61,6 +61,11 @@ jobs:
           /tmp/test_acoustic_layer_coordinator
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
             -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_metric_admission.cpp \
+            -o /tmp/test_acoustic_metric_admission
+          /tmp/test_acoustic_metric_admission
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
             audition_nav2/test/test_acoustic_coordinator_integration.cpp \
             -o /tmp/test_acoustic_coordinator_integration
           /tmp/test_acoustic_coordinator_integration
