@@ -163,5 +163,26 @@ int main() {
   assert(overlap.ingest({73, 153, 200, 2., 2., true}, 153));
   shared = overlap.tick(153, g);
   assert(shared.changed_cells.count(std::make_pair(2u, 2u)) == 1);
+  // Two owners move into one cell: the previous position retires, but
+  // shared ownership must not trigger a redundant master-map rebuild.
+  AcousticCellBuffer converging(3, 75);
+  assert(converging.ingest({81, 100, 250, 1., 1., true}, 110));
+  assert(converging.ingest({82, 101, 250, 3., 3., true}, 110));
+  auto convergence = converging.tick(110, g);
+  assert(convergence.geometry_changed && convergence.own_cells.size() == 2);
+  assert(converging.ingest({81, 120, 250, 3., 3., true}, 120));
+  convergence = converging.tick(120, g);
+  assert(convergence.retired_cells.count(std::make_pair(1u, 1u)) == 1);
+  assert(convergence.changed_cells.empty());
+  assert(convergence.own_cells.size() == 1);
+  assert(convergence.own_cells.count(std::make_pair(3u, 3u)) == 1);
+  converging.revoke(82);
+  convergence = converging.tick(121, g);
+  assert(convergence.changed_cells.empty() && convergence.retired_cells.empty());
+  assert(convergence.own_cells.size() == 1);
+  converging.revoke(81);
+  convergence = converging.tick(122, g);
+  assert(convergence.own_cells.empty());
+  assert(convergence.retired_cells.count(std::make_pair(3u, 3u)) == 1);
   return 0;
 }
