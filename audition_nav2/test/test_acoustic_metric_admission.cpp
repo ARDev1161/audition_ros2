@@ -47,6 +47,21 @@ int main() {
   bad = e; bad.cell.stamp_ns = std::numeric_limits<std::int64_t>::min();
   assert(!AcousticMetricAdmission::admit(bad, now));
   assert(!AcousticMetricAdmission::admit(e, 0));
+  // An untrusted caller must not defeat TF freshness with a huge age limit.
+  bad = e; bad.transform_age_limit_ns = std::numeric_limits<std::int64_t>::max();
+  bad.transform_stamp_ns = now - 300000000LL;
+  bad.cell.stamp_ns = bad.transform_stamp_ns;
+  assert(!AcousticMetricAdmission::admit(bad, now));
+  // Even a fresh TF cannot be reused for a much older observation.
+  bad = e; bad.transform_age_limit_ns = std::numeric_limits<std::int64_t>::max();
+  bad.cell.stamp_ns = now - 100000000LL;
+  assert(!AcousticMetricAdmission::admit(bad, now));
+  // Boundary conditions: exactly 50ms skew is permitted; >50ms is not.
+  bad = e; bad.transform_age_limit_ns = 250000000LL;
+  bad.cell.stamp_ns = now - 60000000LL;
+  assert(AcousticMetricAdmission::admit(bad, now));
+  bad.cell.stamp_ns--;
+  assert(!AcousticMetricAdmission::admit(bad, now));
   coordinator.disable();
   bad = e; bad.cell.source_id = 8;
   assert(!coordinator.ingest_evidence(bad, now));
