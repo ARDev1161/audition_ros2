@@ -58,6 +58,7 @@ def run():
             request.timeout_ms = timeout_ms
             handle = wait(node, client.send_goal_async(request, feedback_callback=feedback_callback))
             assert handle.accepted
+            feedback_states.clear()  # Each goal has an independent confirmation epoch.
             return handle
 
         def send(observation, repeats=3):
@@ -119,7 +120,9 @@ def run():
         handle = goal(6000)
         future = handle.get_result_async()
         send(target(400, 2))
+        await_progress("confirming_bearing:1/3")
         send(target(401, 2))
+        await_progress("confirming_bearing:2/3")
         stale = target(399, 2)
         stale.valid = False
         send(stale)
@@ -130,7 +133,9 @@ def run():
         handle = goal(6000)
         future = handle.get_result_async()
         send(target(500, 2))
+        await_progress("confirming_bearing:1/3")
         send(target(501, 2))
+        await_progress("confirming_bearing:2/3")
         revoked = target(502, 2)
         revoked.valid = False
         send(revoked)
