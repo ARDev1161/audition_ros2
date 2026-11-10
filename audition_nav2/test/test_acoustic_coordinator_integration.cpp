@@ -46,6 +46,15 @@ int main() {
   assert(master[1 * 6 + 1] == 80);
   assert(master[2 * 6 + 2] == 254);
   assert(master[3 * 6 + 3] == 110);
+  // Periodic timer ticks with unchanged evidence must not request a
+  // master-map rebuild. The complete overlay remains available separately.
+  for (std::int64_t t = 111; t < 160; ++t) {
+    auto idle = coordinator.tick(t, grid);
+    assert(!idle.rebuild_required);
+    assert(idle.dirty.empty());
+    assert(idle.update.own_cells.size() == 3);
+    assert(idle.update.changed_cells.empty());
+  }
 
   // Expiry without any new messages must retire one source, not all sources.
   auto expiry = coordinator.tick(161, grid);
