@@ -59,8 +59,7 @@ class AcousticMasterMerge {
       return false;
     // A reconstructed master must never be modified on behalf of a malformed
     // producer. Validate the entire overlay BEFORE the first baseline copy.
-    // The in-place apply() path remains tolerant of individual invalid cells
-    // because it is also used for defensive, best-effort overlay admission.
+    // Both merge paths preflight the entire bounded overlay before mutation.
     for (const auto& cell : update.own_cells) {
       if (cell.first.first >= geometry.width ||
           cell.first.second >= geometry.height ||
@@ -99,6 +98,15 @@ class AcousticMasterMerge {
         static_cast<std::uint64_t>(geometry.width) * geometry.height > 4000000ULL ||
         static_cast<std::uint64_t>(geometry.width) * geometry.height > master_size)
       return 0;
+    // Strict preflight: a malformed source must never partially modify the
+    // shared Nav2 master, even if the bad cell lies outside this update window.
+    // Validate the bounded overlay before writing the first cost.
+    for (const auto& cell : update.own_cells) {
+      if (cell.first.first >= geometry.width ||
+          cell.first.second >= geometry.height ||
+          cell.second == 0 || cell.second > 252)
+        return 0;
+    }
     const unsigned end_i = std::min(max_i, geometry.width);
     const unsigned end_j = std::min(max_j, geometry.height);
     if (min_i >= end_i || min_j >= end_j) return 0;
