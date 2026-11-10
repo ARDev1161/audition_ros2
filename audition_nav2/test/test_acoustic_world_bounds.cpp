@@ -33,6 +33,30 @@ int main() {
   // An outward ULP at DBL_MAX must fail closed instead of producing infinity.
   assert(!AcousticWorldBounds::from_cells({0,0,1,1},
       {1,1,1.,std::numeric_limits<double>::max(),0.}).valid);
+  // Reject a corrupt accumulated rectangle without mutating any bound.
+  double bad_min_x = 3., bad_min_y = 4., bad_max_x = 2., bad_max_y = 5.;
+  assert(!AcousticWorldBounds::expand(w, &bad_min_x, &bad_min_y,
+                                      &bad_max_x, &bad_max_y));
+  assert(bad_min_x == 3. && bad_min_y == 4. &&
+         bad_max_x == 2. && bad_max_y == 5.);
+  bad_min_x = 0.; bad_min_y = 8.; bad_max_x = 1.; bad_max_y = 7.;
+  assert(!AcousticWorldBounds::expand(w, &bad_min_x, &bad_min_y,
+                                      &bad_max_x, &bad_max_y));
+  assert(bad_min_y == 8. && bad_max_y == 7.);
+  // Every legal single-cell dirty rectangle must cover the entire cell,
+  // including the upper edge, for a shifted fractional-resolution map.
+  const GridGeometry shifted{37, 29, 0.125, -1.75, 3.375};
+  for (unsigned j = 0; j < shifted.height; ++j) {
+    for (unsigned i = 0; i < shifted.width; ++i) {
+      const auto cell = AcousticWorldBounds::from_cells(
+          {i, j, i + 1, j + 1}, shifted);
+      assert(cell.valid);
+      assert(cell.min_x < shifted.origin_x + i * shifted.resolution);
+      assert(cell.min_y < shifted.origin_y + j * shifted.resolution);
+      assert(cell.max_x > shifted.origin_x + (i + 1) * shifted.resolution);
+      assert(cell.max_y > shifted.origin_y + (j + 1) * shifted.resolution);
+    }
+  }
   x0 = inf;
   assert(!AcousticWorldBounds::expand(w, &x0, &y0, &x1, &y1));
   assert(x0 == inf);
