@@ -35,8 +35,8 @@ class AcousticDirtyBounds {
         out.max_j = std::max(out.max_j, j + 1);
       }
     };
-    for (const auto& cell : update.own_cells)
-      include(cell.first.first, cell.first.second);
+    for (const auto& cell : update.changed_cells)
+      include(cell.first, cell.second);
     for (const auto& cell : update.retired_cells)
       include(cell.first, cell.second);
     return out;
