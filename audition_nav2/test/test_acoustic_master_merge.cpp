@@ -1,6 +1,8 @@
 #include "audition_nav2/acoustic_master_merge.hpp"
 #include <cassert>
 #include <cstdint>
+#include <limits>
+#include <cmath>
 #include <vector>
 using namespace audition_nav2;
 int main() {
@@ -35,5 +37,28 @@ int main() {
   assert(AcousticMasterMerge::apply(u,grid,2,2,3,3,master.data(),master.size()) == 1);
   assert(master[10] == 90);
   assert(AcousticMasterMerge::apply(u,grid,0,0,2,2,master.data(),master.size()) == 0);
+  // Invalid Nav2 geometry must never modify another layer's master costs.
+  const auto before_invalid = master;
+  const double bad[] = {std::numeric_limits<double>::quiet_NaN(),
+                        std::numeric_limits<double>::infinity(),
+                        -std::numeric_limits<double>::infinity()};
+  for (const double value : bad) {
+    for (int field = 0; field < 3; ++field) {
+      GridGeometry malformed = grid;
+      if (field == 0) malformed.resolution = value;
+      if (field == 1) malformed.origin_x = value;
+      if (field == 2) malformed.origin_y = value;
+      assert(AcousticMasterMerge::apply(u, malformed, 0, 0, 4, 3,
+                                        master.data(), master.size()) == 0);
+      assert(master == before_invalid);
+    }
+  }
+  for (const double resolution : {0.0, -0.5}) {
+    GridGeometry malformed = grid;
+    malformed.resolution = resolution;
+    assert(AcousticMasterMerge::apply(u, malformed, 0, 0, 4, 3,
+                                      master.data(), master.size()) == 0);
+    assert(master == before_invalid);
+  }
   return 0;
 }
