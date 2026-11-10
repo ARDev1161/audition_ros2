@@ -4,6 +4,7 @@
 // never "clear" an acoustic cell by writing FREE_SPACE into the master.
 #include <algorithm>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <map>
@@ -20,7 +21,10 @@ class AcousticMasterMerge {
       const LayerUpdate& update, const GridGeometry& geometry,
       unsigned min_i, unsigned min_j, unsigned max_i, unsigned max_j,
       std::uint8_t* master, std::size_t master_size) {
-    if (!master || geometry.width == 0 || geometry.height == 0 ||
+    if (!master || !std::isfinite(geometry.resolution) ||
+        !std::isfinite(geometry.origin_x) ||
+        !std::isfinite(geometry.origin_y) || geometry.resolution <= 0.0 ||
+        geometry.width == 0 || geometry.height == 0 ||
         geometry.width > 100000 || geometry.height > 100000 ||
         static_cast<std::uint64_t>(geometry.width) * geometry.height > 4000000ULL ||
         static_cast<std::uint64_t>(geometry.width) * geometry.height > master_size)
