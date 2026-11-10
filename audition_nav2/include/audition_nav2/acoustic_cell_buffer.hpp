@@ -132,6 +132,15 @@ class AcousticCellBuffer {
     return true;
   }
   void revoke(std::uint64_t id) { sources_.erase(id); }
+  // Reject delayed invalidations: an old packet cannot revoke a newer
+  // independently validated observation for the same source.
+  bool revoke_if_not_older(std::uint64_t id, std::int64_t stamp_ns) {
+    const auto it = sources_.find(id);
+    if (it == sources_.end() || stamp_ns <= 0 ||
+        stamp_ns < it->second.stamp_ns) return false;
+    sources_.erase(it);
+    return true;
+  }
   // Fail-closed when authorization, TF, or the upstream metric-evidence gate
   // becomes unavailable. The next tick retires our cells on the SAME grid.
   // Preserve replay watermarks: a delayed packet must not restore a revoked
