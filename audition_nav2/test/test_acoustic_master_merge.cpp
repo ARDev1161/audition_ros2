@@ -155,6 +155,31 @@ int main() {
   assert(additions == 1 && composed[6] == 80);
   for (std::size_t k = 0; k < composed.size(); ++k)
     if (k != 6) assert(composed[k] == 77);
+  // Validate the full overlay before copying ANY baseline bytes, including
+  // malformed entries outside the requested Nav2 update window.
+  for (const auto bad_cost : {std::uint8_t{0}, std::uint8_t{253},
+                              std::uint8_t{254}, std::uint8_t{255}}) {
+    LayerUpdate malformed = acoustic;
+    malformed.own_cells[{3, 2}] = bad_cost;
+    const auto previous = composed;
+    additions = 999;
+    assert(!AcousticMasterMerge::compose_from_baseline(
+        malformed, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+        composed.data(), composed.size(), &additions));
+    assert(additions == 0 && composed == previous);
+  }
+  for (const auto invalid_index :
+       {std::pair<unsigned, unsigned>{grid.width, 0},
+        std::pair<unsigned, unsigned>{0, grid.height}}) {
+    LayerUpdate malformed = acoustic;
+    malformed.own_cells[invalid_index] = 90;
+    const auto previous = composed;
+    additions = 999;
+    assert(!AcousticMasterMerge::compose_from_baseline(
+        malformed, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+        composed.data(), composed.size(), &additions));
+    assert(additions == 0 && composed == previous);
+  }
   // Alias, overlap, truncated buffers and invalid geometry fail atomically.
   const auto before_reject = composed;
   assert(!AcousticMasterMerge::compose_from_baseline(
