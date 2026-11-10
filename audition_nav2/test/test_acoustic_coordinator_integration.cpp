@@ -56,13 +56,28 @@ int main() {
     assert(idle.update.changed_cells.empty());
   }
 
+  // Moving a single source dirties only the old and new cells; other
+  // sources remain in the full overlay without expanding the rebuild bounds.
+  assert(coordinator.ingest_validated({1, 160, 200, 1, 2, true}, 160));
+  auto moved = coordinator.tick(160, grid);
+  assert(moved.rebuild_required);
+  assert(moved.update.retired_cells.count({1, 1}) == 1);
+  assert(moved.update.changed_cells.count({1, 2}) == 1);
+  assert(moved.update.changed_cells.size() == 1);
+  assert(moved.dirty.min_i == 1 && moved.dirty.max_i == 2);
+  assert(moved.dirty.min_j == 1 && moved.dirty.max_j == 3);
+  rebuild_and_overlay(moved, grid, master, baseline);
+  assert(master[1 * 6 + 1] == baseline[1 * 6 + 1]);
+  assert(master[2 * 6 + 1] == 80);
+  assert(master[3 * 6 + 3] == 110);
+
   // Expiry without any new messages must retire one source, not all sources.
   auto expiry = coordinator.tick(161, grid);
   assert(expiry.rebuild_required);
   assert(expiry.update.retired_cells.count({2, 2}) == 1);
   rebuild_and_overlay(expiry, grid, master, baseline);
   assert(master[2 * 6 + 2] == 254);
-  assert(master[1 * 6 + 1] == 80);
+  assert(master[2 * 6 + 1] == 80);
   assert(!coordinator.ingest_validated({2, 100, 160, 2, 2, true}, 162));
 
   // Disable is a rollback: rebuild removes acoustic cost, preserves obstacles.
