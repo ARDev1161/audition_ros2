@@ -199,5 +199,30 @@ int main() {
   oversized.own_cells.erase({static_cast<unsigned>(AcousticMasterMerge::kMaxOverlayCells), 0});
   assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
                                     untouched.data(), untouched.size()) == 0);
+  // Baseline reconstruction runs on the Nav2 update thread. A dirty
+  // window larger than the fixed work budget must be rejected before any
+  // destination cell is touched (even with an empty acoustic overlay).
+  GridGeometry large_grid{300, 300, 0.05, -7.5, -7.5};
+  std::vector<std::uint8_t> large_baseline(90000, 21);
+  std::vector<std::uint8_t> large_destination(90000, 77);
+  LayerUpdate empty_overlay;
+  std::size_t large_changes = 123;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      empty_overlay, large_grid, 0, 0, 257, 256,
+      large_baseline.data(), large_baseline.size(),
+      large_destination.data(), large_destination.size(), &large_changes));
+  assert(large_changes == 0);
+  for (auto cost : large_destination) assert(cost == 77);
+  // The exact budget boundary remains valid and copies only the requested
+  // region; no cell outside the update window is modified.
+  assert(AcousticMasterMerge::compose_from_baseline(
+      empty_overlay, large_grid, 0, 0, 256, 256,
+      large_baseline.data(), large_baseline.size(),
+      large_destination.data(), large_destination.size(), &large_changes));
+  assert(large_changes == 0);
+  assert(large_destination[0] == 21);
+  assert(large_destination[255 + 255 * 300] == 21);
+  assert(large_destination[256] == 77);
+  assert(large_destination[256 * 300] == 77);
   return 0;
 }
