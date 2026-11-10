@@ -62,6 +62,31 @@ int main() {
   assert(AcousticMetricAdmission::admit(bad, now));
   bad.cell.stamp_ns--;
   assert(!AcousticMetricAdmission::admit(bad, now));
+  // Delayed invalidation must not erase a newer independently verified source.
+  auto fresh = e;
+  fresh.cell.source_id = 42;
+  fresh.cell.stamp_ns = now - 1000000LL;
+  fresh.transform_stamp_ns = fresh.cell.stamp_ns;
+  assert(coordinator.ingest_evidence(fresh, now));
+  assert(coordinator.source_count() == 2);
+  auto delayed = fresh;
+  delayed.cell.stamp_ns -= 1000000LL;
+  delayed.transform_stamp_ns = delayed.cell.stamp_ns;
+  delayed.transform_lookup_succeeded = false;
+  assert(!coordinator.ingest_evidence(delayed, now));
+  assert(coordinator.source_count() == 2);
+  // A current invalidation revokes ownership, while preserving the replay
+  // watermark so the old valid packet cannot restore a cost.
+  auto invalidated = fresh;
+  invalidated.transform_lookup_succeeded = false;
+  assert(!coordinator.ingest_evidence(invalidated, now));
+  assert(coordinator.source_count() == 1);
+  assert(!coordinator.ingest_evidence(fresh, now));
+  auto renewed = fresh;
+  renewed.cell.stamp_ns += 1;
+  renewed.transform_stamp_ns = renewed.cell.stamp_ns;
+  assert(coordinator.ingest_evidence(renewed, now));
+  assert(coordinator.source_count() == 2);
   coordinator.disable();
   bad = e; bad.cell.source_id = 8;
   assert(!coordinator.ingest_evidence(bad, now));
