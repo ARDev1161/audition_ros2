@@ -138,6 +138,15 @@ class AcousticCellBuffer {
     const auto it = sources_.find(id);
     if (it == sources_.end() || stamp_ns <= 0 ||
         stamp_ns < it->second.stamp_ns) return false;
+    // Advance the replay barrier to the invalidation timestamp. Otherwise
+    // a delayed *valid* observation between the old sample and this
+    // invalidation could resurrect the revoked acoustic cost.
+    // Keep the original bounded expiry: untrusted invalidations must not
+    // extend the lifetime of a replay watermark indefinitely.
+    auto watermark = latest_stamp_.find(id);
+    if (watermark != latest_stamp_.end()) {
+      watermark->second.first = std::max(watermark->second.first, stamp_ns);
+    }
     sources_.erase(it);
     return true;
   }
