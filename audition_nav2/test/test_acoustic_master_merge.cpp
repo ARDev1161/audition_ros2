@@ -124,5 +124,62 @@ int main() {
                                     protected_master.data(),
                                     protected_master.size()) == 0);
   assert(protected_master[7] == 43);
+  // A fresh non-acoustic baseline is mandatory for TTL rollback.
+  // A previously merged master is never a valid baseline.
+  LayerUpdate acoustic;
+  acoustic.own_cells[{1, 1}] = 110;
+  acoustic.own_cells[{2, 1}] = 150;
+  std::vector<std::uint8_t> baseline(12, 23);
+  baseline[5] = 254;  // Independent obstacle wins.
+  baseline[6] = 40;
+  std::vector<std::uint8_t> composed(12, 77);
+  std::size_t additions = 999;
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 1 && composed[5] == 254 && composed[6] == 150);
+  // No packets arrive: TTL expiry produces an empty overlay. Recomposition
+  // must restore exactly the non-acoustic baseline, not write FREE_SPACE.
+  acoustic.own_cells.clear();
+  acoustic.retired_cells.insert({2, 1});
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 0 && composed == baseline);
+  // Partial Nav2 windows must not alter cells outside the dirty rectangle.
+  composed.assign(12, 77);
+  acoustic.own_cells[{2, 1}] = 80;
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 1 && composed[6] == 80);
+  for (std::size_t k = 0; k < composed.size(); ++k)
+    if (k != 6) assert(composed[k] == 77);
+  // Alias, overlap, truncated buffers and invalid geometry fail atomically.
+  const auto before_reject = composed;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, composed.data(), composed.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 0 && composed == before_reject);
+  std::vector<std::uint8_t> overlapping(24, 88);
+  const auto before_overlap = overlapping;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, overlapping.data(), 12,
+      overlapping.data() + 1, 12, &additions));
+  assert(overlapping == before_overlap);
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), 11,
+      composed.data(), composed.size(), &additions));
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 5, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(composed == before_reject);
+  // A malformed geometry must never cause a partial baseline copy.
+  GridGeometry invalid_grid = grid;
+  invalid_grid.resolution = std::numeric_limits<double>::quiet_NaN();
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, invalid_grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(composed == before_reject);
   return 0;
 }
