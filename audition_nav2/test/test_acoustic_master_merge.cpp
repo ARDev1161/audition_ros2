@@ -181,5 +181,23 @@ int main() {
       acoustic, invalid_grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
       composed.data(), composed.size(), &additions));
   assert(composed == before_reject);
+  // Reject oversized overlays before copying even a single baseline cell.
+  // The same bound protects the in-place merge path against unbounded work.
+  LayerUpdate oversized;
+  for (std::size_t n = 0; n <= AcousticMasterMerge::kMaxOverlayCells; ++n)
+    oversized.own_cells[{static_cast<unsigned>(n), 0}] = 42;
+  std::vector<std::uint8_t> untouched(12, 91);
+  std::size_t rejected_changes = 999;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      oversized, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      untouched.data(), untouched.size(), &rejected_changes));
+  assert(rejected_changes == 0 && untouched == std::vector<std::uint8_t>(12, 91));
+  assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
+                                    untouched.data(), untouched.size()) == 0);
+  assert(untouched == std::vector<std::uint8_t>(12, 91));
+  // Exactly at the limit remains admissible; out-of-grid keys are ignored.
+  oversized.own_cells.erase({static_cast<unsigned>(AcousticMasterMerge::kMaxOverlayCells), 0});
+  assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
+                                    untouched.data(), untouched.size()) == 0);
   return 0;
 }
