@@ -87,6 +87,30 @@ int main() {
   renewed.transform_stamp_ns = renewed.cell.stamp_ns;
   assert(coordinator.ingest_evidence(renewed, now));
   assert(coordinator.source_count() == 2);
+  // Rejected future-dated observations must not revoke an existing source.
+  // In particular, they must not poison its anti-replay watermark.
+  auto future = renewed;
+  future.cell.stamp_ns = now + 100000000LL;
+  future.transform_stamp_ns = future.cell.stamp_ns;
+  future.transform_lookup_succeeded = false;
+  assert(!coordinator.ingest_evidence(future, now));
+  assert(coordinator.source_count() == 2);
+  auto after_future = renewed;
+  after_future.cell.stamp_ns += 2;
+  after_future.transform_stamp_ns = after_future.cell.stamp_ns;
+  assert(coordinator.ingest_evidence(after_future, now));
+  assert(coordinator.source_count() == 2);
+  // Invalid receiver time is not permission to revoke.
+  auto invalid_clock = after_future;
+  invalid_clock.transform_lookup_succeeded = false;
+  assert(!coordinator.ingest_evidence(invalid_clock, 0));
+  assert(coordinator.source_count() == 2);
+  // Properly ordered, current invalidation still revokes immediately.
+  auto current_invalidation = after_future;
+  current_invalidation.transform_lookup_succeeded = false;
+  assert(!coordinator.ingest_evidence(current_invalidation, now));
+  assert(coordinator.source_count() == 1);
+  assert(!coordinator.ingest_evidence(after_future, now));
   coordinator.disable();
   bad = e; bad.cell.source_id = 8;
   assert(!coordinator.ingest_evidence(bad, now));
