@@ -26,6 +26,9 @@ struct GridGeometry {
 struct LayerUpdate {
   std::map<std::pair<unsigned, unsigned>, std::uint8_t> own_cells;
   std::set<std::pair<unsigned, unsigned>> retired_cells;
+  // Cells newly owned or whose soft cost changed since the previous tick.
+  // Keep own_cells as the complete overlay for a Nav2 master rebuild.
+  std::set<std::pair<unsigned, unsigned>> changed_cells;
   bool geometry_changed = false;
 };
 class AcousticCellBuffer {
@@ -94,6 +97,13 @@ class AcousticCellBuffer {
     if (!changed) {
       for (const auto& entry : owned_)
         if (!next.count(entry.first)) result.retired_cells.insert(entry.first);
+    }
+    if (!changed) {
+      for (const auto& entry : next) {
+        const auto old = owned_.find(entry.first);
+        if (old == owned_.end() || old->second != entry.second)
+          result.changed_cells.insert(entry.first);
+      }
     }
     owned_ = next;
     geometry_ = grid;
