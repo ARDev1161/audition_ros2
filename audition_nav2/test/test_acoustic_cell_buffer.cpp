@@ -38,6 +38,22 @@ int main() {
   assert(replay.ingest({11, 111, 310, 2., 2., true}, 111));
   replay.tick(311, g);
   assert(replay.source_count() == 0);
+  // A newer invalidation creates a tombstone through the original bounded
+  // expiry. A delayed valid observation between the accepted sample and the
+  // invalidation must not restore the source.
+  AcousticCellBuffer invalidation(2, 80);
+  assert(invalidation.ingest({12, 100, 300, 1., 1., true}, 110));
+  assert(!invalidation.revoke_if_not_older(12, 99));
+  assert(invalidation.source_count() == 1);
+  assert(invalidation.revoke_if_not_older(12, 150));
+  assert(invalidation.source_count() == 0);
+  assert(!invalidation.ingest({12, 120, 300, 1., 1., true}, 160));
+  assert(!invalidation.ingest({12, 150, 300, 1., 1., true}, 160));
+  assert(invalidation.ingest({12, 161, 300, 2., 2., true}, 161));
+  invalidation.revoke_all();
+  assert(!invalidation.ingest({12, 150, 300, 1., 1., true}, 170));
+  invalidation.tick(301, g);
+  assert(invalidation.ingest({12, 301, 400, 3., 3., true}, 301));
   // Replay history is bounded even when distinct IDs are revoked repeatedly.
   AcousticCellBuffer bounded(1, 80);
   for (std::uint64_t id = 1; id <= 4; ++id) {
