@@ -12,8 +12,6 @@ int main() {
   u.own_cells[{1,0}] = 100;
   u.own_cells[{2,0}] = 100;
   u.own_cells[{3,0}] = 100;
-  u.own_cells[{1,1}] = 254; // malformed producer must not create lethal
-  u.own_cells[{99,99}] = 100;
   std::vector<std::uint8_t> master(12, 0);
   master[0] = 255; // unknown remains unknown
   master[1] = 254; // obstacle remains lethal
@@ -21,6 +19,25 @@ int main() {
   assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),master.size()) == 1);
   assert(master[0] == 255 && master[1] == 254 && master[2] == 120);
   assert(master[3] == 100 && master[5] == 0);
+  // A single malformed cell must reject the ENTIRE overlay atomically,
+  // even when a valid cost precedes it in sorted iteration order.
+  LayerUpdate poisoned = u;
+  poisoned.own_cells[{1,1}] = 254;
+  const auto before_poison = master;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 4, 3,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
+  poisoned = u;
+  poisoned.own_cells[{99,99}] = 90;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 4, 3,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
+  // Invalid values outside the update window must also reject the overlay.
+  poisoned = u;
+  poisoned.own_cells[{3,2}] = 255;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 2, 1,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
   assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),master.size()) == 0);
   assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,nullptr,master.size()) == 0);
   assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),1) == 0);
@@ -220,7 +237,7 @@ int main() {
   assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
                                     untouched.data(), untouched.size()) == 0);
   assert(untouched == std::vector<std::uint8_t>(12, 91));
-  // Exactly at the limit remains admissible; out-of-grid keys are ignored.
+  // Exactly at the limit remains bounded; invalid out-of-grid keys reject.
   oversized.own_cells.erase({static_cast<unsigned>(AcousticMasterMerge::kMaxOverlayCells), 0});
   assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
                                     untouched.data(), untouched.size()) == 0);
