@@ -106,4 +106,46 @@ int main() {
   assert(final.rebuild_required);
   assert(final.update.own_cells.empty());
   assert(!coordinator.tick(167, shifted).rebuild_required);
+
+  // Deterministic multi-source stress: repeated movement, overlapping cells,
+  // revocation, TTL, rolling origin, and idle cycles. Compare the incremental
+  // dirty-region update with a complete baseline rebuild at every step.
+  AcousticLayerCoordinator stress(8, 90);
+  stress.enable();
+  GridGeometry sg{12, 12, 1.0, 0.0, 0.0};
+  std::vector<std::uint8_t> base(144, 0), incremental(144, 0);
+  for (unsigned j = 0; j < 12; ++j)
+    for (unsigned i = 0; i < 12; ++i) {
+      const auto k = static_cast<std::size_t>(j) * 12 + i;
+      base[k] = (i + 3 * j) % 17 == 0 ? 254 :
+                (i + j) % 19 == 0 ? 255 :
+                (i + j) % 11 == 0 ? 130 : 0;
+    }
+  incremental = base;
+  for (std::int64_t step = 1; step <= 480; ++step) {
+    const auto now = 100000 + step;
+    if (step % 80 == 0)
+      sg.origin_x = (step / 80) % 3;
+    if (step % 37 == 0) stress.revoke(static_cast<std::uint64_t>(step % 8 + 1));
+    if (step % 113 == 0) stress.disable();
+    if (step % 113 == 1) stress.enable();
+    if (step % 3 == 0) {
+      const auto id = static_cast<std::uint64_t>(step % 8 + 1);
+      const double x = static_cast<double>((step / 3 + id) % 9 + 1);
+      const double y = static_cast<double>((step / 9 + id) % 9 + 1);
+      (void)stress.ingest_validated({id, now, now + 19, x, y, true}, now);
+    }
+    const auto cycle = stress.tick(now, sg);
+    rebuild_and_overlay(cycle, sg, incremental, base);
+    auto expected = base;
+    // A complete rebuild always applies the full current overlay, even when
+    // no dirty bounds were produced this cycle.
+    AcousticMasterMerge::apply(cycle.update, sg, 0, 0, 12, 12,
+                               expected.data(), expected.size());
+    assert(incremental == expected);
+    for (const auto cost : incremental)
+      assert(cost == 0 || cost == 90 || cost == 130 ||
+             cost == 254 || cost == 255);
+  }
 }
+
