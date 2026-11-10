@@ -144,7 +144,11 @@ int main() {
   assert(overlap.ingest({72, 101, 250, 2., 2., true}, 110));
   auto shared = overlap.tick(110, g);
   assert(shared.own_cells.size() == 1);
-  assert(shared.changed_cells.count(std::make_pair(2u, 2u)) == 1);
+  // First tick establishes geometry and requests a full-grid rebuild;
+  // changed_cells is intentionally reserved for same-geometry deltas.
+  assert(shared.geometry_changed);
+  assert(shared.changed_cells.empty());
+  assert(shared.own_cells.count(std::make_pair(2u, 2u)) == 1);
   overlap.revoke(71);
   shared = overlap.tick(111, g);
   assert(shared.own_cells.size() == 1);
