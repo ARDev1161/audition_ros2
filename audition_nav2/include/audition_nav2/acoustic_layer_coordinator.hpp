@@ -28,8 +28,16 @@ class AcousticLayerCoordinator {
   }
   // Subscriber-facing API: provenance and stamped TF are mandatory.
   bool ingest_evidence(const StampedMetricEvidence& evidence, std::int64_t now_ns) {
-    return enabled_ && AcousticMetricAdmission::admit(evidence, now_ns) &&
-           buffer_.ingest(evidence.cell, now_ns);
+    if (!enabled_) return false;
+    if (!AcousticMetricAdmission::admit(evidence, now_ns)) {
+      // An explicit invalidation of a known source revokes its previous
+      // ownership immediately, without releasing its anti-replay watermark.
+      // This is intentionally conservative: an invalid TF or lost metric
+      // confirmation must never leave the previous cost active until TTL.
+      if (evidence.cell.source_id != 0) buffer_.revoke(evidence.cell.source_id);
+      return false;
+    }
+    return buffer_.ingest(evidence.cell, now_ns);
   }
   void disable() { enabled_ = false; buffer_.revoke_all(); }
   void enable() { enabled_ = true; }
