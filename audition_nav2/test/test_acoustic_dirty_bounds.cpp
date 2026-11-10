@@ -1,6 +1,7 @@
 #include "audition_nav2/acoustic_dirty_bounds.hpp"
 #include <cassert>
 #include <cstdint>
+#include <limits>
 using namespace audition_nav2;
 int main() {
   const GridGeometry grid{10, 8, 0.1, 0., 0.};
@@ -36,5 +37,12 @@ int main() {
   assert(b.min_i == 0 && b.min_j == 0 && b.max_i == 10 && b.max_j == 8);
   assert(AcousticDirtyBounds::compute(update, GridGeometry{0,8,1,0,0}).empty());
   assert(AcousticDirtyBounds::compute(update, GridGeometry{5000,5000,1,0,0}).empty());
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  assert(AcousticDirtyBounds::compute(update, GridGeometry{10,8,0,0,0}).empty());
+  assert(AcousticDirtyBounds::compute(update, GridGeometry{10,8,-1,0,0}).empty());
+  assert(AcousticDirtyBounds::compute(update, GridGeometry{10,8,nan,0,0}).empty());
+  assert(AcousticDirtyBounds::compute(update, GridGeometry{10,8,1,inf,0}).empty());
+  assert(AcousticDirtyBounds::compute(update, GridGeometry{10,8,1,0,nan}).empty());
   return 0;
 }
