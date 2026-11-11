@@ -96,7 +96,8 @@ int main() {
   assert(!session.next(small, {20, 20, 0.2, 0, 0}, tile, 4));
   assert(session.begin(small, stable));
   assert(!session.next(small, stable, tile, 0));
-  assert(session.active() && session.cursor() == 0);
+  assert(!session.active() && session.cursor() == 0);
+  assert(session.begin(small, stable));
   std::uint64_t completed = 0;
   while (session.next(small, stable, tile, 3)) {
     completed += tile.max_i - tile.min_i;
@@ -108,11 +109,17 @@ int main() {
   assert(!session.active());
   // Geometry alone cannot detect ABA: a rolling map may return to its
   // original origin between two callbacks. Epoch changes must revoke cursor.
+  // A trusted (epoch-bound) session may never use the legacy zero token.
+  assert(!session.begin(small, stable, 0));
+  assert(!session.active());
   assert(session.begin(small, stable, 41));
   assert(session.next(small, stable, 41, tile, 4));
   assert(session.cursor() == 4);
   assert(!session.next(small, stable, 42, tile, 4));
   assert(!session.active() && session.cursor() == 0 && tile.empty());
+  assert(session.begin(small, stable, 43));
+  assert(!session.next(small, stable, 0, tile, 4));
+  assert(!session.active() && session.cursor() == 0);
   assert(session.begin(small, stable, 43));
   assert(!session.next(small, stable, tile, 4));
   assert(!session.active() && tile.empty());
@@ -122,6 +129,17 @@ int main() {
     epoch_visited += tile.max_i - tile.min_i;
   assert(epoch_visited == 20);
   assert(!session.active());
+  // Invalid budgets must revoke a partially processed transaction, rather
+  // than allow resumption against a potentially stale baseline.
+  assert(session.begin(small, stable, 45));
+  assert(session.next(small, stable, 45, tile, 2));
+  assert(!session.next(small, stable, 45, tile, 0));
+  assert(!session.active() && session.cursor() == 0 && tile.empty());
+  assert(session.begin(small, stable, 45));
+  assert(session.next(small, stable, 45, tile, 2));
+  assert(!session.next(small, stable, 45, tile,
+                       AcousticMasterMerge::kMaxRebuildCells + 1));
+  assert(!session.active() && session.cursor() == 0);
   assert(session.begin(small, stable, 45));
   assert(session.next(small, stable, 45, tile, 2));
   assert(!session.next(small, stable, 46, tile, 2));
