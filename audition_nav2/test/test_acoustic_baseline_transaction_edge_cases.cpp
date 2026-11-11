@@ -78,10 +78,24 @@ int main() {
       baseline.data(), baseline.size(), master.data(), master.size()));
   assert(master == snapshot);
 
-  // Malformed producer data outside the window is rejected atomically.\n  ticket.origin = BaselineOrigin::IndependentNonAcousticLayers;\n  ticket.cycle = 7;\n  overlay.own_cells[{7, 7}] = 253;\n  assert(!AcousticBaselineTransaction::apply(\n      gate, ticket, 9, geometry, overlay, 2, 3, 5, 4,\n      baseline.data(), baseline.size(), master.data(), master.size(), &changes));\n  assert(changes == 0 && master == snapshot);\n  overlay.own_cells.erase({7, 7});\n  // Invalid producer data consumes admission; the same cycle cannot replay.\n  assert(!AcousticBaselineTransaction::apply(\n      gate, ticket, 9, geometry, overlay, 2, 3, 5, 4,\n      baseline.data(), baseline.size(), master.data(), master.size()));\n\n  // Empty overlay is a full restoration of this window, not FREE_SPACE.
-  overlay.own_cells.clear();
+  // Malformed producer data outside the window is rejected atomically.
   ticket.origin = BaselineOrigin::IndependentNonAcousticLayers;
   ticket.cycle = 7;
+  overlay.own_cells[{7, 7}] = 253;
+  assert(!AcousticBaselineTransaction::apply(
+      gate, ticket, 9, geometry, overlay, 2, 3, 5, 4,
+      baseline.data(), baseline.size(), master.data(), master.size(), &changes));
+  assert(changes == 0 && master == snapshot);
+  overlay.own_cells.erase({7, 7});
+  // Invalid producer data consumes admission; the same cycle cannot replay.
+  assert(!AcousticBaselineTransaction::apply(
+      gate, ticket, 9, geometry, overlay, 2, 3, 5, 4,
+      baseline.data(), baseline.size(), master.data(), master.size()));
+
+  // Empty overlay is a full restoration of this window, not FREE_SPACE.
+  overlay.own_cells.clear();
+  ticket.origin = BaselineOrigin::IndependentNonAcousticLayers;
+  ticket.cycle = 8;
   assert(AcousticBaselineTransaction::apply(
       gate, ticket, 9, geometry, overlay, 2, 3, 5, 4,
       baseline.data(), baseline.size(), master.data(), master.size(), &changes));
