@@ -10,6 +10,9 @@ int main() {
   BaselineTicket ticket{7, 1, BaselineOrigin::IndependentNonAcousticLayers, grid};
   assert(gate.accept(ticket, 7, grid));
   assert(gate.active());
+  assert(gate.consume());
+  assert(!gate.active());
+  assert(!gate.consume());
   // Reusing a previous master or a stale snapshot is never an independent rebuild.
   assert(!gate.accept(ticket, 7, grid));
   assert(!gate.active());
@@ -91,6 +94,16 @@ int main() {
   baseline.generation = returned_generation;
   baseline.geometry = grid;
   assert(lifecycle_gate.accept(baseline, returned_generation, grid));
+  // Admission is one-shot: even an unchanged generation and geometry cannot
+  // authorize a second master write without a fresh independent baseline.
+  assert(lifecycle_gate.consume());
+  assert(!lifecycle_gate.consume());
+  assert(!lifecycle_gate.active());
+  assert(!lifecycle_gate.accept(baseline, returned_generation, grid));
+  baseline.cycle = 2;
+  assert(lifecycle_gate.accept(baseline, returned_generation, grid));
+  lifecycle_gate.invalidate();
+  assert(!lifecycle_gate.consume());
   generations.invalidate();
   lifecycle_gate.invalidate();
   assert(!lifecycle_gate.active());
