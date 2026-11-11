@@ -30,6 +30,15 @@ class AcousticBaselineGate {
     active_ = false;
   }
   bool active() const noexcept { return active_; }
+  // A successful admission authorizes exactly one bounded merge transaction.
+  // Reusing an accepted ticket across multiple updateCosts calls would allow
+  // a stale baseline to be applied after TTL, reset or a rolling shift.
+  // Consume before touching the master; a failed merge must rebuild anew.
+  bool consume() noexcept {
+    if (!active_) return false;
+    active_ = false;
+    return true;
+  }
   bool accept(const BaselineTicket& ticket,
               std::uint64_t current_generation,
               const GridGeometry& current_geometry) noexcept {
