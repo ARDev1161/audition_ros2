@@ -99,6 +99,27 @@ int main() {
   assert(AcousticMasterMerge::apply(window, grid, 0, 3, 4, 4,
                                     clipped.data(), clipped.size()) == 0);
   assert(clipped == before_window);
+  // Reject partially out-of-bounds windows atomically, not just fully
+  // out-of-range windows. A clipped partial write would be unsafe for
+  // rolling maps and stale acoustic-cost rollback.
+  LayerUpdate edge_overlay;
+  edge_overlay.own_cells[{0,0}] = 160;
+  edge_overlay.own_cells[{3,2}] = 170;
+  std::vector<std::uint8_t> edge_master(12, 11);
+  const auto edge_before = edge_master;
+  const unsigned bad_windows[][4] = {
+      {0, 0, 5, 3}, {0, 0, 4, 4}, {3, 2, 5, 4},
+      {4, 0, 5, 3}, {0, 3, 4, 4}, {2, 0, 2, 3},
+      {0, 2, 4, 2}, {3, 2, 1, 1}};
+  for (const auto& bounds : bad_windows) {
+    assert(AcousticMasterMerge::apply(
+        edge_overlay, grid, bounds[0], bounds[1], bounds[2], bounds[3],
+        edge_master.data(), edge_master.size()) == 0);
+    assert(edge_master == edge_before);
+  }
+  assert(AcousticMasterMerge::apply(edge_overlay, grid, 0, 0, 4, 3,
+                                    edge_master.data(), edge_master.size()) == 2);
+  assert(edge_master[0] == 160 && edge_master[11] == 170);
   // Soft acoustic evidence cannot overwrite unknown, inscribed/inflated
   // collision costs or a stronger independent layer.
   LayerUpdate competing;
