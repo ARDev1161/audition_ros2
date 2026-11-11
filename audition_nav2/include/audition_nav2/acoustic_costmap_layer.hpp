@@ -5,6 +5,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "nav2_costmap_2d/layer.hpp"
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
+#include "audition_nav2/acoustic_map_generation.hpp"
 
 namespace audition_nav2 {
 // Fail-closed plugin shell. No subscriptions until authenticated metric evidence
@@ -26,5 +27,7 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   std::mutex mutex_;
   rclcpp::TimerBase::SharedPtr expiry_timer_;
   AcousticLayerCoordinator coordinator_;
+  // Tracks Nav2 map geometry, but does not certify a non-acoustic baseline.
+  AcousticMapGeneration map_generation_;
 };
 }  // namespace audition_nav2
