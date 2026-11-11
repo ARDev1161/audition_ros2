@@ -6,6 +6,7 @@
 #include "nav2_costmap_2d/layer.hpp"
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
 #include "audition_nav2/acoustic_map_generation.hpp"
+#include "audition_nav2/acoustic_baseline_gate.hpp"
 
 namespace audition_nav2 {
 // Fail-closed plugin shell. No subscriptions until authenticated metric evidence
@@ -29,5 +30,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   AcousticLayerCoordinator coordinator_;
   // Tracks Nav2 map geometry, but does not certify a non-acoustic baseline.
   AcousticMapGeneration map_generation_;
+  // Every map reset/geometry transition revokes any pending baseline admission.
+  // No ticket is issued until an independent non-acoustic rebuild exists.
+  AcousticBaselineGate baseline_gate_;
 };
 }  // namespace audition_nav2
