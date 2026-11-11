@@ -2,6 +2,7 @@
 // A bounded, one-shot transaction between a verified non-acoustic snapshot
 // provider and the Nav2 master. This class does NOT certify snapshot origin:
 // only a trusted adapter that rebuilt other layers may issue the ticket.
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -55,25 +56,43 @@ class AcousticBaselineTransaction {
           cell.first.second >= geometry.height ||
           cell.second == 0 || cell.second > 252) return false;
     }
-    // A full-size scratch is bounded to 4M cells by the geometry contract.
+    // Stage only the requested window (at most 65,536 cells), not the
+    // entire map. The source is still indexed in full-map coordinates.
+    // This reduces allocation and bounded callback work for large maps.
+    const auto window_width = static_cast<std::size_t>(max_i - min_i);
     std::vector<std::uint8_t> scratch;
-    // Never propagate an allocation failure out of Nav2 updateCosts().
-    // The one-shot ticket has already been consumed; the master remains
-    // untouched and a future cycle must obtain a fresh independent baseline.
     try {
-      scratch.resize(static_cast<std::size_t>(count));
+      scratch.resize(static_cast<std::size_t>(area));
     } catch (const std::bad_alloc&) {
       return false;
     }
-    std::size_t changes = 0;
-    if (!AcousticMasterMerge::compose_from_baseline(
-            overlay, geometry, min_i, min_j, max_i, max_j,
-            independent_baseline, baseline_size, scratch.data(),
-            scratch.size(), &changes)) return false;
     for (unsigned y = min_j; y < max_j; ++y) {
-      const auto offset = static_cast<std::size_t>(y) * geometry.width;
-      for (unsigned x = min_i; x < max_i; ++x)
-        master[offset + x] = scratch[offset + x];
+      const auto source_offset = static_cast<std::size_t>(y) * geometry.width + min_i;
+      const auto window_offset = static_cast<std::size_t>(y - min_j) * window_width;
+      std::copy_n(independent_baseline + source_offset, window_width,
+                  scratch.data() + window_offset);
+    }
+    std::size_t changes = 0;
+    // The overlay is bounded to 4,096 entries. Preserve lethal, inscribed,
+    // unknown, and higher independent costs; never write audio-only lethal.
+    for (const auto& cell : overlay.own_cells) {
+      const auto x = cell.first.first;
+      const auto y = cell.first.second;
+      if (x < min_i || x >= max_i || y < min_j || y >= max_j) continue;
+      const auto index = static_cast<std::size_t>(y - min_j) * window_width +
+                         (x - min_i);
+      auto& existing = scratch[index];
+      if (existing != 255 && existing < 253 && existing < cell.second) {
+        existing = cell.second;
+        ++changes;
+      }
+    }
+    // Commit only after every preflight and staging operation succeeded.
+    for (unsigned y = min_j; y < max_j; ++y) {
+      const auto destination_offset = static_cast<std::size_t>(y) * geometry.width + min_i;
+      const auto window_offset = static_cast<std::size_t>(y - min_j) * window_width;
+      std::copy_n(scratch.data() + window_offset, window_width,
+                  master + destination_offset);
     }
     if (acoustic_changes) *acoustic_changes = changes;
     return true;
