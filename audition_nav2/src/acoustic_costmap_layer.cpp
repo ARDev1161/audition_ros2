@@ -14,6 +14,7 @@ void AcousticCostmapLayer::onInitialize() {
   current_ = true;
   coordinator_.disable();
   map_generation_.invalidate();
+  baseline_gate_.invalidate();
   // The layer remains opt-in and has no evidence subscriber. A timer is
   // nevertheless required: future evidence must expire without a new packet.
   // Capture a weak lifecycle node to avoid extending its lifetime.
@@ -28,6 +29,7 @@ void AcousticCostmapLayer::expireOnTimer() {
   std::lock_guard<std::mutex> lock(mutex_);
   // No trusted evidence is connected. Revoke, never generate map costs.
   coordinator_.revoke_all();
+  baseline_gate_.invalidate();
 }
 void AcousticCostmapLayer::updateBounds(double, double, double,
                                        double* min_x, double* min_y,
@@ -47,9 +49,12 @@ void AcousticCostmapLayer::updateBounds(double, double, double,
   // Observe geometry on every bounds callback, even while inert. A change
   // revokes any previously issued rebuild cursor before the next cycle.
   // This token alone is NOT proof of an independent non-acoustic baseline.
-  if (map_generation_.observe(geometry) == 0) {
+  const auto previous_generation = map_generation_.generation();
+  const auto observed_generation = map_generation_.observe(geometry);
+  if (!observed_generation || observed_generation != previous_generation) {
+    baseline_gate_.invalidate();
     coordinator_.revoke_all();
-    return;
+    if (!observed_generation) return;
   }
   const auto node = node_.lock();
   if (!node) return;
@@ -67,7 +72,10 @@ void AcousticCostmapLayer::updateCosts(nav2_costmap_2d::Costmap2D& master,
   const GridGeometry geometry{
       master.getSizeInCellsX(), master.getSizeInCellsY(),
       master.getResolution(), master.getOriginX(), master.getOriginY()};
-  if (map_generation_.observe(geometry) == 0) {
+  const auto previous_generation = map_generation_.generation();
+  const auto observed_generation = map_generation_.observe(geometry);
+  if (!observed_generation || observed_generation != previous_generation) {
+    baseline_gate_.invalidate();
     coordinator_.revoke_all();
   }
   // No costmap writes: bearing-only and diagnostic hypotheses stay inert.
@@ -76,6 +84,7 @@ void AcousticCostmapLayer::reset() {
   std::lock_guard<std::mutex> lock(mutex_);
   coordinator_.revoke_all();
   map_generation_.invalidate();
+  baseline_gate_.invalidate();
   current_ = true;
 }
 }  // namespace audition_nav2
