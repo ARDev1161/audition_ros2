@@ -77,8 +77,12 @@ class AcousticRebuildSession {
             CellBounds& tile,
             std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
     tile = {};
-    return next(dirty, geometry, generation_ == 0 ? 0 :
-                std::numeric_limits<std::uint64_t>::max(), tile, budget);
+    if (generation_ != 0) {
+      tile = {};
+      invalidate();
+      return false;
+    }
+    return next(dirty, geometry, 0, tile, budget);
   }
 
   bool next(const CellBounds& dirty, const GridGeometry& geometry,
