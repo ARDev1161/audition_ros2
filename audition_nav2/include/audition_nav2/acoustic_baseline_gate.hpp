@@ -25,16 +25,19 @@ struct BaselineTicket {
 class AcousticBaselineGate {
  public:
   void invalidate() noexcept {
-    generation_ = 0;
-    cycle_ = 0;
+    // Revoke the active admission, but preserve the replay high-water mark.
+    // A failed ticket or reset must not make an old cycle valid again.
+    active_ = false;
   }
+  bool active() const noexcept { return active_; }
   bool accept(const BaselineTicket& ticket,
               std::uint64_t current_generation,
               const GridGeometry& current_geometry) noexcept {
     if (ticket.origin != BaselineOrigin::IndependentNonAcousticLayers ||
         !ticket.generation || ticket.generation != current_generation ||
-        !ticket.cycle || ticket.cycle <= cycle_ ||
-        (generation_ && ticket.generation != generation_) ||
+        !ticket.cycle ||
+        ticket.generation < generation_ ||
+        (ticket.generation == generation_ && ticket.cycle <= cycle_) ||
         ticket.geometry.width != current_geometry.width ||
         ticket.geometry.height != current_geometry.height ||
         ticket.geometry.resolution != current_geometry.resolution ||
@@ -46,6 +49,7 @@ class AcousticBaselineGate {
     }
     generation_ = ticket.generation;
     cycle_ = ticket.cycle;
+    active_ = true;
     return true;
   }
  private:
@@ -58,5 +62,6 @@ class AcousticBaselineGate {
   }
   std::uint64_t generation_ = 0;
   std::uint64_t cycle_ = 0;
+  bool active_ = false;
 };
 } // namespace audition_nav2
