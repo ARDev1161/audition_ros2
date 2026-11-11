@@ -136,8 +136,6 @@ TEST(AcousticCostmapPlugin, ReobservesGeometryBetweenCallbacksWithoutWriting) {
   for (unsigned y = 0; y < 7; ++y)
     for (unsigned x = 0; x < 9; ++x)
       master.setCost(x, y, static_cast<unsigned char>((x + y) % 2 ? 254 : 175));
-  const std::vector<std::uint8_t> before(master.getCharMap(),
-                                          master.getCharMap() + 63);
   double min_x = -4, min_y = -4, max_x = 4, max_y = 4;
   layer->updateBounds(0, 0, 0, &min_x, &min_y, &max_x, &max_y);
   layer->updateCosts(master, 0, 0, 9, 7);
@@ -150,8 +148,10 @@ TEST(AcousticCostmapPlugin, ReobservesGeometryBetweenCallbacksWithoutWriting) {
                                       master.getCharMap() + 63), shifted);
   // Repeated reset and ABA return cannot authorize stale acoustic cells.
   master.updateOrigin(-1.0, -1.0);
+  const std::vector<std::uint8_t> restored(master.getCharMap(),
+                                            master.getCharMap() + 63);
   layer->reset();
   layer->updateCosts(master, 0, 0, 9, 7);
   EXPECT_EQ(std::vector<std::uint8_t>(master.getCharMap(),
-                                      master.getCharMap() + 63), before);
+                                      master.getCharMap() + 63), restored);
 }
