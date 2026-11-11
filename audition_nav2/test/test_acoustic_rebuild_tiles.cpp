@@ -190,5 +190,54 @@ int main() {
   assert(rebuild.next(rebuild_region, rebuild_grid, 103, tile, 7));
   assert(!rebuild.next(rebuild_region, rebuild_grid, 104, tile, 7));
   assert(!rebuild.active() && rebuild.cursor() == 0 && tile.empty());
+  // A multi-source overlay must retain independent lethal/unknown baseline
+  // cells and clear *all* former soft costs when every source expires.
+  std::vector<std::uint8_t> multi_baseline(400, 12);
+  multi_baseline[1 * 20 + 1] = 254;
+  multi_baseline[2 * 20 + 2] = 255;
+  std::vector<std::uint8_t> multi_master = multi_baseline;
+  LayerUpdate multi;
+  multi.own_cells[{1, 1}] = 120;  // Must not replace a lethal obstacle.
+  multi.own_cells[{2, 2}] = 90;   // Must not replace unknown space.
+  multi.own_cells[{7, 7}] = 110;
+  multi.own_cells[{18, 18}] = 145;
+  assert(rebuild.begin(rebuild_region, rebuild_grid, 105));
+  std::size_t multi_painted = 0;
+  while (rebuild.next(rebuild_region, rebuild_grid, 105, tile, 5)) {
+    std::size_t changes = 0;
+    assert(AcousticMasterMerge::compose_from_baseline(
+        multi, rebuild_grid, tile.min_i, tile.min_j, tile.max_i,
+        tile.max_j, multi_baseline.data(), multi_baseline.size(),
+        multi_master.data(), multi_master.size(), &changes));
+    multi_painted += changes;
+  }
+  assert(multi_painted == 2);
+  assert(multi_master[1 * 20 + 1] == 254);
+  assert(multi_master[2 * 20 + 2] == 255);
+  assert(multi_master[7 * 20 + 7] == 110);
+  assert(multi_master[18 * 20 + 18] == 145);
+
+  // An invalid cell outside the current tile must reject the entire
+  // operation before any destination bytes are changed.
+  LayerUpdate invalid = multi;
+  invalid.own_cells[{19, 19}] = 254;
+  const auto untouched = multi_master;
+  std::size_t rejected_changes = 999;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      invalid, rebuild_grid, 0, 0, 5, 1,
+      multi_baseline.data(), multi_baseline.size(),
+      multi_master.data(), multi_master.size(), &rejected_changes));
+  assert(multi_master == untouched);
+  assert(rejected_changes == 0);
+
+  multi.own_cells.clear();
+  assert(rebuild.begin(rebuild_region, rebuild_grid, 106));
+  while (rebuild.next(rebuild_region, rebuild_grid, 106, tile, 5)) {
+    assert(AcousticMasterMerge::compose_from_baseline(
+        multi, rebuild_grid, tile.min_i, tile.min_j, tile.max_i,
+        tile.max_j, multi_baseline.data(), multi_baseline.size(),
+        multi_master.data(), multi_master.size()));
+  }
+  assert(multi_master == multi_baseline);
   return 0;
 }
