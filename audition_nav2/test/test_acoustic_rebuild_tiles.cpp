@@ -113,6 +113,25 @@ int main() {
   }
   assert(completed == 20);
   assert(!session.active() && session.cursor() == 20);
+  // A one-tile transaction must be retired on the successful final call,
+  // without relying on a follow-up next() from the Nav2 update loop.
+  const CellBounds single{3, 4, 5, 5};
+  assert(session.begin(single, stable, 47));
+  assert(session.next(single, stable, 47, tile, 2));
+  assert(tile.min_i == 3 && tile.max_i == 5);
+  assert(!session.active() && session.cursor() == 2);
+  assert(!session.next(single, stable, 47, tile, 2));
+  assert(tile.empty() && session.cursor() == 2);
+  // The final partial tile also revokes its session immediately.
+  assert(session.begin(single, stable, 48));
+  assert(session.next(single, stable, 48, tile, 1));
+  assert(session.active() && session.cursor() == 1);
+  assert(session.next(single, stable, 48, tile, 1));
+  assert(!session.active() && session.cursor() == 2);
+  // A new generation explicitly starts a new transaction.
+  assert(session.begin(single, stable, 49));
+  assert(session.next(single, stable, 49, tile, 2));
+  assert(!session.active());
   assert(!session.next(small, stable, tile, 3));
   assert(!session.begin(small, {20, 20, 0.0, 0, 0}));
   assert(!session.active());
