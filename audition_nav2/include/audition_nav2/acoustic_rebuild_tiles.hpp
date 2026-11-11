@@ -96,8 +96,9 @@ class AcousticRebuildSession {
             std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
     tile = {};
     if (!active_) return false;
-    if (generation == 0 || generation != generation_ ||
-        !same(dirty, geometry)) {
+    // The legacy zero/zero path remains available for isolated tests;
+    // trusted sessions are created only with a nonzero generation.
+    if (generation != generation_ || !same(dirty, geometry)) {
       invalidate();
       return false;
     }
