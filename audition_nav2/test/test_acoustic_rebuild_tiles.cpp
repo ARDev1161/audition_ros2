@@ -106,5 +106,27 @@ int main() {
   assert(!session.next(small, stable, tile, 3));
   assert(!session.begin(small, {20, 20, 0.0, 0, 0}));
   assert(!session.active());
+  // Geometry alone cannot detect ABA: a rolling map may return to its
+  // original origin between two callbacks. Epoch changes must revoke cursor.
+  assert(session.begin(small, stable, 41));
+  assert(session.next(small, stable, 41, tile, 4));
+  assert(session.cursor() == 4);
+  assert(!session.next(small, stable, 42, tile, 4));
+  assert(!session.active() && session.cursor() == 0 && tile.empty());
+  assert(session.begin(small, stable, 43));
+  assert(!session.next(small, stable, tile, 4));
+  assert(!session.active() && tile.empty());
+  assert(session.begin(small, stable, 44));
+  std::uint64_t epoch_visited = 0;
+  while (session.next(small, stable, 44, tile, 3))
+    epoch_visited += tile.max_i - tile.min_i;
+  assert(epoch_visited == 20);
+  assert(!session.active());
+  assert(session.begin(small, stable, 45));
+  assert(session.next(small, stable, 45, tile, 2));
+  assert(!session.next(small, stable, 46, tile, 2));
+  assert(session.begin(small, stable, 46));
+  assert(session.next(small, stable, 46, tile, 2));
+  assert(tile.min_i == small.min_i);
   return 0;
 }
