@@ -58,7 +58,18 @@ class AcousticRebuildSession {
     if (!AcousticRebuildTiles::next(dirty, geometry, probe, first)) return false;
     dirty_ = dirty;
     geometry_ = geometry;
+    generation_ = 0;
     active_ = true;
+    return true;
+  }
+
+  // A generation token prevents ABA reuse when a rolling map moves away and
+  // later returns to exactly the same geometry between update callbacks.
+  // The producer must increment generation on reset/reallocation/rolling shift.
+  bool begin(const CellBounds& dirty, const GridGeometry& geometry,
+             std::uint64_t generation) {
+    if (!begin(dirty, geometry)) return false;
+    generation_ = generation;
     return true;
   }
 
@@ -66,8 +77,16 @@ class AcousticRebuildSession {
             CellBounds& tile,
             std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
     tile = {};
+    return next(dirty, geometry, generation_ == 0 ? 0 :
+                std::numeric_limits<std::uint64_t>::max(), tile, budget);
+  }
+
+  bool next(const CellBounds& dirty, const GridGeometry& geometry,
+            std::uint64_t generation, CellBounds& tile,
+            std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
+    tile = {};
     if (!active_) return false;
-    if (!same(dirty, geometry)) {
+    if (generation != generation_ || !same(dirty, geometry)) {
       invalidate();
       return false;
     }
@@ -99,6 +118,7 @@ class AcousticRebuildSession {
   CellBounds dirty_{};
   GridGeometry geometry_{};
   std::uint64_t cursor_ = 0;
+  std::uint64_t generation_ = 0;
   bool active_ = false;
 };
 }  // namespace audition_nav2
