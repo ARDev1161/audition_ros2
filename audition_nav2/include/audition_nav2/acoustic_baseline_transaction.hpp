@@ -40,7 +40,11 @@ class AcousticBaselineTransaction {
     if (count > 4000000ULL || count > baseline_size ||
         count > master_size) return false;
     // The master is never a valid independent source, including overlapping
-    // spans. The merge contract enforces this check on both full buffers.
+    // spans. A scratch buffer alone would hide this alias from the composer.
+    const auto src = reinterpret_cast<std::uintptr_t>(independent_baseline);
+    const auto dst = reinterpret_cast<std::uintptr_t>(master);
+    if (src > UINTPTR_MAX - count || dst > UINTPTR_MAX - count ||
+        (src < dst + count && dst < src + count)) return false;
     // A full-size scratch is bounded to 4M cells by the geometry contract.
     std::vector<std::uint8_t> scratch(static_cast<std::size_t>(count));
     std::size_t changes = 0;
