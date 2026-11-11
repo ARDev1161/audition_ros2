@@ -23,8 +23,10 @@ class AcousticRebuildTiles {
         !std::isfinite(grid.origin_x) || !std::isfinite(grid.origin_y) ||
         grid.width > 100000 || grid.height > 100000 ||
         static_cast<std::uint64_t>(grid.width) * grid.height > 4000000ULL ||
-        dirty.empty() || dirty.max_i > grid.width ||
-        dirty.max_j > grid.height ||
+        dirty.empty() || dirty.min_i >= dirty.max_i ||
+        dirty.min_j >= dirty.max_j ||
+        dirty.min_i >= grid.width || dirty.min_j >= grid.height ||
+        dirty.max_i > grid.width || dirty.max_j > grid.height ||
         budget == 0 || budget > AcousticMasterMerge::kMaxRebuildCells)
       return false;
     const std::uint64_t width = dirty.max_i - dirty.min_i;
