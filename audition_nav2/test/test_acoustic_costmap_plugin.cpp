@@ -126,3 +126,32 @@ TEST(AcousticCostmapPlugin, FailClosedAcrossClippedAndInvalidUpdateWindows) {
               expected);
   }
 }
+
+TEST(AcousticCostmapPlugin, ReobservesGeometryBetweenCallbacksWithoutWriting) {
+  pluginlib::ClassLoader<nav2_costmap_2d::Layer> loader(
+      "nav2_costmap_2d", "nav2_costmap_2d::Layer");
+  auto layer = loader.createSharedInstance("audition_nav2::AcousticCostmapLayer");
+  ASSERT_NE(layer, nullptr);
+  nav2_costmap_2d::Costmap2D master(9, 7, 0.2, -1.0, -1.0, 0);
+  for (unsigned y = 0; y < 7; ++y)
+    for (unsigned x = 0; x < 9; ++x)
+      master.setCost(x, y, static_cast<unsigned char>((x + y) % 2 ? 254 : 175));
+  const std::vector<std::uint8_t> before(master.getCharMap(),
+                                          master.getCharMap() + 63);
+  double min_x = -4, min_y = -4, max_x = 4, max_y = 4;
+  layer->updateBounds(0, 0, 0, &min_x, &min_y, &max_x, &max_y);
+  layer->updateCosts(master, 0, 0, 9, 7);
+  // Geometry changes without an intervening bounds callback.
+  master.updateOrigin(-0.8, -1.0);
+  const std::vector<std::uint8_t> shifted(master.getCharMap(),
+                                           master.getCharMap() + 63);
+  layer->updateCosts(master, 0, 0, 9, 7);
+  EXPECT_EQ(std::vector<std::uint8_t>(master.getCharMap(),
+                                      master.getCharMap() + 63), shifted);
+  // Repeated reset and ABA return cannot authorize stale acoustic cells.
+  master.updateOrigin(-1.0, -1.0);
+  layer->reset();
+  layer->updateCosts(master, 0, 0, 9, 7);
+  EXPECT_EQ(std::vector<std::uint8_t>(master.getCharMap(),
+                                      master.getCharMap() + 63), before);
+}
