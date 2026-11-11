@@ -64,6 +64,15 @@ int main() {
                AcousticMasterMerge::kMaxRebuildCells + 1);
   check_reject({0, 0, 1, 1}, {2001, 2000, 0.1, 0, 0}, 10);
   check_reject({0, 0, 0, 1}, large, 10);
+  // Inverted bounds must not underflow unsigned width/height or advance
+  // a resumable cursor. These are nonempty according to some callers.
+  check_reject({8, 2, 3, 4}, large, 10);
+  check_reject({2, 8, 4, 3}, large, 10);
+  check_reject({2001, 0, 2002, 1}, large, 10);
+  check_reject({0, 2001, 1, 2002}, large, 10);
+  check_reject({std::numeric_limits<unsigned>::max(), 0, 1, 1}, large, 10);
+  check_reject({0, std::numeric_limits<unsigned>::max(), 1, 1}, large, 10);
+
   // Geometry preflight rejects non-metric or non-finite map metadata.
   check_reject({0, 0, 1, 1}, {2000, 2000, 0, 0, 0}, 10);
   check_reject({0, 0, 1, 1}, {2000, 2000, -1, 0, 0}, 10);
