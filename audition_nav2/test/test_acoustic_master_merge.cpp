@@ -287,5 +287,39 @@ int main() {
   assert(large_destination[255 + 255 * 300] == 21);
   assert(large_destination[256] == 77);
   assert(large_destination[256 * 300] == 77);
+  // Exhaustive small-grid rollback matrix: every acoustic cell must disappear
+  // when the next cycle supplies a fresh non-acoustic baseline, including
+  // windows that cover only one cell. Neighbouring cells are never modified.
+  for (unsigned y = 0; y < grid.height; ++y) {
+    for (unsigned x = 0; x < grid.width; ++x) {
+      LayerUpdate one;
+      one.own_cells[{x, y}] = 200;
+      std::vector<std::uint8_t> independent(12, 19);
+      independent[0] = 255;
+      independent[1] = 254;
+      independent[2] = 253;
+      std::vector<std::uint8_t> destination(12, 99);
+      std::size_t applied = 999;
+      const auto index = static_cast<std::size_t>(y) * grid.width + x;
+      assert(AcousticMasterMerge::compose_from_baseline(
+          one, grid, x, y, x + 1, y + 1,
+          independent.data(), independent.size(),
+          destination.data(), destination.size(), &applied));
+      const bool protected_cell = index < 3;
+      assert(applied == (protected_cell ? 0U : 1U));
+      assert(destination[index] == (protected_cell ? independent[index] : 200));
+      for (std::size_t k = 0; k < destination.size(); ++k)
+        if (k != index) assert(destination[k] == 99);
+      one.own_cells.clear();
+      one.retired_cells.insert({x, y});
+      assert(AcousticMasterMerge::compose_from_baseline(
+          one, grid, x, y, x + 1, y + 1,
+          independent.data(), independent.size(),
+          destination.data(), destination.size(), &applied));
+      assert(applied == 0 && destination[index] == independent[index]);
+      for (std::size_t k = 0; k < destination.size(); ++k)
+        if (k != index) assert(destination[k] == 99);
+    }
+  }
   return 0;
 }
