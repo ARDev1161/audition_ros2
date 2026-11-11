@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdint>
 #include "audition_nav2/acoustic_baseline_gate.hpp"
+#include "audition_nav2/acoustic_map_generation.hpp"
 
 int main() {
   using namespace audition_nav2;
@@ -65,5 +66,34 @@ int main() {
   auto bad = grid;
   bad.resolution = 0.0;
   assert(!gate.accept(ticket, 8, bad));
+  // Exercise the same generation/invalidation handshake used by the Nav2
+  // bounds and costs callbacks. A valid geometry transition revokes the
+  // previously accepted non-acoustic baseline, including an ABA return.
+  AcousticMapGeneration generations;
+  AcousticBaselineGate lifecycle_gate;
+  const auto first = generations.observe(grid);
+  assert(first != 0);
+  BaselineTicket baseline{first, 1,
+      BaselineOrigin::IndependentNonAcousticLayers, grid};
+  assert(lifecycle_gate.accept(baseline, first, grid));
+  const auto shifted_generation = generations.observe(shifted);
+  assert(shifted_generation > first);
+  lifecycle_gate.invalidate();
+  assert(!lifecycle_gate.active());
+  assert(!lifecycle_gate.accept(baseline, shifted_generation, shifted));
+  baseline.generation = shifted_generation;
+  baseline.geometry = shifted;
+  assert(lifecycle_gate.accept(baseline, shifted_generation, shifted));
+  const auto returned_generation = generations.observe(grid);
+  assert(returned_generation > shifted_generation);
+  lifecycle_gate.invalidate();
+  assert(!lifecycle_gate.accept(baseline, returned_generation, grid));
+  baseline.generation = returned_generation;
+  baseline.geometry = grid;
+  assert(lifecycle_gate.accept(baseline, returned_generation, grid));
+  generations.invalidate();
+  lifecycle_gate.invalidate();
+  assert(!lifecycle_gate.active());
+  assert(!lifecycle_gate.accept(baseline, generations.generation(), grid));
   return 0;
 }
