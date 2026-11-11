@@ -68,6 +68,12 @@ class AcousticRebuildSession {
   // The producer must increment generation on reset/reallocation/rolling shift.
   bool begin(const CellBounds& dirty, const GridGeometry& geometry,
              std::uint64_t generation) {
+    // Zero is reserved for the legacy, unversioned test path. A trusted
+    // adapter must never silently downgrade to geometry-only ABA detection.
+    if (generation == 0) {
+      invalidate();
+      return false;
+    }
     if (!begin(dirty, geometry)) return false;
     generation_ = generation;
     return true;
@@ -90,13 +96,19 @@ class AcousticRebuildSession {
             std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
     tile = {};
     if (!active_) return false;
-    if (generation != generation_ || !same(dirty, geometry)) {
+    if (generation == 0 || generation != generation_ ||
+        !same(dirty, geometry)) {
+      invalidate();
+      return false;
+    }
+    // Invalid scheduling parameters revoke the cursor: a later caller must
+    // explicitly revalidate its baseline and start a new transaction.
+    if (budget == 0 || budget > AcousticMasterMerge::kMaxRebuildCells) {
       invalidate();
       return false;
     }
     if (!AcousticRebuildTiles::next(dirty_, geometry_, cursor_, tile, budget)) {
-      // An invalid budget must not silently complete the session.
-      if (budget != 0 && budget <= AcousticMasterMerge::kMaxRebuildCells &&
+      if (
           cursor_ == static_cast<std::uint64_t>(dirty_.max_i - dirty_.min_i) *
                          (dirty_.max_j - dirty_.min_j))
         active_ = false;
