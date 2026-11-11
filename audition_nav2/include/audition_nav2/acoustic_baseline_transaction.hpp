@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <new>
 #include "audition_nav2/acoustic_baseline_gate.hpp"
 #include "audition_nav2/acoustic_master_merge.hpp"
 
@@ -46,7 +47,15 @@ class AcousticBaselineTransaction {
     if (src > UINTPTR_MAX - count || dst > UINTPTR_MAX - count ||
         (src < dst + count && dst < src + count)) return false;
     // A full-size scratch is bounded to 4M cells by the geometry contract.
-    std::vector<std::uint8_t> scratch(static_cast<std::size_t>(count));
+    std::vector<std::uint8_t> scratch;
+    // Never propagate an allocation failure out of Nav2 updateCosts().
+    // The one-shot ticket has already been consumed; the master remains
+    // untouched and a future cycle must obtain a fresh independent baseline.
+    try {
+      scratch.resize(static_cast<std::size_t>(count));
+    } catch (const std::bad_alloc&) {
+      return false;
+    }
     std::size_t changes = 0;
     if (!AcousticMasterMerge::compose_from_baseline(
             overlay, geometry, min_i, min_j, max_i, max_j,
