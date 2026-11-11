@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <vector>
 #include "audition_nav2/acoustic_rebuild_tiles.hpp"
 
@@ -63,5 +64,47 @@ int main() {
                AcousticMasterMerge::kMaxRebuildCells + 1);
   check_reject({0, 0, 1, 1}, {2001, 2000, 0.1, 0, 0}, 10);
   check_reject({0, 0, 0, 1}, large, 10);
+  // Geometry preflight rejects non-metric or non-finite map metadata.
+  check_reject({0, 0, 1, 1}, {2000, 2000, 0, 0, 0}, 10);
+  check_reject({0, 0, 1, 1}, {2000, 2000, -1, 0, 0}, 10);
+  check_reject({0, 0, 1, 1},
+               {2000, 2000, std::numeric_limits<double>::quiet_NaN(), 0, 0}, 10);
+  check_reject({0, 0, 1, 1},
+               {2000, 2000, 0.1, std::numeric_limits<double>::infinity(), 0}, 10);
+
+  // A resumable session must never continue across a rolling origin, resize,
+  // resolution change, or changed dirty window.
+  const CellBounds small{2, 3, 12, 5};
+  const GridGeometry stable{20, 20, 0.1, 0, 0};
+  AcousticRebuildSession session;
+  assert(session.begin(small, stable));
+  assert(session.next(small, stable, tile, 4));
+  assert(session.cursor() == 4);
+  assert(tile.min_i == 2 && tile.max_i == 6 && tile.min_j == 3);
+  assert(!session.next(small, {20, 20, 0.1, 0.1, 0}, tile, 4));
+  assert(!session.active() && session.cursor() == 0 && tile.empty());
+  assert(!session.next(small, stable, tile, 4));
+  assert(session.begin(small, stable));
+  assert(session.next(small, stable, tile, 4));
+  assert(!session.next({2, 3, 13, 5}, stable, tile, 4));
+  assert(!session.active());
+  assert(session.begin(small, stable));
+  assert(session.next(small, stable, tile, 4));
+  assert(!session.next(small, {21, 20, 0.1, 0, 0}, tile, 4));
+  assert(session.begin(small, stable));
+  assert(session.next(small, stable, tile, 4));
+  assert(!session.next(small, {20, 20, 0.2, 0, 0}, tile, 4));
+  assert(session.begin(small, stable));
+  assert(!session.next(small, stable, tile, 0));
+  assert(session.active() && session.cursor() == 0);
+  std::uint64_t completed = 0;
+  while (session.next(small, stable, tile, 3)) {
+    completed += tile.max_i - tile.min_i;
+  }
+  assert(completed == 20);
+  assert(!session.active() && session.cursor() == 20);
+  assert(!session.next(small, stable, tile, 3));
+  assert(!session.begin(small, {20, 20, 0.0, 0, 0}));
+  assert(!session.active());
   return 0;
 }
