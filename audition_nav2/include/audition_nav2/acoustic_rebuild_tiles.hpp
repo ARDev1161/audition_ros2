@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include "audition_nav2/acoustic_dirty_bounds.hpp"
 #include "audition_nav2/acoustic_master_merge.hpp"
 
@@ -18,6 +19,8 @@ class AcousticRebuildTiles {
                    std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
     tile = {};
     if (grid.width == 0 || grid.height == 0 ||
+        !std::isfinite(grid.resolution) || grid.resolution <= 0.0 ||
+        !std::isfinite(grid.origin_x) || !std::isfinite(grid.origin_y) ||
         grid.width > 100000 || grid.height > 100000 ||
         static_cast<std::uint64_t>(grid.width) * grid.height > 4000000ULL ||
         dirty.empty() || dirty.max_i > grid.width ||
@@ -40,5 +43,62 @@ class AcousticRebuildTiles {
     cursor += count;
     return true;
   }
+};
+
+// Session binds a tile cursor to one exact map generation. A rolling map,
+// resize, or dirty-window change invalidates the session instead of silently
+// resuming at an unrelated cell. The caller must rebuild a fresh independent
+// baseline and explicitly begin a new session after invalidation.
+class AcousticRebuildSession {
+ public:
+  bool begin(const CellBounds& dirty, const GridGeometry& geometry) {
+    invalidate();
+    std::uint64_t probe = 0;
+    CellBounds first;
+    if (!AcousticRebuildTiles::next(dirty, geometry, probe, first)) return false;
+    dirty_ = dirty;
+    geometry_ = geometry;
+    active_ = true;
+    return true;
+  }
+
+  bool next(const CellBounds& dirty, const GridGeometry& geometry,
+            CellBounds& tile,
+            std::uint64_t budget = AcousticMasterMerge::kMaxRebuildCells) {
+    tile = {};
+    if (!active_) return false;
+    if (!same(dirty, geometry)) {
+      invalidate();
+      return false;
+    }
+    if (!AcousticRebuildTiles::next(dirty_, geometry_, cursor_, tile, budget)) {
+      // An invalid budget must not silently complete the session.
+      if (budget != 0 && budget <= AcousticMasterMerge::kMaxRebuildCells &&
+          cursor_ == static_cast<std::uint64_t>(dirty_.max_i - dirty_.min_i) *
+                         (dirty_.max_j - dirty_.min_j))
+        active_ = false;
+      return false;
+    }
+    return true;
+  }
+
+  void invalidate() { active_ = false; cursor_ = 0; }
+  bool active() const { return active_; }
+  std::uint64_t cursor() const { return cursor_; }
+
+ private:
+  bool same(const CellBounds& dirty, const GridGeometry& geometry) const {
+    return dirty.min_i == dirty_.min_i && dirty.min_j == dirty_.min_j &&
+           dirty.max_i == dirty_.max_i && dirty.max_j == dirty_.max_j &&
+           geometry.width == geometry_.width &&
+           geometry.height == geometry_.height &&
+           geometry.resolution == geometry_.resolution &&
+           geometry.origin_x == geometry_.origin_x &&
+           geometry.origin_y == geometry_.origin_y;
+  }
+  CellBounds dirty_{};
+  GridGeometry geometry_{};
+  std::uint64_t cursor_ = 0;
+  bool active_ = false;
 };
 }  // namespace audition_nav2
