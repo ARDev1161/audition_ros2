@@ -111,12 +111,17 @@ class AcousticRebuildSession {
       return false;
     }
     if (!AcousticRebuildTiles::next(dirty_, geometry_, cursor_, tile, budget)) {
-      if (
-          cursor_ == static_cast<std::uint64_t>(dirty_.max_i - dirty_.min_i) *
-                         (dirty_.max_j - dirty_.min_j))
-        active_ = false;
+      // A failed scheduling attempt must not leave a reusable admission.
+      // Completion is handled immediately after the last successful tile.
+      invalidate();
       return false;
     }
+    // Revoke the session as soon as the final tile is issued, not only when
+    // a caller happens to request one more tile. This prevents an apparently
+    // active rebuild cursor from being retained across idle update cycles.
+    const auto total = static_cast<std::uint64_t>(dirty_.max_i - dirty_.min_i) *
+                       (dirty_.max_j - dirty_.min_j);
+    if (cursor_ == total) active_ = false;
     return true;
   }
 
