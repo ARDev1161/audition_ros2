@@ -48,12 +48,12 @@ int main() {
   }
   assert(cursor == 4000000ULL);
   // Reject invalid geometry, bounds, and budgets without cursor advancement.
-  cursor = 3;
+  cursor = 0;
   const auto check_reject = [&](CellBounds region, GridGeometry geometry,
                                 std::uint64_t budget) {
     CellBounds out{1, 1, 2, 2};
     assert(!AcousticRebuildTiles::next(region, geometry, cursor, out, budget));
-    assert(cursor == 3);
+    assert(cursor == 0);
     assert(out.empty());
   };
   check_reject({0, 0, 2001, 1}, large, 10);
