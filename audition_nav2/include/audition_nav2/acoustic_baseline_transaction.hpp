@@ -46,7 +46,7 @@ class AcousticBaselineTransaction {
     const auto dst = reinterpret_cast<std::uintptr_t>(master);
     if (src > UINTPTR_MAX - count || dst > UINTPTR_MAX - count ||
         (src < dst + count && dst < src + count)) return false;
-    // A full-size scratch is bounded to 4M cells by the geometry contract.
+    // Validate all producer cells before allocating up to 4 MiB of scratch.\n    // An invalid cell outside the requested window must also fail closed.\n    if (overlay.own_cells.size() > AcousticMasterMerge::kMaxOverlayCells)\n      return false;\n    for (const auto& cell : overlay.own_cells) {\n      if (cell.first.first >= geometry.width ||\n          cell.first.second >= geometry.height ||\n          cell.second == 0 || cell.second > 252) return false;\n    }\n    // A full-size scratch is bounded to 4M cells by the geometry contract.
     std::vector<std::uint8_t> scratch;
     // Never propagate an allocation failure out of Nav2 updateCosts().
     // The one-shot ticket has already been consumed; the master remains
