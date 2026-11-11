@@ -107,9 +107,15 @@ class AcousticMasterMerge {
           cell.second == 0 || cell.second > 252)
         return 0;
     }
-    const unsigned end_i = std::min(max_i, geometry.width);
-    const unsigned end_j = std::min(max_j, geometry.height);
-    if (min_i >= end_i || min_j >= end_j) return 0;
+    // The Nav2 caller must supply a valid exclusive window. Silently
+    // clipping a malformed window could apply only some acoustic costs and
+    // leave stale costs outside the clipped region after TTL/rolling shifts.
+    // Fail closed before touching any master cell instead.
+    if (min_i >= max_i || min_j >= max_j ||
+        max_i > geometry.width || max_j > geometry.height)
+      return 0;
+    const unsigned end_i = max_i;
+    const unsigned end_j = max_j;
     std::size_t changed = 0;
     // O(number of validated acoustic cells), not O(master grid area).
     for (const auto& item : update.own_cells) {
