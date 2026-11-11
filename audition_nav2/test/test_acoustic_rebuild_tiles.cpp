@@ -146,5 +146,49 @@ int main() {
   assert(session.begin(small, stable, 46));
   assert(session.next(small, stable, 46, tile, 2));
   assert(tile.min_i == small.min_i);
+  // End-to-end bounded baseline reconstruction: an expired acoustic cell
+  // must disappear from the master, while a non-acoustic obstacle survives.
+  // This is a ROS-independent contract test, not permission to enable Nav2.
+  const GridGeometry rebuild_grid{20, 20, 0.1, 0, 0};
+  const CellBounds rebuild_region{0, 0, 20, 20};
+  std::vector<std::uint8_t> baseline(400, 10);
+  std::vector<std::uint8_t> master(400, 10);
+  baseline[3 * 20 + 2] = 254;  // Independently owned lethal obstacle.
+  LayerUpdate acoustic;
+  acoustic.own_cells[{4, 3}] = 100;
+  acoustic.own_cells[{2, 3}] = 100;
+  AcousticRebuildSession rebuild;
+  assert(rebuild.begin(rebuild_region, rebuild_grid, 101));
+  std::size_t painted = 0;
+  while (rebuild.next(rebuild_region, rebuild_grid, 101, tile, 7)) {
+    std::size_t changes = 999;
+    assert(AcousticMasterMerge::compose_from_baseline(
+        acoustic, rebuild_grid, tile.min_i, tile.min_j, tile.max_i,
+        tile.max_j, baseline.data(), baseline.size(), master.data(),
+        master.size(), &changes));
+    painted += changes;
+  }
+  assert(painted == 1);
+  assert(master[3 * 20 + 4] == 100);
+  assert(master[3 * 20 + 2] == 254);
+  // No new acoustic messages: a subsequent baseline-only rebuild clears
+  // the old soft cost without overwriting any independent obstacle.
+  acoustic.own_cells.clear();
+  assert(rebuild.begin(rebuild_region, rebuild_grid, 102));
+  while (rebuild.next(rebuild_region, rebuild_grid, 102, tile, 7)) {
+    std::size_t changes = 999;
+    assert(AcousticMasterMerge::compose_from_baseline(
+        acoustic, rebuild_grid, tile.min_i, tile.min_j, tile.max_i,
+        tile.max_j, baseline.data(), baseline.size(), master.data(),
+        master.size(), &changes));
+    assert(changes == 0);
+  }
+  assert(master == baseline);
+  // A geometry epoch change mid-rebuild must revoke the cursor. A caller
+  // must not continue writing tiles against an unrelated baseline.
+  assert(rebuild.begin(rebuild_region, rebuild_grid, 103));
+  assert(rebuild.next(rebuild_region, rebuild_grid, 103, tile, 7));
+  assert(!rebuild.next(rebuild_region, rebuild_grid, 104, tile, 7));
+  assert(!rebuild.active() && rebuild.cursor() == 0 && tile.empty());
   return 0;
 }
