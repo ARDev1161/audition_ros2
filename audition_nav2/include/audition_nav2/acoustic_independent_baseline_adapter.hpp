@@ -49,6 +49,14 @@ class AcousticIndependentBaselineAdapter {
         area > AcousticMasterMerge::kMaxRebuildCells ||
         overlay.own_cells.size() > AcousticMasterMerge::kMaxOverlayCells)
       return false;
+    // Reject malformed overlays before invoking an expensive third-party
+    // reconstruction callback. Validate even cells outside the dirty window:
+    // the transaction must never silently accept invalid producer data.
+    for (const auto& cell : overlay.own_cells) {
+      if (cell.first.first >= geometry.width ||
+          cell.first.second >= geometry.height ||
+          cell.second == 0 || cell.second > 252) return false;
+    }
     // Reject replay and stale generations before allocating/calling the provider.
     // The transaction rechecks and consumes admission after reconstruction.
     if (!gate.can_accept(ticket, generation, geometry)) return false;
