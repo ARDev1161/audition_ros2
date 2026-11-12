@@ -123,6 +123,11 @@ int main() {
       partial_failure, master.data(), master.size()));
   assert(partial_calls == 1 && master == before);
   // Failed provider does not consume cycle 4; fresh independent data can retry.
+  // Restore the acoustic overlay explicitly: it was cleared for the TTL test
+  // above, and an empty overlay must never synthesize a soft cost.
+  overlay.own_cells[{2, 2}] = 120;
+  overlay.own_cells[{3, 2}] = 120;
+  overlay.own_cells[{4, 2}] = 120;
   assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
