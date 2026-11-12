@@ -23,7 +23,15 @@ int main() {
   assert(!stage.ready(stale));
   stale = t; stale.geometry.origin_x = 0.05;
   assert(!stage.ready(stale));
-  assert(stage.cells().front() == 254 && stage.cells().back() == 254);
+  // Partial and mismatched transactions must never expose any baseline.
+  std::vector<std::uint8_t> extracted{42};
+  assert(!stage.take_ready(stale, extracted));
+  assert(extracted.size() == 1 && extracted[0] == 42);
+  assert(stage.take_ready(t, extracted));
+  assert(extracted.size() == 512u * 256u);
+  assert(extracted.front() == 254 && extracted.back() == 254);
+  assert(!stage.take_ready(t, extracted));
+  assert(!stage.ready(t));
   stage.reset();
   assert(!stage.ready(t));
   assert(stage.begin(t));
@@ -39,6 +47,10 @@ int main() {
   assert(stage.add_checked(t, 0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.add_checked(t,256, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.ready(t));
+  std::vector<std::uint8_t> final_baseline;
+  assert(stage.take_ready(t, final_baseline));
+  assert(final_baseline.size() == 512u * 256u);
+  assert(!stage.take_ready(t, final_baseline));
   auto bad = t; bad.origin = BaselineOrigin::PreviousMaster;
   assert(!stage.begin(bad));
   assert(!stage.ready(t));
