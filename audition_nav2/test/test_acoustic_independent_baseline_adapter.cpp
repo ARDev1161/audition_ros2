@@ -48,6 +48,18 @@ int main() {
       gate, ticket(2), 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
   assert(master == before);
+  // Stale/replayed tickets must not invoke expensive reconstruction.
+  assert(calls == 2);
+  assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, ticket(1), 17, geometry, overlay, 0, 0, 20, 20,
+      rebuild, master.data(), master.size()));
+  assert(calls == 2 && master == before);
+  auto old_generation = ticket(100);
+  old_generation.generation = 16;
+  assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, old_generation, 17, geometry, overlay, 0, 0, 20, 20,
+      rebuild, master.data(), master.size()));
+  assert(calls == 2 && master == before);
   // Callback failure and exceptions never mutate the master.
   const auto failed = [](const GridGeometry&, std::uint8_t*, std::size_t) {
     return false;
