@@ -48,7 +48,7 @@ class AcousticIndependentBaselineAdapter {
         area > AcousticMasterMerge::kMaxRebuildCells ||
         overlay.own_cells.size() > AcousticMasterMerge::kMaxOverlayCells)
       return false;
-    // Private storage prevents accidental pointer aliasing with the master.
+    // Reject replay and stale generations before allocating/calling the provider.\n    // The transaction rechecks and consumes admission after reconstruction.\n    if (!gate.can_accept(ticket, generation, geometry)) return false;\n    // Private storage prevents accidental pointer aliasing with the master.
     // No costmap writes happen until reconstruction has fully succeeded.
     std::vector<std::uint8_t> baseline;
     try {
