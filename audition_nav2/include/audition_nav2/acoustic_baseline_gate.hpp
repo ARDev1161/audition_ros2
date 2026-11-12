@@ -39,20 +39,27 @@ class AcousticBaselineGate {
     active_ = false;
     return true;
   }
+  // Read-only replay preflight: reject stale tickets before a potentially
+  // expensive independent layer reconstruction. The transaction still calls
+  // accept() at commit time; this is not an authorization or reservation.
+  bool can_accept(const BaselineTicket& ticket,
+                  std::uint64_t current_generation,
+                  const GridGeometry& current_geometry) const noexcept {
+    return ticket.origin == BaselineOrigin::IndependentNonAcousticLayers &&
+        ticket.generation != 0 && ticket.generation == current_generation &&
+        ticket.cycle != 0 && ticket.generation >= generation_ &&
+        (ticket.generation != generation_ || ticket.cycle > cycle_) &&
+        ticket.geometry.width == current_geometry.width &&
+        ticket.geometry.height == current_geometry.height &&
+        ticket.geometry.resolution == current_geometry.resolution &&
+        ticket.geometry.origin_x == current_geometry.origin_x &&
+        ticket.geometry.origin_y == current_geometry.origin_y &&
+        valid(current_geometry);
+  }
   bool accept(const BaselineTicket& ticket,
               std::uint64_t current_generation,
               const GridGeometry& current_geometry) noexcept {
-    if (ticket.origin != BaselineOrigin::IndependentNonAcousticLayers ||
-        !ticket.generation || ticket.generation != current_generation ||
-        !ticket.cycle ||
-        ticket.generation < generation_ ||
-        (ticket.generation == generation_ && ticket.cycle <= cycle_) ||
-        ticket.geometry.width != current_geometry.width ||
-        ticket.geometry.height != current_geometry.height ||
-        ticket.geometry.resolution != current_geometry.resolution ||
-        ticket.geometry.origin_x != current_geometry.origin_x ||
-        ticket.geometry.origin_y != current_geometry.origin_y ||
-        !valid(current_geometry)) {
+    if (!can_accept(ticket, current_generation, current_geometry)) {
       invalidate();
       return false;
     }
