@@ -78,7 +78,7 @@ int main() {
   assert(!pipeline.submit(ticket, wrong, costs.data(), coverage.data(), costs.size()));
   assert(!pipeline.next(ticket, 65536, tile));
   // Bounded producer: one tile per tick, no partial output.
-  const GridGeometry small{3, 2, 0.1, 0, 0};
+  const GridGeometry small{5, 2, 0.1, 0, 0};
   const BaselineTicket fresh{8, 11, BaselineOrigin::IndependentNonAcousticLayers, small};
   auto producer = [](const BaselineTicket& seen, const AcousticBaselineTilePipeline::Tile& t,
                      std::vector<std::uint8_t>& c, std::vector<std::uint8_t>& cover) {
@@ -97,7 +97,7 @@ int main() {
   assert(pipeline.produce_one(fresh, 2, producer));
   assert(pipeline.produce_one(fresh, 2, producer));
   assert(pipeline.take_ready(fresh, result));
-  assert(result == std::vector<std::uint8_t>(6, 30));
+  assert(result == std::vector<std::uint8_t>(10, 30));
 
   // Callback failure, exception, and malformed output all revoke the ticket.
   assert(pipeline.begin(fresh, 2, 1));
