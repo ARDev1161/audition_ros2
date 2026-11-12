@@ -108,6 +108,20 @@ int main() {
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       throwing, master.data(), master.size()));
   assert(master == before);
+  // A provider may partially populate its scratch buffer before failing.
+  // Neither that data nor a thrown exception may leak into the master.
+  unsigned partial_calls = 0;
+  const auto partial_failure = [&](const GridGeometry&, std::uint8_t* dst,
+                                   std::size_t n) {
+    ++partial_calls;
+    assert(n == independent.size());
+    std::fill(dst, dst + n, static_cast<std::uint8_t>(252));
+    return false;
+  };
+  assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
+      partial_failure, master.data(), master.size()));
+  assert(partial_calls == 1 && master == before);
   // Failed provider does not consume cycle 4; fresh independent data can retry.
   assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
