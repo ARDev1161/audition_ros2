@@ -31,7 +31,9 @@ void AcousticCostmapLayer::expireOnTimer() {
   // No trusted evidence is connected. Revoke, never generate map costs.
   coordinator_.revoke_all();
   baseline_gate_.invalidate();
-  baseline_pipeline_.abort();
+  // Only a transaction older than its steady-clock deadline is aborted.
+  // A periodic timer must not discard a healthy multi-tick rebuild.
+  baseline_pipeline_.expire_if_stalled();
 }
 void AcousticCostmapLayer::updateBounds(double, double, double,
                                        double* min_x, double* min_y,

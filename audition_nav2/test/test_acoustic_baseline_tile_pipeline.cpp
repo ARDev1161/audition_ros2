@@ -177,9 +177,13 @@ int main() {
   // Stalled async tiles must expire without requiring another producer
   // completion or ROS message. Use one monotonic clock domain throughout.
   assert(pipeline.begin(fresh, 2, 1));
+  assert(pipeline.active());
+  assert(!pipeline.expire_if_stalled()); // Immediate wall-timer tick must preserve work.
   assert(pipeline.next(fresh, 2, live));
   assert(!pipeline.expire_if_stalled(fresh, 1000, 1099, 100));
   assert(pipeline.expire_if_stalled(fresh, 1000, 1100, 100));
+  assert(!pipeline.active());
+  assert(!pipeline.expire_if_stalled());
   assert(!pipeline.submit(fresh, live, valid_costs.data(), valid_cover.data(), 2));
   assert(!pipeline.take_ready(fresh, result));
   // Clock rollback and zero deadline are invalid, not unlimited retention.

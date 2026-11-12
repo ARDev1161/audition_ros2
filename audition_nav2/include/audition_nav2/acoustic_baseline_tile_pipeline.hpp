@@ -1,6 +1,7 @@
 #pragma once
 // Transactional, bounded staging of a non-acoustic baseline. The producer
 // must reconstruct each tile independently; this class cannot certify that.
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -18,6 +19,7 @@ class AcousticBaselineTilePipeline {
       return false;
     }
     ticket_ = ticket;
+    started_ = std::chrono::steady_clock::now();
     active_ = true;
     return true;
   }
@@ -76,6 +78,19 @@ class AcousticBaselineTilePipeline {
       return false;
     }
   }
+  bool active() const noexcept { return active_; }
+  // Timer-facing watchdog: a live transaction gets a fixed wall-clock
+  // deadline from begin(), not from each arriving tile or ROS/sim time.
+  // The timer must not revoke healthy in-flight work on every 100-ms tick.
+  bool expire_if_stalled() {
+    if (!active_) return false;
+    const auto now = std::chrono::steady_clock::now();
+    if (now < started_ || now - started_ >= std::chrono::seconds(2)) {
+      reset();
+      return true;
+    }
+    return false;
+  }
   // Monotonic watchdog for stalled asynchronous reconstruction. The caller
   // supplies timestamps from ONE steady clock domain (never ROS/sim time).
   // A timeout revokes all outstanding leases and partial tiles. Invalid
@@ -116,12 +131,14 @@ class AcousticBaselineTilePipeline {
     cursor_.reset();
     staging_.reset();
     active_ = false;
+    started_ = {};
   }
  private:
   BaselineTicket ticket_{};
   AcousticBaselineTileCursor cursor_;
   AcousticTiledBaseline staging_;
   bool active_ = false;
+  std::chrono::steady_clock::time_point started_{};
   std::uint64_t epoch_ = 0;
 };
 }  // namespace audition_nav2
