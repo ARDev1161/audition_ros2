@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 #include "audition_nav2/acoustic_independent_baseline_adapter.hpp"
@@ -117,6 +118,55 @@ int main() {
     assert(large_calls == 0);
     assert(std::all_of(large_master.begin(), large_master.end(),
                        [](std::uint8_t v) { return v == 33; }));
+  }
+  // Boundary admission: exactly 65,536 cells are allowed even for a tiny
+  // dirty window, while larger maps are rejected above. Confirm the full
+  // coverage contract and non-acoustic lethal/unknown preservation at limit.
+  {
+    const GridGeometry boundary{256, 256, 0.05, -1.0, 2.0};
+    std::vector<std::uint8_t> boundary_master(256u * 256u, 77);
+    AcousticBaselineGate boundary_gate;
+    unsigned boundary_calls = 0;
+    const auto boundary_provider = [&](const GridGeometry&, std::uint8_t* out,
+                                       std::uint8_t* coverage, std::size_t n) {
+      ++boundary_calls;
+      assert(n == boundary_master.size());
+      std::fill(out, out + n, static_cast<std::uint8_t>(9));
+      std::fill(coverage, coverage + n, static_cast<std::uint8_t>(1));
+      out[0] = 254;
+      out[n - 1] = 255;
+      return true;
+    };
+    LayerUpdate boundary_overlay;
+    boundary_overlay.own_cells[{1, 0}] = 252;
+    const BaselineTicket boundary_ticket{
+        1, 1, BaselineOrigin::IndependentNonAcousticLayers, boundary};
+    assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        boundary_gate, boundary_ticket, 1, boundary, boundary_overlay,
+        0, 0, 2, 1, boundary_provider,
+        boundary_master.data(), boundary_master.size()));
+    assert(boundary_calls == 1);
+    assert(boundary_master[0] == 254);
+    assert(boundary_master[1] == 252);
+    assert(boundary_master.back() == 77);  // Outside dirty window untouched.
+    // Replaying a ticket must not invoke the provider.
+    assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        boundary_gate, boundary_ticket, 1, boundary, boundary_overlay,
+        0, 0, 2, 1, boundary_provider,
+        boundary_master.data(), boundary_master.size()));
+    assert(boundary_calls == 1);
+  }
+  // Invalid floating-point geometry must not enter the provider or mutate
+  // the master, even if its ticket carries the same invalid geometry.
+  {
+    auto invalid = geometry;
+    invalid.resolution = std::numeric_limits<double>::quiet_NaN();
+    const BaselineTicket invalid_ticket{
+        18, 1, BaselineOrigin::IndependentNonAcousticLayers, invalid};
+    assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        gate, invalid_ticket, 18, invalid, overlay, 0, 0, 20, 20,
+        rebuild, master.data(), master.size()));
+    assert(calls == 3 && master == before);
   }
   // Subsequent provider-failure checks use a fresh admission cycle.
   // Callback failure and exceptions never mutate the master.
