@@ -43,8 +43,14 @@ class AcousticBaselineTilePipeline {
   }
   // Do not expose a partial buffer. A successful take consumes both states.
   bool take_ready(const BaselineTicket& current, std::vector<std::uint8_t>& out) {
-    if (!active_ || !cursor_.finished(current) || !staging_.ready(current))
+    if (!active_) return false;
+    // A changed map generation, cycle, or rolling origin invalidates the
+    // whole pending transaction even if no more tiles are requested.
+    if (!cursor_.matches(current) || !staging_.matches(current)) {
+      reset();
       return false;
+    }
+    if (!cursor_.finished(current) || !staging_.ready(current)) return false;
     if (!staging_.take_ready(current, out)) {
       reset();
       return false;
