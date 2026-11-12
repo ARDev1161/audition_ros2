@@ -33,7 +33,7 @@ class AcousticBaselineTilePipeline {
   bool submit(const BaselineTicket& producer, const Tile& tile,
               const std::uint8_t* costs, const std::uint8_t* coverage,
               std::size_t size) {
-    if (!active_ || !cursor_.matches(producer) || !staging_.matches(producer) ||
+    if (!active_ || !cursor_.pending(producer, tile) || !staging_.matches(producer) ||
         !staging_.add_checked(producer, tile.x, tile.y, tile.width,
                               tile.height, costs, coverage, size) ||
         !cursor_.acknowledge(producer, tile, true)) {
