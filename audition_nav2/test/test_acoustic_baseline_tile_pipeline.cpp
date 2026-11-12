@@ -152,4 +152,26 @@ int main() {
   for (int i = 0; i < 6; ++i) assert(pipeline.produce_one(fresh, 2, producer));
   assert(pipeline.take_ready(fresh, result));
 
+  // Same-ticket ABA for manually submitted asynchronous tiles: a delayed
+  // completion from a cancelled transaction must never poison the new one.
+  assert(pipeline.begin(fresh, 2, 1));
+  AcousticBaselineTilePipeline::Tile stale{};
+  assert(pipeline.next(fresh, 2, stale));
+  pipeline.abort();
+  assert(pipeline.begin(fresh, 2, 1));
+  AcousticBaselineTilePipeline::Tile live{};
+  assert(pipeline.next(fresh, 2, live));
+  assert(stale.x == live.x && stale.y == live.y);
+  assert(stale.lease != live.lease);
+  std::vector<std::uint8_t> stale_costs(2, 99), valid_costs(2, 30), valid_cover(2, 1);
+  assert(!pipeline.submit(fresh, stale, stale_costs.data(), valid_cover.data(), 2));
+  // Fail closed after stale submission; no partially staged data may escape.
+  assert(!pipeline.take_ready(fresh, result));
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(pipeline.next(fresh, 2, live));
+  assert(pipeline.submit(fresh, live, valid_costs.data(), valid_cover.data(), 2));
+  for (int i = 0; i < 5; ++i) assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.take_ready(fresh, result));
+  assert(result == std::vector<std::uint8_t>(10, 30));
+
 }
