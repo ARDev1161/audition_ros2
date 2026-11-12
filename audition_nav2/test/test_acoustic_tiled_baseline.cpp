@@ -12,6 +12,9 @@ int main() {
   assert(stage.add_checked(t,0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(!stage.ready(t));
   assert(!stage.add_checked(t,0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
+  assert(!stage.ready(t));
+  assert(stage.begin(t));
+  assert(stage.add_checked(t, 0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.add_checked(t,256, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.ready(t));
   auto stale = t; stale.cycle = 2;
@@ -28,8 +31,12 @@ int main() {
   assert(!stage.add_checked(t,0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(!stage.ready(t));
   marks[1] = 1;
+  assert(stage.begin(t));
   assert(stage.add_checked(t,0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(!stage.add_checked(t,256, 0, 256, 256, costs.data(), marks.data(), 65535));
+  assert(!stage.ready(t));
+  assert(stage.begin(t));
+  assert(stage.add_checked(t, 0, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.add_checked(t,256, 0, 256, 256, costs.data(), marks.data(), costs.size()));
   assert(stage.ready(t));
   auto bad = t; bad.origin = BaselineOrigin::PreviousMaster;
