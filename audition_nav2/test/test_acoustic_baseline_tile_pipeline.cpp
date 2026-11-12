@@ -121,4 +121,35 @@ int main() {
   pipeline.abort();
   assert(!pipeline.take_ready(fresh, result));
 
+  // A callback can synchronously cancel or restart the transaction. Its
+  // completion must never be submitted into the new transaction (same-ticket ABA).
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [&](const auto&, const auto&, auto& c, auto& cover) {
+    pipeline.abort();
+    for (auto& v : c) v = 99;
+    for (auto& v : cover) v = 1;
+    return true;
+  }));
+  assert(!pipeline.take_ready(fresh, result));
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [&](const auto&, const auto&, auto& c, auto& cover) {
+    assert(pipeline.begin(fresh, 2, 1));
+    for (auto& v : c) v = 99;
+    for (auto& v : cover) v = 1;
+    return true;
+  }));
+  // The replacement transaction is still intact and can be completed normally.
+  for (int i = 0; i < 6; ++i) assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.take_ready(fresh, result));
+  assert(result == std::vector<std::uint8_t>(10, 30));
+  // An exception after a callback restarts the pipeline must not abort the
+  // replacement transaction either.
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [&](const auto&, const auto&, auto&, auto&) -> bool {
+    assert(pipeline.begin(fresh, 2, 1));
+    throw std::runtime_error("stale callback");
+  }));
+  for (int i = 0; i < 6; ++i) assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.take_ready(fresh, result));
+
 }
