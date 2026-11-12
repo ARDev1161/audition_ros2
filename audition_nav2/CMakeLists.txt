@@ -92,5 +92,14 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME acoustic_independent_baseline_adapter_contract
     COMMAND test_acoustic_independent_baseline_adapter)
+  add_executable(test_acoustic_independent_baseline_lifecycle
+    test/test_acoustic_independent_baseline_lifecycle.cpp)
+  target_compile_features(test_acoustic_independent_baseline_lifecycle PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_independent_baseline_lifecycle PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_independent_baseline_lifecycle PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_independent_baseline_lifecycle_contract
+    COMMAND test_acoustic_independent_baseline_lifecycle)
 endif()
 ament_package()
