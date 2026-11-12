@@ -21,10 +21,12 @@ int main() {
         BaselineOrigin::IndependentNonAcousticLayers, geometry};
   };
   unsigned calls = 0;
-  const auto rebuild = [&](const GridGeometry&, std::uint8_t* dst, std::size_t n) {
+  const auto rebuild = [&](const GridGeometry&, std::uint8_t* dst,
+                           std::uint8_t* coverage, std::size_t n) {
     ++calls;
     assert(n == independent.size());
     std::copy(independent.begin(), independent.end(), dst);
+    std::fill(coverage, coverage + n, static_cast<std::uint8_t>(1));
     return true;
   };
   std::size_t changes = 999;
@@ -95,13 +97,15 @@ int main() {
   assert(calls == 3 && master == before);
   // Subsequent provider-failure checks use a fresh admission cycle.
   // Callback failure and exceptions never mutate the master.
-  const auto failed = [](const GridGeometry&, std::uint8_t*, std::size_t) {
+  const auto failed = [](const GridGeometry&, std::uint8_t*,
+                         std::uint8_t*, std::size_t) {
     return false;
   };
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       failed, master.data(), master.size()));
-  const auto throwing = [](const GridGeometry&, std::uint8_t*, std::size_t) -> bool {
+  const auto throwing = [](const GridGeometry&, std::uint8_t*,
+                           std::uint8_t*, std::size_t) -> bool {
     throw std::runtime_error("provider unavailable");
   };
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
@@ -112,16 +116,42 @@ int main() {
   // Neither that data nor a thrown exception may leak into the master.
   unsigned partial_calls = 0;
   const auto partial_failure = [&](const GridGeometry&, std::uint8_t* dst,
-                                   std::size_t n) {
+                                   std::uint8_t* coverage, std::size_t n) {
     ++partial_calls;
     assert(n == independent.size());
     std::fill(dst, dst + n, static_cast<std::uint8_t>(252));
+    std::fill(coverage, coverage + n / 2, static_cast<std::uint8_t>(1));
     return false;
   };
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       partial_failure, master.data(), master.size()));
   assert(partial_calls == 1 && master == before);
+  // Even a provider that returns success must prove that every cell was
+  // reconstructed. Unwritten zero-initialized cells must not clear obstacles.
+  unsigned incomplete_calls = 0;
+  const auto incomplete_success = [&](const GridGeometry&, std::uint8_t* dst,
+                                      std::uint8_t* coverage, std::size_t n) {
+    ++incomplete_calls;
+    std::copy(independent.begin(), independent.end(), dst);
+    std::fill(coverage, coverage + n - 1, static_cast<std::uint8_t>(1));
+    return true;
+  };
+  assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
+      incomplete_success, master.data(), master.size()));
+  assert(incomplete_calls == 1 && master == before);
+  const auto invalid_coverage = [&](const GridGeometry&, std::uint8_t* dst,
+                                    std::uint8_t* coverage, std::size_t n) {
+    std::copy(independent.begin(), independent.end(), dst);
+    std::fill(coverage, coverage + n, static_cast<std::uint8_t>(1));
+    coverage[n - 1] = 2;
+    return true;
+  };
+  assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
+      invalid_coverage, master.data(), master.size()));
+  assert(master == before);
   // Failed provider does not consume cycle 4; fresh independent data can retry.
   // Restore the acoustic overlay explicitly: it was cleared for the TTL test
   // above, and an empty overlay must never synthesize a soft cost.
