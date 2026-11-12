@@ -30,6 +30,9 @@ class AcousticIndependentBaselineAdapter {
       std::size_t* changes = nullptr) {
     if (changes) *changes = 0;
     const auto count = static_cast<std::uint64_t>(geometry.width) * geometry.height;
+    // Validate bounds before subtracting unsigned coordinates.
+    if (min_i >= max_i || min_j >= max_j ||
+        max_i > geometry.width || max_j > geometry.height) return false;
     const auto area = static_cast<std::uint64_t>(max_i - min_i) *
                       static_cast<std::uint64_t>(max_j - min_j);
     if (!rebuild || !master || ticket.origin != BaselineOrigin::IndependentNonAcousticLayers ||
@@ -43,8 +46,6 @@ class AcousticIndependentBaselineAdapter {
         !std::isfinite(geometry.origin_x) || !std::isfinite(geometry.origin_y) ||
         geometry.width == 0 || geometry.height == 0 ||
         count > 4000000ULL || count > master_size ||
-        min_i >= max_i || min_j >= max_j ||
-        max_i > geometry.width || max_j > geometry.height ||
         area > AcousticMasterMerge::kMaxRebuildCells ||
         overlay.own_cells.size() > AcousticMasterMerge::kMaxOverlayCells)
       return false;
