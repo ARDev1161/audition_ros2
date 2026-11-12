@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <utility>
 #include "audition_nav2/acoustic_baseline_tile_cursor.hpp"
 
 namespace audition_nav2 {
@@ -41,6 +42,36 @@ class AcousticBaselineTilePipeline {
     }
     return true;
   }
+  // Run at most one independently reconstructed tile per call. The producer
+  // receives the immutable ticket and exact tile geometry; it must attest
+  // non-acoustic provenance outside this staging helper. Exceptions, failed
+  // callbacks and malformed buffers revoke all staged work. This is NOT a
+  // Nav2 master-map reconstruction implementation.
+  template <class Producer>
+  bool produce_one(const BaselineTicket& current, std::size_t budget,
+                   Producer&& producer) {
+    Tile tile{};
+    if (!next(current, budget, tile)) return false;
+    const std::size_t count = static_cast<std::size_t>(tile.width) * tile.height;
+    try {
+      std::vector<std::uint8_t> costs(count);
+      std::vector<std::uint8_t> coverage(count, 0);
+      if (!std::forward<Producer>(producer)(current, tile, costs, coverage)) {
+        reset();
+        return false;
+      }
+      if (costs.size() != count || coverage.size() != count) {
+        reset();
+        return false;
+      }
+      return submit(current, tile, costs.data(), coverage.data(), count);
+    } catch (...) {
+      reset();
+      return false;
+    }
+  }
+  // Explicit cancellation for asynchronous producer failure / shutdown.
+  void abort() { reset(); }
   // Do not expose a partial buffer. A successful take consumes both states.
   bool take_ready(const BaselineTicket& current, std::vector<std::uint8_t>& out) {
     if (!active_) return false;
