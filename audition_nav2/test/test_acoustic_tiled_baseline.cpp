@@ -39,4 +39,30 @@ int main() {
   assert(!stage.begin(bad));
   bad = t; bad.geometry.width = 4001; bad.geometry.height = 1000;
   assert(!stage.begin(bad));
+  // An asynchronous tile from an old cycle must revoke the transaction.
+  assert(stage.begin(t));
+  assert(stage.add_checked(t, 0, 0, 256, 256,
+                           costs.data(), marks.data(), costs.size()));
+  auto old_cycle = t;
+  old_cycle.cycle = 2;
+  assert(!stage.add_checked(old_cycle, 256, 0, 256, 256,
+                            costs.data(), marks.data(), costs.size()));
+  assert(!stage.matches(t) && !stage.ready(t));
+  assert(!stage.add_checked(t, 256, 0, 256, 256,
+                            costs.data(), marks.data(), costs.size()));
+  // Rolling origin ABA: equal dimensions do not make a tile reusable.
+  assert(stage.begin(t));
+  auto moved = t;
+  moved.geometry.origin_x = 0.1;
+  assert(!stage.add_checked(moved, 0, 0, 256, 256,
+                            costs.data(), marks.data(), costs.size()));
+  assert(!stage.ready(t));
+  // A fresh transaction can still complete after an invalidated producer.
+  assert(stage.begin(t));
+  assert(stage.add_checked(t, 0, 0, 256, 256,
+                           costs.data(), marks.data(), costs.size()));
+  assert(stage.add_checked(t, 256, 0, 256, 256,
+                           costs.data(), marks.data(), costs.size()));
+  assert(stage.ready(t));
+
 }
