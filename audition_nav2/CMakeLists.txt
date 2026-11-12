@@ -101,5 +101,13 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME acoustic_independent_baseline_lifecycle_contract
     COMMAND test_acoustic_independent_baseline_lifecycle)
+  add_executable(test_acoustic_tiled_baseline
+    test/test_acoustic_tiled_baseline.cpp)
+  target_compile_features(test_acoustic_tiled_baseline PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_tiled_baseline PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_tiled_baseline PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_tiled_baseline_contract COMMAND test_acoustic_tiled_baseline)
 endif()
 ament_package()
