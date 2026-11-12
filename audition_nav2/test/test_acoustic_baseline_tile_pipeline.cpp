@@ -30,6 +30,25 @@ int main() {
   assert(result[256u * 513u] == 13);
   assert(result.back() == 15);
   assert(!pipeline.take_ready(ticket, result));
+  // A stale completion request must revoke staged work, not merely return
+  // false and permit a later completion with the old ticket.
+  assert(pipeline.begin(ticket, 256, 256));
+  assert(pipeline.next(ticket, 65536, tile));
+  std::vector<std::uint8_t> first_costs(65536, 25), first_coverage(65536, 1);
+  assert(pipeline.submit(ticket, tile, first_costs.data(), first_coverage.data(), 65536));
+  auto newer = ticket;
+  ++newer.generation;
+  const auto unchanged = result;
+  assert(!pipeline.take_ready(newer, result));
+  assert(result == unchanged);
+  assert(!pipeline.next(ticket, 65536, tile));
+  assert(!pipeline.take_ready(ticket, result));
+  // The same invalidation applies to a shifted rolling window.
+  assert(pipeline.begin(ticket, 256, 256));
+  auto rolled = ticket;
+  rolled.geometry.origin_y += 0.05;
+  assert(!pipeline.take_ready(rolled, result));
+  assert(!pipeline.next(ticket, 65536, tile));
   // A malformed tile revokes the entire transaction, never exposes partial data.
   assert(pipeline.begin(ticket, 256, 256));
   assert(pipeline.next(ticket, 65536, tile));
