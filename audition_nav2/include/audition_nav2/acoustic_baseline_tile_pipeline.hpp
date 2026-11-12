@@ -53,10 +53,16 @@ class AcousticBaselineTilePipeline {
     Tile tile{};
     if (!next(current, budget, tile)) return false;
     const std::size_t count = static_cast<std::size_t>(tile.width) * tile.height;
+    // A producer is external code: it may synchronously cancel or restart
+    // the pipeline. Never accept its result into a replacement transaction,
+    // even when the replacement happens to reuse the same ticket (ABA).
+    const auto epoch = epoch_;
     try {
       std::vector<std::uint8_t> costs(count);
       std::vector<std::uint8_t> coverage(count, 0);
-      if (!std::forward<Producer>(producer)(current, tile, costs, coverage)) {
+      const bool produced = std::forward<Producer>(producer)(current, tile, costs, coverage);
+      if (epoch != epoch_) return false;
+      if (!produced) {
         reset();
         return false;
       }
@@ -66,7 +72,7 @@ class AcousticBaselineTilePipeline {
       }
       return submit(current, tile, costs.data(), coverage.data(), count);
     } catch (...) {
-      reset();
+      if (epoch == epoch_) reset();
       return false;
     }
   }
@@ -90,6 +96,7 @@ class AcousticBaselineTilePipeline {
     return true;
   }
   void reset() {
+    ++epoch_;
     cursor_.reset();
     staging_.reset();
     active_ = false;
@@ -99,5 +106,6 @@ class AcousticBaselineTilePipeline {
   AcousticBaselineTileCursor cursor_;
   AcousticTiledBaseline staging_;
   bool active_ = false;
+  std::uint64_t epoch_ = 0;
 };
 }  // namespace audition_nav2
