@@ -79,7 +79,16 @@ class AcousticTiledBaseline {
   bool ready(const BaselineTicket& current) const {
     return same_ticket(current) && count_ == cells_.size();
   }
-  const std::vector<std::uint8_t>& cells() const { return cells_; }
+  // Export only a complete, ticket-matched reconstruction. Failed attempts
+  // leave the caller's output untouched and revoke no valid transaction.
+  // Successful extraction consumes the transaction to prevent stale reuse.
+  bool take_ready(const BaselineTicket& current,
+                  std::vector<std::uint8_t>& output) {
+    if (!ready(current)) return false;
+    output.swap(cells_);
+    reset();
+    return true;
+  }
   void reset() { active_ = false; count_ = 0; cells_.clear(); covered_.clear(); }
  private:
   bool same_ticket(const BaselineTicket& current) const {
