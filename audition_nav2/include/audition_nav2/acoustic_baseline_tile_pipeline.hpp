@@ -76,6 +76,22 @@ class AcousticBaselineTilePipeline {
       return false;
     }
   }
+  // Monotonic watchdog for stalled asynchronous reconstruction. The caller
+  // supplies timestamps from ONE steady clock domain (never ROS/sim time).
+  // A timeout revokes all outstanding leases and partial tiles. Invalid
+  // timestamps fail closed; the caller must begin a fresh transaction.
+  bool expire_if_stalled(const BaselineTicket& current,
+                         std::uint64_t started_ns, std::uint64_t now_ns,
+                         std::uint64_t max_age_ns) {
+    if (!active_) return false;
+    if (!cursor_.matches(current) || !staging_.matches(current) ||
+        max_age_ns == 0 || now_ns < started_ns ||
+        now_ns - started_ns >= max_age_ns) {
+      reset();
+      return true;
+    }
+    return false;
+  }
   // Explicit cancellation for asynchronous producer failure / shutdown.
   void abort() { reset(); }
   // Do not expose a partial buffer. A successful take consumes both states.
