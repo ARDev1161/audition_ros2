@@ -95,6 +95,29 @@ int main() {
       gate, ticket(3), 17, geometry, valid_outside_window, 0, 0, 5, 5,
       rebuild, master.data(), master.size()));
   assert(calls == 3 && master == before);
+  // A tiny dirty window on a large map must not trigger an unbounded
+  // synchronous full-map provider rebuild in the Nav2 update thread.
+  // This is independent of the 65,536-cell dirty-window admission limit.
+  {
+    const GridGeometry large{257, 256, 0.1, 0, 0}; // 65,792 cells
+    std::vector<std::uint8_t> large_master(257u * 256u, 33);
+    AcousticBaselineGate large_gate;
+    std::size_t large_calls = 0;
+    const auto expensive = [&](const GridGeometry&, std::uint8_t*,
+                               std::uint8_t*, std::size_t) {
+      ++large_calls;
+      return true;
+    };
+    const BaselineTicket large_ticket{
+        1, 1, BaselineOrigin::IndependentNonAcousticLayers, large};
+    LayerUpdate empty;
+    assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        large_gate, large_ticket, 1, large, empty, 0, 0, 1, 1,
+        expensive, large_master.data(), large_master.size()));
+    assert(large_calls == 0);
+    assert(std::all_of(large_master.begin(), large_master.end(),
+                       [](std::uint8_t v) { return v == 33; }));
+  }
   // Subsequent provider-failure checks use a fresh admission cycle.
   // Callback failure and exceptions never mutate the master.
   const auto failed = [](const GridGeometry&, std::uint8_t*,
