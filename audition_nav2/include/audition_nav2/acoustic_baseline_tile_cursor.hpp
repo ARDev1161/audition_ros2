@@ -10,7 +10,7 @@
 namespace audition_nav2 {
 class AcousticBaselineTileCursor {
  public:
-  struct Tile { unsigned x, y, width, height; };
+  struct Tile { unsigned x, y, width, height; std::uint64_t lease = 0; };
   static constexpr std::size_t kMaxWorkPerTick = 65536u;
 
   bool begin(const BaselineTicket& ticket, unsigned tile_width,
@@ -45,17 +45,22 @@ class AcousticBaselineTileCursor {
     const unsigned w = std::min(tile_width_, g.width - x_);
     const unsigned h = std::min(tile_height_, g.height - y_);
     if (static_cast<std::uint64_t>(w) * h > budget) return false;
-    out = {x_, y_, w, h};
+    out = {x_, y_, w, h, lease_};
     awaiting_ = true;
     return true;
   }
 
+  // A tile lease is tied to one cursor transaction, not merely the map
+  // ticket. Reusing a ticket after abort/begin must not admit late tiles.
+  bool pending(const BaselineTicket& current, const Tile& tile) const {
+    return matches(current) && awaiting_ && tile.lease == lease_ &&
+        tile.x == x_ && tile.y == y_ &&
+        tile.width == std::min(tile_width_, ticket_.geometry.width - x_) &&
+        tile.height == std::min(tile_height_, ticket_.geometry.height - y_);
+  }
   bool acknowledge(const BaselineTicket& current, const Tile& tile,
                    bool success) {
-    if (!matches(current) || !awaiting_ || !success ||
-        tile.x != x_ || tile.y != y_ ||
-        tile.width != std::min(tile_width_, ticket_.geometry.width - x_) ||
-        tile.height != std::min(tile_height_, ticket_.geometry.height - y_)) {
+    if (!success || !pending(current, tile)) {
       reset();  // Reject stale, reordered or failed asynchronous work.
       return false;
     }
@@ -82,6 +87,7 @@ class AcousticBaselineTileCursor {
         t.geometry.origin_y == ticket_.geometry.origin_y;
   }
   void reset() {
+    ++lease_;  // Invalidate every previously issued tile, including ABA.
     active_ = awaiting_ = finished_ = false;
     x_ = y_ = tile_width_ = tile_height_ = 0;
   }
@@ -89,5 +95,6 @@ class AcousticBaselineTileCursor {
   BaselineTicket ticket_{};
   unsigned x_ = 0, y_ = 0, tile_width_ = 0, tile_height_ = 0;
   bool active_ = false, awaiting_ = false, finished_ = false;
+  std::uint64_t lease_ = 0;
 };
 }  // namespace audition_nav2
