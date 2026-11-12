@@ -99,29 +99,30 @@ int main() {
     return false;
   };
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
-      gate, ticket(3), 17, geometry, overlay, 0, 0, 20, 20,
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       failed, master.data(), master.size()));
   const auto throwing = [](const GridGeometry&, std::uint8_t*, std::size_t) -> bool {
     throw std::runtime_error("provider unavailable");
   };
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
-      gate, ticket(3), 17, geometry, overlay, 0, 0, 20, 20,
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       throwing, master.data(), master.size()));
-  assert(master == before);
+  assert(master == after_reapply);
   // Failed provider does not consume cycle 3; fresh independent data can retry.
   assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
-      gate, ticket(3), 17, geometry, overlay, 0, 0, 20, 20,
+      gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
+  const auto after_reapply = master;
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
-      gate, ticket(4), 17, {20, 20, 0.1, 1, 0}, overlay, 0, 0, 20, 20,
+      gate, ticket(5), 17, {20, 20, 0.1, 1, 0}, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
-  assert(master == before);
+  assert(master == after_reapply);
   // A ticket claiming the previous master is never admitted.
-  auto bad = ticket(4);
+  auto bad = ticket(5);
   bad.origin = BaselineOrigin::PreviousMaster;
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, bad, 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
-  assert(master == before);
+  assert(master == after_reapply);
   return 0;
 }
