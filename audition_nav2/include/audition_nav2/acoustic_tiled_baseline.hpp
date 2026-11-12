@@ -29,8 +29,9 @@ class AcousticTiledBaseline {
     active_ = true;
     return true;
   }
-  // Reject overlaps, malformed coverage and oversized tiles atomically.
-  bool add(unsigned x, unsigned y, unsigned width, unsigned height,
+ private:
+  // Only add_checked can enter this path; never accept unbound producer data.
+  bool add_unchecked(unsigned x, unsigned y, unsigned width, unsigned height,
            const std::uint8_t* costs, const std::uint8_t* coverage,
            std::size_t size) {
     if (!active_ || !costs || !coverage || !width || !height ||
@@ -53,6 +54,7 @@ class AcousticTiledBaseline {
     count_ += size;
     return true;
   }
+ public:
   // Async producers must present the ticket captured when their tile was
   // scheduled. A stale tile revokes the whole staging transaction, even if
   // its coordinates still happen to fit the current map (ABA protection).
@@ -64,7 +66,11 @@ class AcousticTiledBaseline {
       reset();
       return false;
     }
-    return add(x, y, width, height, costs, coverage, size);
+    if (!add_unchecked(x, y, width, height, costs, coverage, size)) {
+      reset();  // No partially staged transaction survives a bad producer tile.
+      return false;
+    }
+    return true;
   }
   // A failed or expired producer must not leave a partially ready baseline.
   bool matches(const BaselineTicket& current) const {
