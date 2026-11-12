@@ -15,6 +15,7 @@ void AcousticCostmapLayer::onInitialize() {
   coordinator_.disable();
   map_generation_.invalidate();
   baseline_gate_.invalidate();
+  baseline_pipeline_.abort();
   // The layer remains opt-in and has no evidence subscriber. A timer is
   // nevertheless required: future evidence must expire without a new packet.
   // Capture a weak lifecycle node to avoid extending its lifetime.
@@ -30,6 +31,7 @@ void AcousticCostmapLayer::expireOnTimer() {
   // No trusted evidence is connected. Revoke, never generate map costs.
   coordinator_.revoke_all();
   baseline_gate_.invalidate();
+  baseline_pipeline_.abort();
 }
 void AcousticCostmapLayer::updateBounds(double, double, double,
                                        double* min_x, double* min_y,
@@ -53,6 +55,7 @@ void AcousticCostmapLayer::updateBounds(double, double, double,
   const auto observed_generation = map_generation_.observe(geometry);
   if (!observed_generation || observed_generation != previous_generation) {
     baseline_gate_.invalidate();
+    baseline_pipeline_.abort();
     coordinator_.revoke_all();
     if (!observed_generation) return;
   }
@@ -76,6 +79,7 @@ void AcousticCostmapLayer::updateCosts(nav2_costmap_2d::Costmap2D& master,
   const auto observed_generation = map_generation_.observe(geometry);
   if (!observed_generation || observed_generation != previous_generation) {
     baseline_gate_.invalidate();
+    baseline_pipeline_.abort();
     coordinator_.revoke_all();
   }
   // No costmap writes: bearing-only and diagnostic hypotheses stay inert.
@@ -85,6 +89,7 @@ void AcousticCostmapLayer::reset() {
   coordinator_.revoke_all();
   map_generation_.invalidate();
   baseline_gate_.invalidate();
+  baseline_pipeline_.abort();
   current_ = true;
 }
 }  // namespace audition_nav2
