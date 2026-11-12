@@ -33,7 +33,10 @@ class AcousticIndependentBaselineAdapter {
       std::size_t* changes = nullptr) {
     if (changes) *changes = 0;
     const auto count = static_cast<std::uint64_t>(geometry.width) * geometry.height;
-    // This synchronous callback reconstructs the ENTIRE map, not merely the\n    // dirty window. A small window on a huge map must not bypass the CPU\n    // budget. Larger maps require a separately scheduled/tiled provider.\n    // Validate bounds before subtracting unsigned coordinates.
+    // This synchronous callback reconstructs the ENTIRE map, not merely the
+    // dirty window. A small window on a huge map must not bypass the CPU
+    // budget. Larger maps require a separately scheduled/tiled provider.
+    // Validate bounds before subtracting unsigned coordinates.
     if (min_i >= max_i || min_j >= max_j ||
         max_i > geometry.width || max_j > geometry.height) return false;
     const auto area = static_cast<std::uint64_t>(max_i - min_i) *
