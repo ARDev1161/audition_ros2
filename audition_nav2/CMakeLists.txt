@@ -83,5 +83,14 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME acoustic_baseline_transaction_edge_cases
     COMMAND test_acoustic_baseline_transaction_edge_cases)
+  add_executable(test_acoustic_independent_baseline_adapter
+    test/test_acoustic_independent_baseline_adapter.cpp)
+  target_compile_features(test_acoustic_independent_baseline_adapter PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_independent_baseline_adapter PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_independent_baseline_adapter PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_independent_baseline_adapter_contract
+    COMMAND test_acoustic_independent_baseline_adapter)
 endif()
 ament_package()
