@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdint>
 #include <vector>
+#include <stdexcept>
 #include "audition_nav2/acoustic_baseline_tile_pipeline.hpp"
 using namespace audition_nav2;
 int main() {
@@ -76,4 +77,48 @@ int main() {
   wrong.x = 256;
   assert(!pipeline.submit(ticket, wrong, costs.data(), coverage.data(), costs.size()));
   assert(!pipeline.next(ticket, 65536, tile));
+  // Bounded producer: one tile per tick, no partial output.
+  const GridGeometry small{3, 2, 0.1, 0, 0};
+  const BaselineTicket fresh{8, 11, BaselineOrigin::IndependentNonAcousticLayers, small};
+  auto producer = [](const BaselineTicket& seen, const AcousticBaselineTilePipeline::Tile& t,
+                     std::vector<std::uint8_t>& c, std::vector<std::uint8_t>& cover) {
+    assert(seen.generation == 8);
+    assert(t.width * t.height <= 2);
+    for (auto& v : c) v = 30;
+    for (auto& v : cover) v = 1;
+    return true;
+  };
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 1, producer)); // Budget too small: no callback.
+  for (int i = 0; i < 4; ++i) {
+    assert(pipeline.produce_one(fresh, 2, producer));
+    assert(!pipeline.take_ready(fresh, result));
+  }
+  assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.take_ready(fresh, result));
+  assert(result == std::vector<std::uint8_t>(6, 30));
+
+  // Callback failure, exception, and malformed output all revoke the ticket.
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [](const auto&, const auto&, auto&, auto&) {
+    return false;
+  }));
+  assert(!pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [](const auto&, const auto&, auto&, auto&) -> bool {
+    throw std::runtime_error("producer failed");
+  }));
+  assert(!pipeline.take_ready(fresh, result));
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [](const auto&, const auto&, auto& c, auto&) {
+    c.clear();
+    return true;
+  }));
+  assert(!pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(pipeline.produce_one(fresh, 2, producer));
+  pipeline.abort();
+  assert(!pipeline.take_ready(fresh, result));
+
 }
