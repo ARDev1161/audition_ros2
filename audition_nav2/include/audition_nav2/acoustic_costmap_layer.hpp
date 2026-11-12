@@ -7,6 +7,7 @@
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
 #include "audition_nav2/acoustic_map_generation.hpp"
 #include "audition_nav2/acoustic_baseline_gate.hpp"
+#include "audition_nav2/acoustic_baseline_tile_pipeline.hpp"
 
 namespace audition_nav2 {
 // Fail-closed plugin shell. No subscriptions until authenticated metric evidence
@@ -33,5 +34,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   // Every map reset/geometry transition revokes any pending baseline admission.
   // No ticket is issued until an independent non-acoustic rebuild exists.
   AcousticBaselineGate baseline_gate_;
+  // Staging is revoked on every lifecycle/geometry/expiry transition.
+  // It cannot authorize writes until a separate non-acoustic Nav2 producer exists.
+  AcousticBaselineTilePipeline baseline_pipeline_;
 };
 }  // namespace audition_nav2
