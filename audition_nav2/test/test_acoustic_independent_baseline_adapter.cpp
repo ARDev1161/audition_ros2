@@ -72,6 +72,28 @@ int main() {
         rebuild, master.data(), master.size()));
     assert(calls == 2 && master == before);
   }
+  // Invalid producer data anywhere on the map (including outside the
+  // requested window) must not invoke the independent baseline provider.
+  // These failures also must not consume the next valid cycle.
+  for (const auto& invalid : std::vector<std::pair<
+           std::pair<unsigned, unsigned>, std::uint8_t>>{
+           {{20, 0}, 120}, {{0, 20}, 120},
+           {{19, 19}, 0}, {{19, 19}, 253},
+           {{19, 19}, 254}, {{19, 19}, 255}}) {
+    LayerUpdate malformed;
+    malformed.own_cells[invalid.first] = invalid.second;
+    assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        gate, ticket(3), 17, geometry, malformed, 0, 0, 5, 5,
+        rebuild, master.data(), master.size()));
+    assert(calls == 2 && master == before);
+  }
+  LayerUpdate valid_outside_window;
+  valid_outside_window.own_cells[{19, 19}] = 120;
+  assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
+      gate, ticket(3), 17, geometry, valid_outside_window, 0, 0, 5, 5,
+      rebuild, master.data(), master.size()));
+  assert(calls == 3 && master == before);
+  // Subsequent provider-failure checks use a fresh admission cycle.
   // Callback failure and exceptions never mutate the master.
   const auto failed = [](const GridGeometry&, std::uint8_t*, std::size_t) {
     return false;
