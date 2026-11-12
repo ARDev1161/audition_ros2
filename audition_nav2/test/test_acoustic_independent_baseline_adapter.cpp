@@ -107,12 +107,16 @@ int main() {
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       throwing, master.data(), master.size()));
-  assert(master == after_reapply);
-  // Failed provider does not consume cycle 3; fresh independent data can retry.
+  assert(master == before);
+  // Failed provider does not consume cycle 4; fresh independent data can retry.
   assert(AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(4), 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
   const auto after_reapply = master;
+  assert(calls == 4);
+  assert(master[2 * 20 + 2] == 120);
+  assert(master[2 * 20 + 3] == 254);
+  assert(master[2 * 20 + 4] == 255);
   assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
       gate, ticket(5), 17, {20, 20, 0.1, 1, 0}, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
