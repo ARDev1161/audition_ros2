@@ -16,7 +16,10 @@ class AcousticIndependentBaselineAdapter {
  public:
   // No master pointer is exposed to the provider. The callback must fill
   // exactly count bytes from non-acoustic layers, in current map coordinates.
-  using Rebuild = std::function<bool(const GridGeometry&, std::uint8_t*, std::size_t)>;
+  // Coverage must be explicitly marked 1 for every reconstructed cell;
+  // an unwritten cell must never silently become FREE_SPACE.
+  using Rebuild = std::function<bool(const GridGeometry&, std::uint8_t*,
+                                     std::uint8_t*, std::size_t)>;
 
   // A failed reconstruction never changes master or consumes an admission.
   // A successful reconstruction is bound to the supplied generation/cycle;
@@ -63,9 +66,17 @@ class AcousticIndependentBaselineAdapter {
     // Private storage prevents accidental pointer aliasing with the master.
     // No costmap writes happen until reconstruction has fully succeeded.
     std::vector<std::uint8_t> baseline;
+    std::vector<std::uint8_t> coverage;
     try {
       baseline.resize(static_cast<std::size_t>(count));
-      if (!rebuild(geometry, baseline.data(), baseline.size())) return false;
+      coverage.resize(static_cast<std::size_t>(count), 0);
+      if (!rebuild(geometry, baseline.data(), coverage.data(), baseline.size()))
+        return false;
+      // A successful but incomplete provider would otherwise erase physical
+      // obstacles with zero-initialized scratch cells. Reject before commit.
+      for (const auto mark : coverage) {
+        if (mark != 1) return false;
+      }
     } catch (const std::bad_alloc&) {
       return false;
     } catch (...) {
