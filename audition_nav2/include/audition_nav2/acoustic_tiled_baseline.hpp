@@ -53,20 +53,38 @@ class AcousticTiledBaseline {
     count_ += size;
     return true;
   }
+  // Async producers must present the ticket captured when their tile was
+  // scheduled. A stale tile revokes the whole staging transaction, even if
+  // its coordinates still happen to fit the current map (ABA protection).
+  bool add_checked(const BaselineTicket& producer,
+                   unsigned x, unsigned y, unsigned width, unsigned height,
+                   const std::uint8_t* costs, const std::uint8_t* coverage,
+                   std::size_t size) {
+    if (!same_ticket(producer)) {
+      reset();
+      return false;
+    }
+    return add(x, y, width, height, costs, coverage, size);
+  }
+  // A failed or expired producer must not leave a partially ready baseline.
+  bool matches(const BaselineTicket& current) const {
+    return same_ticket(current);
+  }
   bool ready(const BaselineTicket& current) const {
-    return active_ && count_ == cells_.size() &&
-        current.generation == ticket_.generation &&
-        current.cycle == ticket_.cycle &&
-        current.origin == ticket_.origin &&
+    return same_ticket(current) && count_ == cells_.size();
+  }
+  const std::vector<std::uint8_t>& cells() const { return cells_; }
+  void reset() { active_ = false; count_ = 0; cells_.clear(); covered_.clear(); }
+ private:
+  bool same_ticket(const BaselineTicket& current) const {
+    return active_ && current.generation == ticket_.generation &&
+        current.cycle == ticket_.cycle && current.origin == ticket_.origin &&
         current.geometry.width == ticket_.geometry.width &&
         current.geometry.height == ticket_.geometry.height &&
         current.geometry.resolution == ticket_.geometry.resolution &&
         current.geometry.origin_x == ticket_.geometry.origin_x &&
         current.geometry.origin_y == ticket_.geometry.origin_y;
   }
-  const std::vector<std::uint8_t>& cells() const { return cells_; }
-  void reset() { active_ = false; count_ = 0; cells_.clear(); covered_.clear(); }
- private:
   BaselineTicket ticket_{};
   bool active_ = false;
   std::size_t count_ = 0;
