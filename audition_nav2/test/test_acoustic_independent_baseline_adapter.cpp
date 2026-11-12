@@ -60,6 +60,18 @@ int main() {
       gate, old_generation, 17, geometry, overlay, 0, 0, 20, 20,
       rebuild, master.data(), master.size()));
   assert(calls == 2 && master == before);
+  // Invalid and inverted windows must be rejected before provider invocation.
+  // This also exercises the unsigned subtraction boundary in area accounting.
+  for (const auto& window : std::vector<std::vector<unsigned>>{
+           {10, 0, 9, 20}, {0, 12, 20, 11},
+           {0, 0, 21, 20}, {0, 0, 20, 21},
+           {0, 0, 0, 20}, {0, 0, 20, 0}}) {
+    assert(!AcousticIndependentBaselineAdapter::rebuild_and_apply(
+        gate, ticket(3), 17, geometry, overlay,
+        window[0], window[1], window[2], window[3],
+        rebuild, master.data(), master.size()));
+    assert(calls == 2 && master == before);
+  }
   // Callback failure and exceptions never mutate the master.
   const auto failed = [](const GridGeometry&, std::uint8_t*, std::size_t) {
     return false;
