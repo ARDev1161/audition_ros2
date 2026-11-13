@@ -148,6 +148,34 @@ int main() {
              cost == 254 || cost == 255);
   }
 
+  // Two independently confirmed sources may occupy one cell. Retiring the
+  // first must not clear the second; only the final retirement may restore
+  // the non-acoustic baseline. Repeat with a lethal/unknown neighbor to
+  // guard against accidental cross-layer clearing.
+  AcousticLayerCoordinator overlap(4, 65);
+  overlap.enable();
+  const GridGeometry og{5, 5, 1.0, 0.0, 0.0};
+  std::vector<std::uint8_t> ob(25, 0), om(25, 0);
+  ob[1 * 5 + 1] = 254;
+  ob[3 * 5 + 3] = 255;
+  om = ob;
+  assert(overlap.ingest_validated({21, 2000, 2050, 2, 2, true}, 2000));
+  assert(overlap.ingest_validated({22, 2000, 2200, 2, 2, true}, 2000));
+  auto both = overlap.tick(2000, og);
+  rebuild_and_overlay(both, og, om, ob);
+  assert(om[2 * 5 + 2] == 65);
+  auto one_expired = overlap.tick(2051, og);
+  rebuild_and_overlay(one_expired, og, om, ob);
+  assert(om[2 * 5 + 2] == 65);
+  assert(om[1 * 5 + 1] == 254 && om[3 * 5 + 3] == 255);
+  // No incoming messages or Nav2 cycles until both sources have expired.
+  auto all_expired = overlap.tick(2201, og);
+  assert(all_expired.rebuild_required);
+  rebuild_and_overlay(all_expired, og, om, ob);
+  assert(om == ob);
+  assert(!overlap.ingest_validated({21, 2000, 2050, 2, 2, true}, 2202));
+  assert(!overlap.ingest_validated({22, 2000, 2200, 2, 2, true}, 2202));
+
   // Nav2 may suspend updateMap() while the ROS timer continues. The timer
   // must NOT consume dirty cells: the resumed bounds pass retires expired
   // acoustic costs from the master even without incoming messages.
