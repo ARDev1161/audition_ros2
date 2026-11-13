@@ -197,6 +197,39 @@ int main() {
                                        {"obstacles", "inflation"}}, snapshot,
                                      costs, marks));
   assert(costs == stable_costs && marks == stable_marks);
+  // A roster snapshot from another map generation must never certify a
+  // baseline ticket, even if the external snapshot provider agrees with it.
+  // This is a preflight failure: neither snapshot nor layer callbacks run.
+  int wrong_generation_snapshots = 0;
+  int wrong_generation_layers = 0;
+  const C::RosterSnapshot foreign_roster{18, "acoustic", {"obstacles"}};
+  const C::SnapshotProvider foreign_snapshot =
+      [&](C::RosterSnapshot& out) {
+        ++wrong_generation_snapshots;
+        out = foreign_roster;
+        return true;
+      };
+  const C::Layer foreign_layer =
+      [&](const auto&, const auto&, auto& c, auto& m) {
+        ++wrong_generation_layers;
+        std::fill(c.begin(), c.end(), 10);
+        std::fill(m.begin(), m.end(), 1);
+        return true;
+      };
+  assert(!C::compose_verified_stable(
+      t, tile, {{"obstacles", true, true, foreign_layer}},
+      foreign_roster, foreign_snapshot, costs, marks));
+  assert(wrong_generation_snapshots == 0 && wrong_generation_layers == 0);
+  assert(costs == stable_costs && marks == stable_marks);
+  // The same guard applies when the ticket changes but the roster does not.
+  auto next_generation_ticket = t;
+  next_generation_ticket.generation = 18;
+  assert(!C::compose_verified_stable(
+      next_generation_ticket, tile,
+      {{"obstacles", true, true, foreign_layer}},
+      counted_roster, foreign_snapshot, costs, marks));
+  assert(wrong_generation_snapshots == 0 && wrong_generation_layers == 0);
+  assert(costs == stable_costs && marks == stable_marks);
   // Stable composition must reject malformed input before querying the
   // roster, copying output buffers, or running any layer callback.
   int snapshots = 0;
