@@ -16,6 +16,9 @@ namespace audition_nav2 {
 class AcousticLayerTileCompositor {
  public:
   using Tile = AcousticBaselineTilePipeline::Tile;
+  // Cap aggregate callback work per tile, not only tile area. A 64-layer
+  // roster must not turn one bounded tile into unbounded update latency.
+  static constexpr std::size_t kMaxLayerCellVisits = 262144u;
   using Layer = std::function<bool(const BaselineTicket&, const Tile&,
                                    std::vector<std::uint8_t>&,
                                    std::vector<std::uint8_t>&)>;
@@ -65,6 +68,7 @@ class AcousticLayerTileCompositor {
       return false;
     const auto n = static_cast<std::size_t>(tile.width) * tile.height;
     if (n > AcousticTiledBaseline::kMaxTileCells ||
+        layers.size() > kMaxLayerCellVisits / n ||
         costs.size() != n || coverage.size() != n) return false;
     // Never leave a partially composed result on a failed callback.
     std::vector<std::uint8_t> composed(n, 0), complete(n, 0);
