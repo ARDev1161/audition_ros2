@@ -3,6 +3,7 @@
 #include <mutex>
 #include <cstdint>
 #include "rclcpp/rclcpp.hpp"
+#include "audition_msgs/msg/localized_source_array.hpp"
 #include "nav2_costmap_2d/layer.hpp"
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
 #include "audition_nav2/acoustic_map_generation.hpp"
@@ -27,6 +28,12 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   // Expire ownership on a wall-clock cadence even without incoming messages.
   // No acoustic observation source is wired yet; the timer is fail-closed.
   void expireOnTimer();
+  // Explicitly opt-in only to an independently validated metric ROS stream.
+  // The ordinary M4 diagnostic output is never automatically subscribed.
+  void onTrustedMetricArray(const audition_msgs::msg::LocalizedSourceArray& msg);
+  rclcpp::Subscription<audition_msgs::msg::LocalizedSourceArray>::SharedPtr
+      verified_metric_subscription_;
+  std::uint64_t last_metric_generation_ = 0;
   std::mutex mutex_;
   rclcpp::TimerBase::SharedPtr expiry_timer_;
   AcousticLayerCoordinator coordinator_;
