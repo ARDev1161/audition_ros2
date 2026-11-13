@@ -176,6 +176,49 @@ int main() {
   assert(!overlap.ingest_validated({21, 2000, 2050, 2, 2, true}, 2202));
   assert(!overlap.ingest_validated({22, 2000, 2200, 2, 2, true}, 2202));
 
+  // A resize is a new coordinate system, not an opportunity to replay
+  // stale grid indices. Keep only still-live world-frame sources, and
+  // recompute the overlay against the newly rebuilt non-acoustic baseline.
+  AcousticLayerCoordinator resize(4, 72);
+  resize.enable();
+  const GridGeometry small{4, 4, 1.0, 0.0, 0.0};
+  const GridGeometry large{7, 5, 1.0, -1.0, -1.0};
+  std::vector<std::uint8_t> small_base(16, 0), small_master(16, 0);
+  small_base[1 * 4 + 1] = 254;
+  small_master = small_base;
+  assert(resize.ingest_validated({31, 3000, 3200, 2.0, 2.0, true}, 3000));
+  assert(resize.ingest_validated({32, 3000, 3020, 3.0, 3.0, true}, 3000));
+  auto small_cycle = resize.tick(3000, small);
+  rebuild_and_overlay(small_cycle, small, small_master, small_base);
+  assert(small_master[2 * 4 + 2] == 72);
+  assert(small_master[1 * 4 + 1] == 254);
+
+  // No Nav2 updates during resize; the short-lived source expires while
+  // the persistent source moves to a different cell in the larger grid.
+  std::vector<std::uint8_t> large_base(35, 0), large_master(35, 0);
+  large_base[2 * 7 + 2] = 255;
+  large_base[3 * 7 + 3] = 130;
+  large_master = large_base;
+  auto resized = resize.tick(3030, large);
+  assert(resized.update.geometry_changed);
+  assert(resized.rebuild_required);
+  assert(resized.dirty.min_i == 0 && resized.dirty.max_i == 7);
+  assert(resized.dirty.min_j == 0 && resized.dirty.max_j == 5);
+  assert(resized.update.own_cells.size() == 1);
+  rebuild_and_overlay(resized, large, large_master, large_base);
+  assert(large_master[3 * 7 + 3] == 130);
+  assert(large_master[2 * 7 + 2] == 255);
+  assert(!resize.ingest_validated({32, 3000, 3020, 3.0, 3.0, true}, 3030));
+  assert(!resize.tick(3031, large).rebuild_required);
+
+  // TTL retirement after resize restores the new baseline, not the old
+  // small-grid master, and a second idle update stays clean.
+  auto resized_expiry = resize.tick(3201, large);
+  assert(resized_expiry.rebuild_required);
+  rebuild_and_overlay(resized_expiry, large, large_master, large_base);
+  assert(large_master == large_base);
+  assert(!resize.tick(3202, large).rebuild_required);
+
   // Nav2 may suspend updateMap() while the ROS timer continues. The timer
   // must NOT consume dirty cells: the resumed bounds pass retires expired
   // acoustic costs from the master even without incoming messages.
