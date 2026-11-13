@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <functional>
 #include "audition_nav2/acoustic_world_bounds.hpp"
+#include "audition_nav2/acoustic_verified_metric_input.hpp"
+#include <string>
+#include <vector>
 #include "nav2_costmap_2d/layered_costmap.hpp"
 
 namespace audition_nav2 {
@@ -20,9 +23,66 @@ void AcousticCostmapLayer::onInitialize() {
   pending_valid_ = false;
   auto node = node_.lock();
   if (node) {
+    declareParameter("enable_soft_costs", rclcpp::ParameterValue(false));
+    declareParameter("trusted_metric_topic", rclcpp::ParameterValue(std::string("")));
+    bool requested = false;
+    std::string topic;
+    node->get_parameter(name_ + ".enable_soft_costs", requested);
+    node->get_parameter(name_ + ".trusted_metric_topic", topic);
+    // This topic is an OPERATOR-APPROVED upstream trust boundary, not
+    // M4's unverified diagnostic localization stream. Its messages still
+    // undergo strict generation, timestamp, method, covariance and
+    // same-global-frame checks before any cell is admitted.
+    if (requested && !topic.empty()) {
+      enabled_ = true;
+      coordinator_.enable();
+      verified_metric_subscription_ =
+          node->create_subscription<audition_msgs::msg::LocalizedSourceArray>(
+              topic, rclcpp::QoS(10).reliable(),
+              [this](const audition_msgs::msg::LocalizedSourceArray& msg) {
+                onTrustedMetricArray(msg);
+              });
+    } else if (requested) {
+      RCLCPP_WARN(logger_,
+          "Acoustic soft costs requested without trusted_metric_topic; layer disabled");
+    }
     expiry_timer_ = node->create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&AcousticCostmapLayer::expireOnTimer, this));
+  }
+}
+
+void AcousticCostmapLayer::onTrustedMetricArray(
+    const audition_msgs::msg::LocalizedSourceArray& msg) {
+  if (!clock_ || !layered_costmap_) return;
+  const auto now_ns = clock_->now().nanoseconds();
+  std::vector<StampedMetricEvidence> evidence;
+  // Decode outside the state mutex; the callback performs bounded
+  // validation (at most 32 sources) and cannot change the costmap.
+  const bool valid = AcousticVerifiedMetricInput::decode(
+      msg, layered_costmap_->getGlobalFrameID(), now_ns, evidence);
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!enabled_) return;
+  // Replayed older sessions cannot revoke a newer trusted observation.
+  if (msg.generation < last_metric_generation_) return;
+  if (!valid) {
+    coordinator_.revoke_all();
+    return;
+  }
+  if (msg.generation != last_metric_generation_) {
+    coordinator_.revoke_all();
+    last_metric_generation_ = msg.generation;
+  }
+  if (evidence.empty()) {
+    coordinator_.revoke_all();  // Explicit empty verified snapshot.
+    return;
+  }
+  for (const auto& item : evidence) {
+    if (!coordinator_.ingest_evidence(item, now_ns)) {
+      // Do not leave a partially updated batch visible to Nav2.
+      coordinator_.revoke_all();
+      return;
+    }
   }
 }
 
