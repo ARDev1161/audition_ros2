@@ -112,4 +112,39 @@ int main() {
   assert(pipeline.take_ready(t, result));
   assert(result.size() == 8 && result[1] == 100 && result[2] == 254);
   assert(!pipeline.take_ready(t, result));
+  // Bounded CPU: tile size alone is insufficient when dozens of independent
+  // layer callbacks would each traverse the full tile.
+  const GridGeometry large_g{256, 256, 0.1, 0, 0};
+  const BaselineTicket large_t{9, 10, BaselineOrigin::IndependentNonAcousticLayers,
+                               large_g};
+  const C::Tile large_tile{0, 0, 256, 256, 17};
+  std::vector<std::uint8_t> large_costs(65536, 77);
+  std::vector<std::uint8_t> large_marks(65536, 88);
+  int calls = 0;
+  const C::Layer counted_large = [&](const auto&, const auto&, auto& c, auto& m) {
+    ++calls;
+    std::fill(c.begin(), c.end(), 3);
+    std::fill(m.begin(), m.end(), 1);
+    return true;
+  };
+  const std::vector<C::Layer> within_budget(4, counted_large);
+  assert(C::compose(large_t, large_tile, within_budget,
+                    large_costs, large_marks));
+  assert(calls == 4 && large_costs[0] == 3 && large_marks[0] == 1);
+  const auto committed_costs = large_costs;
+  const auto committed_marks = large_marks;
+  calls = 0;
+  const std::vector<C::Layer> over_budget(5, counted_large);
+  assert(!C::compose(large_t, large_tile, over_budget,
+                     large_costs, large_marks));
+  assert(calls == 0 && large_costs == committed_costs &&
+         large_marks == committed_marks);
+  std::vector<C::VerifiedLayer> verified_over_budget;
+  for (int i = 0; i < 5; ++i)
+    verified_over_budget.push_back({"layer_" + std::to_string(i), true, true,
+                                   counted_large});
+  assert(!C::compose_verified(large_t, large_tile, verified_over_budget,
+                              "acoustic", large_costs, large_marks));
+  assert(calls == 0 && large_costs == committed_costs &&
+         large_marks == committed_marks);
 }
