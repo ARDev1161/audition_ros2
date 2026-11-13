@@ -144,9 +144,14 @@ class AcousticLayerTileCompositor {
         costs.size() != n || coverage.size() != n) return false;
     // Never leave a partially composed result on a failed callback.
     try {
-      std::vector<std::uint8_t> composed(n, 0), complete(n, 0);
+      // Preflight the entire callback roster before invoking any provider.
+      // A missing late callback must not run earlier, potentially stateful
+      // Nav2 layer producers before the transaction is known to be invalid.
       for (const auto& layer : layers) {
         if (!layer) return false;
+      }
+      std::vector<std::uint8_t> composed(n, 0), complete(n, 0);
+      for (const auto& layer : layers) {
         std::vector<std::uint8_t> values(n, 0), marks(n, 0);
         if (!layer(ticket, tile, values, marks) ||
             values.size() != n || marks.size() != n) return false;
