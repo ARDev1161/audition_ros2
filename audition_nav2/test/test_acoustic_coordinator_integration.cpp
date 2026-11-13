@@ -147,5 +147,49 @@ int main() {
       assert(cost == 0 || cost == 90 || cost == 130 ||
              cost == 254 || cost == 255);
   }
-}
 
+  // Nav2 may suspend updateMap() while the ROS timer continues. The timer
+  // must NOT consume dirty cells: the resumed bounds pass retires expired
+  // acoustic costs from the master even without incoming messages.
+  AcousticLayerCoordinator paused(4, 75);
+  paused.enable();
+  const GridGeometry pg{8, 8, 1.0, 0.0, 0.0};
+  std::vector<std::uint8_t> pb(64, 0), pm(64, 0);
+  pb[1 * 8 + 1] = 130;
+  pm = pb;
+  assert(paused.ingest_validated({11, 1000, 1050, 2.0, 2.0, true}, 1000));
+  assert(paused.ingest_validated({12, 1000, 1200, 1.0, 1.0, true}, 1000));
+  auto before_pause = paused.tick(1000, pg);
+  rebuild_and_overlay(before_pause, pg, pm, pb);
+  assert(pm[2 * 8 + 2] == 75);
+  assert(pm[1 * 8 + 1] == 130);
+  // No coordinator tick from t=1000 to t=1100: updateMap is suspended.
+  auto resumed = paused.tick(1100, pg);
+  assert(resumed.rebuild_required);
+  assert(resumed.update.retired_cells.count({2, 2}) == 1);
+  assert(resumed.update.own_cells.count({2, 2}) == 0);
+  rebuild_and_overlay(resumed, pg, pm, pb);
+  assert(pm[2 * 8 + 2] == 0);
+  assert(pm[1 * 8 + 1] == 130);
+  assert(!paused.tick(1101, pg).rebuild_required);
+  assert(!paused.ingest_validated({11, 1000, 1050, 2.0, 2.0, true}, 1101));
+
+  // Rolling map while suspended: old grid indices cannot clear the new
+  // master; resumed update must request a full-grid baseline rebuild.
+  assert(paused.ingest_validated({13, 1102, 1150, 4.0, 4.0, true}, 1102));
+  auto pre_roll = paused.tick(1102, pg);
+  rebuild_and_overlay(pre_roll, pg, pm, pb);
+  assert(pm[4 * 8 + 4] == 75);
+  const GridGeometry rolled{8, 8, 1.0, 1.0, 0.0};
+  auto after_roll = paused.tick(1201, rolled);
+  assert(after_roll.update.geometry_changed);
+  assert(after_roll.rebuild_required);
+  assert(after_roll.dirty.min_i == 0 && after_roll.dirty.max_i == 8);
+  assert(after_roll.dirty.min_j == 0 && after_roll.dirty.max_j == 8);
+  assert(after_roll.update.own_cells.empty());
+  // Nav2 supplies the new baseline, never the previous acoustic master.
+  pm = pb;
+  rebuild_and_overlay(after_roll, rolled, pm, pb);
+  assert(pm == pb);
+  assert(!paused.tick(1202, rolled).rebuild_required);
+}
