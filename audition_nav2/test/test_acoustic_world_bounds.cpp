@@ -10,6 +10,24 @@ int main() {
   double x0 = -3, y0 = -0.25, x1 = -0.5, y1 = 2;
   assert(AcousticWorldBounds::expand(w, &x0, &y0, &x1, &y1));
   assert(x0 == -3 && y0 < -0.5 && x1 > 0 && y1 == 2);
+  // Nav2 initializes the world bounds to its empty sentinel on each update.
+  // Acoustic arrival or TTL expiry may be the ONLY dirty layer.
+  const double high = std::numeric_limits<double>::max();
+  const double low = std::numeric_limits<double>::lowest();
+  double empty_x0 = high, empty_y0 = high, empty_x1 = low, empty_y1 = low;
+  assert(AcousticWorldBounds::expand(w, &empty_x0, &empty_y0,
+                                      &empty_x1, &empty_y1));
+  assert(empty_x0 == w.min_x && empty_y0 == w.min_y);
+  assert(empty_x1 == w.max_x && empty_y1 == w.max_y);
+  assert(AcousticWorldBounds::expand(w, &empty_x0, &empty_y0,
+                                      &empty_x1, &empty_y1));
+  assert(empty_x0 == w.min_x && empty_x1 == w.max_x);
+  // A partial sentinel is not a legitimate Nav2 accumulator.
+  double partial_x0 = high, partial_y0 = high, partial_x1 = low,
+         partial_y1 = 0.;
+  assert(!AcousticWorldBounds::expand(w, &partial_x0, &partial_y0,
+                                       &partial_x1, &partial_y1));
+  assert(partial_x0 == high && partial_y1 == 0.);
   assert(!AcousticWorldBounds::from_cells({}, g).valid);
   assert(!AcousticWorldBounds::from_cells({0,0,9,3}, g).valid);
   assert(!AcousticWorldBounds::from_cells({8,0,9,1}, g).valid);
