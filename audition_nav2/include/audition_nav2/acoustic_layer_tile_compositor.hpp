@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
+#include <unordered_set>
 #include <vector>
 #include "audition_nav2/acoustic_baseline_tile_pipeline.hpp"
 
@@ -17,6 +19,35 @@ class AcousticLayerTileCompositor {
   using Layer = std::function<bool(const BaselineTicket&, const Tile&,
                                    std::vector<std::uint8_t>&,
                                    std::vector<std::uint8_t>&)>;
+  // A provider must bind each callback to a distinct, verified non-acoustic
+  // layer identity. These declarations are fail-closed admission checks, not
+  // a way to infer provenance from arbitrary callbacks. A Nav2 adapter must
+  // verify the actual plugin identity and combination method independently.
+  struct VerifiedLayer {
+    std::string identity;
+    bool independent = false;
+    bool max_combination = false;
+    Layer reconstruct;
+  };
+  static bool compose_verified(const BaselineTicket& ticket, const Tile& tile,
+                               const std::vector<VerifiedLayer>& sources,
+                               const std::string& acoustic_identity,
+                               std::vector<std::uint8_t>& costs,
+                               std::vector<std::uint8_t>& coverage) {
+    if (acoustic_identity.empty() || sources.empty() || sources.size() > 64)
+      return false;
+    std::unordered_set<std::string> identities;
+    std::vector<Layer> callbacks;
+    callbacks.reserve(sources.size());
+    for (const auto& source : sources) {
+      if (source.identity.empty() || source.identity == acoustic_identity ||
+          !source.independent || !source.max_combination ||
+          !source.reconstruct || !identities.insert(source.identity).second)
+        return false;
+      callbacks.push_back(source.reconstruct);
+    }
+    return compose(ticket, tile, callbacks, costs, coverage);
+  }
   // All callbacks must reconstruct their own layer tile, not read the
   // acoustic-contaminated master. The caller is responsible for validating
   // layer identities and Nav2 ordering before constructing this list.
