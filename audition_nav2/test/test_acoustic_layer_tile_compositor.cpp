@@ -227,7 +227,8 @@ int main() {
   assert(!C::compose_verified_stable(
       next_generation_ticket, tile,
       {{"obstacles", true, true, foreign_layer}},
-      counted_roster, foreign_snapshot, costs, marks));
+      C::RosterSnapshot{17, "acoustic", {"obstacles"}},
+      foreign_snapshot, costs, marks));
   assert(wrong_generation_snapshots == 0 && wrong_generation_layers == 0);
   assert(costs == stable_costs && marks == stable_marks);
   // Stable composition must reject malformed input before querying the
