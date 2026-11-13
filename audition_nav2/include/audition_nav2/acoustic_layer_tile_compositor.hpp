@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <string>
 #include <unordered_set>
@@ -39,17 +40,26 @@ class AcousticLayerTileCompositor {
                                std::vector<std::uint8_t>& coverage) {
     if (acoustic_identity.empty() || sources.empty() || sources.size() > 64)
       return false;
-    std::unordered_set<std::string> identities;
-    std::vector<Layer> callbacks;
-    callbacks.reserve(sources.size());
-    for (const auto& source : sources) {
-      if (source.identity.empty() || source.identity == acoustic_identity ||
-          !source.independent || !source.max_combination ||
-          !source.reconstruct || !identities.insert(source.identity).second)
-        return false;
-      callbacks.push_back(source.reconstruct);
+    // Preflight work limits before allocating/copying callbacks.
+    if (!valid_tile(ticket, tile) ||
+        sources.size() > kMaxLayerCellVisits / tile_cells(tile))
+      return false;
+    try {
+      std::unordered_set<std::string> identities;
+      std::vector<Layer> callbacks;
+      callbacks.reserve(sources.size());
+      for (const auto& source : sources) {
+        if (source.identity.empty() || source.identity == acoustic_identity ||
+            !source.independent || !source.max_combination ||
+            !source.reconstruct || !identities.insert(source.identity).second)
+          return false;
+        callbacks.push_back(source.reconstruct);
+      }
+      return compose(ticket, tile, callbacks, costs, coverage);
+    } catch (...) {
+      // No allocation/callback exception may escape into Nav2 updateCosts.
+      return false;
     }
-    return compose(ticket, tile, callbacks, costs, coverage);
   }
   // A roster may change while external callbacks reconstruct a tile (e.g.
   // plugin reload, reorder, or layer removal). Admit a tile only when the
@@ -104,21 +114,14 @@ class AcousticLayerTileCompositor {
                       const std::vector<Layer>& layers,
                       std::vector<std::uint8_t>& costs,
                       std::vector<std::uint8_t>& coverage) {
-    if (ticket.origin != BaselineOrigin::IndependentNonAcousticLayers ||
-        ticket.generation == 0 || ticket.cycle == 0 ||
-        layers.empty() || layers.size() > 64 ||
-        !tile.width || !tile.height ||
-        tile.x >= ticket.geometry.width || tile.y >= ticket.geometry.height ||
-        tile.width > ticket.geometry.width - tile.x ||
-        tile.height > ticket.geometry.height - tile.y)
+    if (!valid_tile(ticket, tile) || layers.empty() || layers.size() > 64)
       return false;
-    const auto n = static_cast<std::size_t>(tile.width) * tile.height;
-    if (n > AcousticTiledBaseline::kMaxTileCells ||
-        layers.size() > kMaxLayerCellVisits / n ||
+    const auto n = tile_cells(tile);
+    if (layers.size() > kMaxLayerCellVisits / n ||
         costs.size() != n || coverage.size() != n) return false;
     // Never leave a partially composed result on a failed callback.
-    std::vector<std::uint8_t> composed(n, 0), complete(n, 0);
     try {
+      std::vector<std::uint8_t> composed(n, 0), complete(n, 0);
       for (const auto& layer : layers) {
         if (!layer) return false;
         std::vector<std::uint8_t> values(n, 0), marks(n, 0);
@@ -136,12 +139,33 @@ class AcousticLayerTileCompositor {
           complete[i] = 1;
         }
       }
+      costs.swap(composed);
+      coverage.swap(complete);
+      return true;
     } catch (...) {
       return false;
     }
-    costs.swap(composed);
-    coverage.swap(complete);
-    return true;
+  }
+ private:
+  static std::size_t tile_cells(const Tile& tile) noexcept {
+    return static_cast<std::size_t>(tile.width) * tile.height;
+  }
+  static bool valid_tile(const BaselineTicket& ticket, const Tile& tile) noexcept {
+    if (ticket.origin != BaselineOrigin::IndependentNonAcousticLayers ||
+        !ticket.generation || !ticket.cycle ||
+        !ticket.geometry.width || !ticket.geometry.height ||
+        !std::isfinite(ticket.geometry.resolution) ||
+        ticket.geometry.resolution <= 0 ||
+        !std::isfinite(ticket.geometry.origin_x) ||
+        !std::isfinite(ticket.geometry.origin_y) ||
+        !tile.width || !tile.height ||
+        tile.x >= ticket.geometry.width || tile.y >= ticket.geometry.height ||
+        tile.width > ticket.geometry.width - tile.x ||
+        tile.height > ticket.geometry.height - tile.y)
+      return false;
+    // Division avoids overflow for untrusted dimensions.
+    return static_cast<std::size_t>(tile.width) <=
+           AcousticTiledBaseline::kMaxTileCells / tile.height;
   }
 };
 }  // namespace audition_nav2
