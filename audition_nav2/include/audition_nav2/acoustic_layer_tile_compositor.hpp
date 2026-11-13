@@ -44,9 +44,12 @@ class AcousticLayerTileCompositor {
         if (!layer(ticket, tile, values, marks) ||
             values.size() != n || marks.size() != n) return false;
         for (std::size_t i = 0; i < n; ++i) {
-          if (marks[i] != 1) return false;
+          if (marks[i] != 1 || values[i] == 255) return false;
           // Conservative maximum is NOT a substitute for Nav2 layer
-          // combination semantics. The provider must opt into this contract
+          // combination semantics. Unknown (255) must be resolved by the
+          // independent provider; numeric max would incorrectly turn it
+          // into a permanent unknown cell, hiding known obstacles.
+          // The provider must opt into this contract
           // only when all participating layers use max-style composition.
           composed[i] = std::max(composed[i], values[i]);
           complete[i] = 1;
