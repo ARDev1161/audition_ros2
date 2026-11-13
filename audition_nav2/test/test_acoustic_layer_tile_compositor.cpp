@@ -1,5 +1,7 @@
 #include <cassert>
 #include <cstdint>
+#include <limits>
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 #include "audition_nav2/acoustic_layer_tile_compositor.hpp"
@@ -99,6 +101,31 @@ int main() {
   auto bad_tile = tile; bad_tile.x = 3;
   assert(!C::compose(t, bad_tile, {obstacle}, costs, marks));
   assert(!C::compose(t, tile, {}, costs, marks));
+  // Invalid geometry must be rejected before any callback or buffer mutation.
+  // This also checks zero-area tiles and huge untrusted tile dimensions.
+  const auto preflight_costs = costs, preflight_marks = marks;
+  invoked = 0;
+  auto malformed = t;
+  malformed.geometry.resolution = std::numeric_limits<double>::quiet_NaN();
+  assert(!C::compose(malformed, tile, {counted}, costs, marks));
+  assert(!C::compose_verified(malformed, tile,
+      {{"obstacles", true, true, counted}}, "acoustic", costs, marks));
+  malformed = t;
+  malformed.geometry.origin_x = std::numeric_limits<double>::infinity();
+  assert(!C::compose(malformed, tile, {counted}, costs, marks));
+  malformed = t;
+  malformed.geometry.resolution = 0.0;
+  assert(!C::compose_verified(malformed, tile,
+      {{"obstacles", true, true, counted}}, "acoustic", costs, marks));
+  auto zero_tile = tile;
+  zero_tile.height = 0;
+  assert(!C::compose(t, zero_tile, {counted}, costs, marks));
+  assert(!C::compose_verified(t, zero_tile,
+      {{"obstacles", true, true, counted}}, "acoustic", costs, marks));
+  assert(invoked == 0 && costs == preflight_costs &&
+         marks == preflight_marks);
+  // Throwing while copying an external std::function must fail closed.
+  // (Callback execution exceptions are separately tested above.)
   // Integrate the compositor with bounded pipeline without Nav2 writes.
   AcousticBaselineTilePipeline pipeline;
   assert(pipeline.begin(t, 2, 1));
