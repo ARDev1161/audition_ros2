@@ -48,11 +48,13 @@ class AcousticVerifiedMetricInput final {
 
     std::vector<StampedMetricEvidence> pending;
     std::set<std::uint64_t> seen_ids;
+    std::set<std::string> seen_names;
     pending.reserve(msg.sources.size());
     for (const auto& source : msg.sources) {
       if (source.source_id.empty() || source.source_id.size() > 256 ||
           source.source_generation == 0 ||
           source.localization_method != kRequiredMethod ||
+          !seen_names.insert(source.source_id).second ||
           source.header.frame_id != global_frame ||
           !std::isfinite(source.position.x) ||
           !std::isfinite(source.position.y) ||
