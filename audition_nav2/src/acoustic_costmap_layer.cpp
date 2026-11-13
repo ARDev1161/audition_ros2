@@ -21,6 +21,8 @@ void AcousticCostmapLayer::onInitialize() {
   baseline_gate_.invalidate();
   baseline_pipeline_.abort();
   pending_valid_ = false;
+  last_metric_generation_ = 0;
+  last_metric_stamp_.clear();
   auto node = node_.lock();
   if (node) {
     declareParameter("enable_soft_costs", rclcpp::ParameterValue(false));
@@ -237,6 +239,8 @@ void AcousticCostmapLayer::reset() {
   baseline_gate_.invalidate();
   baseline_pipeline_.abort();
   pending_valid_ = false;
+  last_metric_generation_ = 0;
+  last_metric_stamp_.clear();
   current_ = true;
 }
 }  // namespace audition_nav2
