@@ -58,6 +58,41 @@ int main() {
   };
   assert(!C::compose(t, tile, {invalid_coverage}, costs, marks));
   assert(costs == original && marks == original_marks);
+  // A verified provider must enumerate unique, independent non-acoustic
+  // identities and certify max-style combination before any callbacks run.
+  using V = C::VerifiedLayer;
+  std::vector<V> verified{{"obstacles", true, true, obstacle},
+                          {"inflation", true, true, inflation}};
+  assert(C::compose_verified(t, tile, verified, "acoustic", costs, marks));
+  assert(costs[2] == 254 && costs[1] == 100);
+  const auto verified_costs = costs, verified_marks = marks;
+  int invoked = 0;
+  auto counted = [&](const auto&, const auto&, auto& c, auto& m) {
+    ++invoked;
+    std::fill(c.begin(), c.end(), 1);
+    std::fill(m.begin(), m.end(), 1);
+    return true;
+  };
+  const auto rejected = [&](std::vector<V> sources, const std::string& self) {
+    assert(!C::compose_verified(t, tile, sources, self, costs, marks));
+    assert(costs == verified_costs && marks == verified_marks);
+    assert(invoked == 0);
+  };
+  rejected({{"acoustic", true, true, counted}}, "acoustic");
+  rejected({{"", true, true, counted}}, "acoustic");
+  rejected({{"obstacles", false, true, counted}}, "acoustic");
+  rejected({{"obstacles", true, false, counted}}, "acoustic");
+  rejected({{"obstacles", true, true, counted},
+            {"obstacles", true, true, counted}}, "acoustic");
+  rejected({{"obstacles", true, true, counted}}, "");
+  rejected({}, "acoustic");
+  // Invalid provenance must be rejected before invoking even the first
+  // producer. An accepted callback failure still rolls back atomically.
+  assert(!C::compose_verified(t, tile,
+      {{"obstacles", true, true, counted}, {"bad", true, true, throwing}},
+      "acoustic", costs, marks));
+  assert(invoked == 1 && costs == verified_costs && marks == verified_marks);
+  invoked = 0;
   auto bad_ticket = t;
   bad_ticket.origin = BaselineOrigin::PreviousMaster;
   assert(!C::compose(bad_ticket, tile, {obstacle}, costs, marks));
