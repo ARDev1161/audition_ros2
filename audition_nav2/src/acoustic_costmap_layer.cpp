@@ -71,18 +71,52 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   }
   if (msg.generation != last_metric_generation_) {
     coordinator_.revoke_all();
+    last_metric_stamp_.clear();
     last_metric_generation_ = msg.generation;
   }
   if (evidence.empty()) {
     coordinator_.revoke_all();  // Explicit empty verified snapshot.
+    last_metric_stamp_.clear();
+    return;
+  }
+  // Replay fences older than the hard TTL can be pruned: decode() rejects
+  // observations older than 250 ms, so they cannot be resurrected.
+  for (auto it = last_metric_stamp_.begin();
+       it != last_metric_stamp_.end();) {
+    if (it->second <= now_ns &&
+        static_cast<std::uint64_t>(now_ns) -
+        static_cast<std::uint64_t>(it->second) >
+        static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs))
+      it = last_metric_stamp_.erase(it);
+    else
+      ++it;
+  }
+  // Preflight the whole batch before accepting its first new observation.
+  // Reliable DDS may legitimately replay an unchanged complete snapshot:
+  // equality is a no-op, not a reason to revoke a still-live source.
+  std::size_t unseen = 0;
+  for (const auto& item : evidence) {
+    const auto it = last_metric_stamp_.find(item.cell.source_id);
+    if (it != last_metric_stamp_.end()) {
+      if (item.cell.stamp_ns < it->second) return;
+    } else {
+      ++unseen;
+    }
+  }
+  if (last_metric_stamp_.size() + unseen > 128) {
+    coordinator_.revoke_all();
     return;
   }
   for (const auto& item : evidence) {
+    const auto it = last_metric_stamp_.find(item.cell.source_id);
+    if (it != last_metric_stamp_.end() &&
+        item.cell.stamp_ns == it->second) continue;
     if (!coordinator_.ingest_evidence(item, now_ns)) {
-      // Do not leave a partially updated batch visible to Nav2.
+      // A partially accepted batch is never exposed to the next Nav2 tick.
       coordinator_.revoke_all();
       return;
     }
+    last_metric_stamp_[item.cell.source_id] = item.cell.stamp_ns;
   }
 }
 
