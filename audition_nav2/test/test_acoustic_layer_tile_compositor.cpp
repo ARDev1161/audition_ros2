@@ -112,6 +112,45 @@ int main() {
   assert(pipeline.take_ready(t, result));
   assert(result.size() == 8 && result[1] == 100 && result[2] == 254);
   assert(!pipeline.take_ready(t, result));
+  // Roster changes during a producer callback must invalidate the entire
+  // tile even when all callbacks returned success and all cells were covered.
+  C::RosterSnapshot roster{17, "acoustic", {"obstacles", "inflation"}};
+  C::SnapshotProvider snapshot = [&](C::RosterSnapshot& out) {
+    out = roster;
+    return true;
+  };
+  assert(C::compose_verified_stable(t, tile, verified, roster, snapshot,
+                                    costs, marks));
+  const auto stable_costs = costs, stable_marks = marks;
+  auto changed_roster = verified;
+  changed_roster[0].reconstruct = [&](const auto& ticket, const auto& next,
+                                      auto& c, auto& m) {
+    const bool ok = obstacle(ticket, next, c, m);
+    ++roster.generation;
+    return ok;
+  };
+  assert(!C::compose_verified_stable(t, tile, changed_roster,
+                                     C::RosterSnapshot{17, "acoustic",
+                                       {"obstacles", "inflation"}}, snapshot,
+                                     costs, marks));
+  assert(costs == stable_costs && marks == stable_marks);
+  roster.generation = 17;
+  roster.ordered_identities = {"inflation", "obstacles"};
+  assert(!C::compose_verified_stable(t, tile, verified,
+                                     C::RosterSnapshot{17, "acoustic",
+                                       {"obstacles", "inflation"}}, snapshot,
+                                     costs, marks));
+  assert(costs == stable_costs && marks == stable_marks);
+  roster.ordered_identities = {"obstacles", "inflation"};
+  auto failed_snapshot = [](C::RosterSnapshot&) { return false; };
+  assert(!C::compose_verified_stable(t, tile, verified, roster,
+                                     failed_snapshot, costs, marks));
+  assert(costs == stable_costs && marks == stable_marks);
+  assert(!C::compose_verified_stable(t, tile, verified,
+                                     C::RosterSnapshot{0, "acoustic",
+                                       {"obstacles", "inflation"}}, snapshot,
+                                     costs, marks));
+  assert(costs == stable_costs && marks == stable_marks);
   // Bounded CPU: tile size alone is insufficient when dozens of independent
   // layer callbacks would each traverse the full tile.
   const GridGeometry large_g{256, 256, 0.1, 0, 0};
