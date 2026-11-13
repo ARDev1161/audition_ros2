@@ -125,5 +125,14 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME acoustic_baseline_tile_pipeline_contract
     COMMAND test_acoustic_baseline_tile_pipeline)
+  add_executable(test_acoustic_layer_tile_compositor
+    test/test_acoustic_layer_tile_compositor.cpp)
+  target_compile_features(test_acoustic_layer_tile_compositor PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_layer_tile_compositor PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_layer_tile_compositor PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_layer_tile_compositor_contract
+    COMMAND test_acoustic_layer_tile_compositor)
 endif()
 ament_package()
