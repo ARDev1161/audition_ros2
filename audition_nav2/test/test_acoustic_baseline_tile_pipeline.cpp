@@ -197,6 +197,23 @@ int main() {
   ++stale_ticket.cycle;
   assert(pipeline.expire_if_stalled(stale_ticket, 1000, 1001, 100));
   assert(!pipeline.produce_one(fresh, 2, producer));
+  // A producer that finishes after its transaction was timed out must not
+  // publish stale data, even when the periodic timer has not run again.
+  assert(pipeline.begin(fresh, 2, 1));
+  assert(!pipeline.produce_one(fresh, 2, [&](const auto&, const auto&, auto& c, auto& cover) {
+    for (auto& v : c) v = 99;
+    for (auto& v : cover) v = 1;
+    assert(pipeline.expire_if_stalled(fresh, 1000, 1100, 100));
+    return true;
+  }));
+  assert(!pipeline.active());
+  assert(!pipeline.take_ready(fresh, result));
+  // A fresh transaction still works after a timed-out callback.
+  assert(pipeline.begin(fresh, 2, 1));
+  for (int i = 0; i < 6; ++i) assert(pipeline.produce_one(fresh, 2, producer));
+  assert(pipeline.take_ready(fresh, result));
+  assert(result == std::vector<std::uint8_t>(10, 30));
+
   // Healthy reconstruction stays usable before the deadline.
   assert(pipeline.begin(fresh, 2, 1));
   assert(!pipeline.expire_if_stalled(fresh, 1000, 1099, 100));
