@@ -160,7 +160,7 @@ int main() {
   assert(!pipeline.take_ready(t, result));
   // Roster changes during a producer callback must invalidate the entire
   // tile even when all callbacks returned success and all cells were covered.
-  C::RosterSnapshot roster{17, "acoustic", {"obstacles", "inflation"}};
+  C::RosterSnapshot roster{t.generation, "acoustic", {"obstacles", "inflation"}};
   C::SnapshotProvider snapshot = [&](C::RosterSnapshot& out) {
     out = roster;
     return true;
@@ -176,14 +176,14 @@ int main() {
     return ok;
   };
   assert(!C::compose_verified_stable(t, tile, changed_roster,
-                                     C::RosterSnapshot{17, "acoustic",
+                                     C::RosterSnapshot{t.generation, "acoustic",
                                        {"obstacles", "inflation"}}, snapshot,
                                      costs, marks));
   assert(costs == stable_costs && marks == stable_marks);
-  roster.generation = 17;
+  roster.generation = t.generation;
   roster.ordered_identities = {"inflation", "obstacles"};
   assert(!C::compose_verified_stable(t, tile, verified,
-                                     C::RosterSnapshot{17, "acoustic",
+                                     C::RosterSnapshot{t.generation, "acoustic",
                                        {"obstacles", "inflation"}}, snapshot,
                                      costs, marks));
   assert(costs == stable_costs && marks == stable_marks);
@@ -236,7 +236,7 @@ int main() {
   int snapshots = 0;
   // The one-layer fixture must report the one-layer roster, not the
   // earlier two-layer fixture: stable composition validates exact ordering.
-  const C::RosterSnapshot counted_roster{17, "acoustic", {"obstacles"}};
+  const C::RosterSnapshot counted_roster{t.generation, "acoustic", {"obstacles"}};
   C::SnapshotProvider counted_snapshot = [&](C::RosterSnapshot& out) {
     ++snapshots;
     out = counted_roster;
@@ -278,15 +278,15 @@ int main() {
     assert(costs == stable_costs && marks == stable_marks);
   };
   stable_rejected({{"acoustic", true, true, counted}},
-                  {17, "acoustic", {"acoustic"}});
+                  {t.generation, "acoustic", {"acoustic"}});
   stable_rejected({{"obstacles", false, true, counted}}, counted_roster);
   stable_rejected({{"obstacles", true, false, counted}}, counted_roster);
   stable_rejected({{"obstacles", true, true, C::Layer{}}}, counted_roster);
   stable_rejected({{"obstacles", true, true, counted},
                    {"obstacles", true, true, counted}},
-                  {17, "acoustic", {"obstacles", "obstacles"}});
+                  {t.generation, "acoustic", {"obstacles", "obstacles"}});
   stable_rejected({{"", true, true, counted}},
-                  {17, "acoustic", {""}});
+                  {t.generation, "acoustic", {""}});
   // Valid input still exercises both roster snapshots and commits atomically.
   assert(C::compose_verified_stable(t, tile, counted_verified,
                                     counted_roster, counted_snapshot,
