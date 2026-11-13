@@ -40,6 +40,24 @@ int main() {
   };
   assert(!C::compose(t, tile, {throwing}, costs, marks));
   assert(costs == original && marks == original_marks);
+  // Nav2 NO_INFORMATION (255) cannot be combined by numeric max: a
+  // provider must resolve unknowns before claiming complete coverage.
+  auto unknown = [](const auto&, const auto&, auto& c, auto& m) {
+    std::fill(c.begin(), c.end(), 0);
+    std::fill(m.begin(), m.end(), 1);
+    c[2] = 255;
+    return true;
+  };
+  assert(!C::compose(t, tile, {obstacle, unknown}, costs, marks));
+  assert(costs == original && marks == original_marks);
+  // Reject malformed coverage values, not just missing cells.
+  auto invalid_coverage = [](const auto&, const auto&, auto&, auto& m) {
+    std::fill(m.begin(), m.end(), 1);
+    m[0] = 2;
+    return true;
+  };
+  assert(!C::compose(t, tile, {invalid_coverage}, costs, marks));
+  assert(costs == original && marks == original_marks);
   auto bad_ticket = t;
   bad_ticket.origin = BaselineOrigin::PreviousMaster;
   assert(!C::compose(bad_ticket, tile, {obstacle}, costs, marks));
