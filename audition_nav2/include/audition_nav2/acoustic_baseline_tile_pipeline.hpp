@@ -26,7 +26,7 @@ class AcousticBaselineTilePipeline {
   // Exactly one producer tile can be outstanding. A caller-supplied budget
   // limits the work admitted during a tick, not the total map size.
   bool next(const BaselineTicket& current, std::size_t budget, Tile& tile) {
-    if (!active_ || !cursor_.matches(current) || !staging_.matches(current)) {
+    if (expire_if_stalled() || !active_ || !cursor_.matches(current) || !staging_.matches(current)) {
       reset();
       return false;
     }
@@ -35,7 +35,7 @@ class AcousticBaselineTilePipeline {
   bool submit(const BaselineTicket& producer, const Tile& tile,
               const std::uint8_t* costs, const std::uint8_t* coverage,
               std::size_t size) {
-    if (!active_ || !cursor_.pending(producer, tile) || !staging_.matches(producer) ||
+    if (expire_if_stalled() || !active_ || !cursor_.pending(producer, tile) || !staging_.matches(producer) ||
         !staging_.add_checked(producer, tile.x, tile.y, tile.width,
                               tile.height, costs, coverage, size) ||
         !cursor_.acknowledge(producer, tile, true)) {
@@ -63,7 +63,7 @@ class AcousticBaselineTilePipeline {
       std::vector<std::uint8_t> costs(count);
       std::vector<std::uint8_t> coverage(count, 0);
       const bool produced = std::forward<Producer>(producer)(current, tile, costs, coverage);
-      if (epoch != epoch_) return false;
+      if (epoch != epoch_ || expire_if_stalled()) return false;
       if (!produced) {
         reset();
         return false;
@@ -111,7 +111,7 @@ class AcousticBaselineTilePipeline {
   void abort() { reset(); }
   // Do not expose a partial buffer. A successful take consumes both states.
   bool take_ready(const BaselineTicket& current, std::vector<std::uint8_t>& out) {
-    if (!active_) return false;
+    if (expire_if_stalled() || !active_) return false;
     // A changed map generation, cycle, or rolling origin invalidates the
     // whole pending transaction even if no more tiles are requested.
     if (!cursor_.matches(current) || !staging_.matches(current)) {
