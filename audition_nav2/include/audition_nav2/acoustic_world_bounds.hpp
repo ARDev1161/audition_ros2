@@ -51,6 +51,21 @@ class AcousticWorldBounds {
         !std::isfinite(*min_x) || !std::isfinite(*min_y) ||
         !std::isfinite(*max_x) || !std::isfinite(*max_y) ||
         *min_x > *max_x || *min_y > *max_y) return false;
+    // Nav2 initializes every update's accumulator to [MAX, MAX] /
+    // [lowest, lowest]. This is a valid EMPTY accumulator, not a corrupt
+    // rectangle. Without this branch an acoustic-only TTL/dirty update would
+    // never request a master rebuild.
+    const auto high = std::numeric_limits<double>::max();
+    const auto low = std::numeric_limits<double>::lowest();
+    if (*min_x == high && *min_y == high &&
+        *max_x == low && *max_y == low) {
+      *min_x = own.min_x;
+      *min_y = own.min_y;
+      *max_x = own.max_x;
+      *max_y = own.max_y;
+      return true;
+    }
+    if (*min_x > *max_x || *min_y > *max_y) return false;
     *min_x = std::min(*min_x, own.min_x);
     *min_y = std::min(*min_y, own.min_y);
     *max_x = std::max(*max_x, own.max_x);
