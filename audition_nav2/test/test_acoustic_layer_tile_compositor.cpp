@@ -214,6 +214,26 @@ int main() {
                                      costs, short_marks));
   assert(snapshots == 0 && invoked == 0);
   assert(costs == stable_costs && marks == stable_marks);
+  // Invalid provenance must not query the external roster even when the
+  // expected labels match. Reject duplicate identities, acoustic self,
+  // missing callbacks, and unsupported combination semantics before work.
+  const auto stable_rejected = [&](std::vector<V> bad,
+                                   C::RosterSnapshot expected) {
+    assert(!C::compose_verified_stable(t, tile, bad, expected,
+                                       counted_snapshot, costs, marks));
+    assert(snapshots == 0 && invoked == 0);
+    assert(costs == stable_costs && marks == stable_marks);
+  };
+  stable_rejected({{"acoustic", true, true, counted}},
+                  {17, "acoustic", {"acoustic"}});
+  stable_rejected({{"obstacles", false, true, counted}}, counted_roster);
+  stable_rejected({{"obstacles", true, false, counted}}, counted_roster);
+  stable_rejected({{"obstacles", true, true, C::Layer{}}}, counted_roster);
+  stable_rejected({{"obstacles", true, true, counted},
+                   {"obstacles", true, true, counted}},
+                  {17, "acoustic", {"obstacles", "obstacles"}});
+  stable_rejected({{"", true, true, counted}},
+                  {17, "acoustic", {""}});
   // Valid input still exercises both roster snapshots and commits atomically.
   assert(C::compose_verified_stable(t, tile, counted_verified,
                                     counted_roster, counted_snapshot,
