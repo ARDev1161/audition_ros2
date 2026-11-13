@@ -89,8 +89,24 @@ class AcousticLayerTileCompositor {
         expected.ordered_identities.size() != sources.size() ||
         costs.size() != tile_cells(tile) ||
         coverage.size() != tile_cells(tile)) return false;
-    for (std::size_t i = 0; i < sources.size(); ++i)
-      if (expected.ordered_identities[i] != sources[i].identity) return false;
+    // Reject a forged or inconsistent roster before calling an external
+    // snapshot provider. The snapshot check alone cannot validate declared
+    // callback provenance: the verified layer contract must hold as well.
+    try {
+      std::unordered_set<std::string> identities;
+      for (std::size_t i = 0; i < sources.size(); ++i) {
+        const auto& source = sources[i];
+        if (source.identity.empty() ||
+            source.identity == expected.acoustic_identity ||
+            !source.independent || !source.max_combination ||
+            !source.reconstruct ||
+            !identities.insert(source.identity).second ||
+            expected.ordered_identities[i] != source.identity)
+          return false;
+      }
+    } catch (...) {
+      return false;
+    }
     const auto matches = [&](const RosterSnapshot& current) {
       return current.generation == expected.generation &&
              current.acoustic_identity == expected.acoustic_identity &&
