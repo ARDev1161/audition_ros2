@@ -178,6 +178,47 @@ int main() {
                                        {"obstacles", "inflation"}}, snapshot,
                                      costs, marks));
   assert(costs == stable_costs && marks == stable_marks);
+  // Stable composition must reject malformed input before querying the
+  // roster, copying output buffers, or running any layer callback.
+  int snapshots = 0;
+  C::SnapshotProvider counted_snapshot = [&](C::RosterSnapshot& out) {
+    ++snapshots;
+    out = roster;
+    return true;
+  };
+  invoked = 0;
+  std::vector<V> counted_verified{{"obstacles", true, true, counted}};
+  const C::RosterSnapshot counted_roster{17, "acoustic", {"obstacles"}};
+  auto bad_stable_tile = tile;
+  bad_stable_tile.width = 0;
+  assert(!C::compose_verified_stable(t, bad_stable_tile, counted_verified,
+                                     counted_roster, counted_snapshot,
+                                     costs, marks));
+  auto bad_stable_ticket = t;
+  bad_stable_ticket.geometry.resolution =
+      std::numeric_limits<double>::infinity();
+  assert(!C::compose_verified_stable(bad_stable_ticket, tile, counted_verified,
+                                     counted_roster, counted_snapshot,
+                                     costs, marks));
+  auto short_costs = costs;
+  short_costs.pop_back();
+  assert(!C::compose_verified_stable(t, tile, counted_verified,
+                                     counted_roster, counted_snapshot,
+                                     short_costs, marks));
+  auto short_marks = marks;
+  short_marks.pop_back();
+  assert(!C::compose_verified_stable(t, tile, counted_verified,
+                                     counted_roster, counted_snapshot,
+                                     costs, short_marks));
+  assert(snapshots == 0 && invoked == 0);
+  assert(costs == stable_costs && marks == stable_marks);
+  // Valid input still exercises both roster snapshots and commits atomically.
+  assert(C::compose_verified_stable(t, tile, counted_verified,
+                                    counted_roster, counted_snapshot,
+                                    costs, marks));
+  assert(snapshots == 2 && invoked == 1);
+  costs = stable_costs;
+  marks = stable_marks;
   // Bounded CPU: tile size alone is insufficient when dozens of independent
   // layer callbacks would each traverse the full tile.
   const GridGeometry large_g{256, 256, 0.1, 0, 0};
