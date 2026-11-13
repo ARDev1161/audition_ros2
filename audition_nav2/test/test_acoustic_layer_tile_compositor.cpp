@@ -37,6 +37,25 @@ int main() {
   };
   assert(!C::compose(t, tile, {bad_size}, costs, marks));
   assert(costs == original && marks == original_marks);
+  // Invalid late callback must be rejected before any earlier producer runs.
+  // This is important because real Nav2 layer callbacks may have state.
+  int preflight_invocations = 0;
+  const C::Layer side_effect = [&](const auto&, const auto&, auto& c, auto& m) {
+    ++preflight_invocations;
+    std::fill(c.begin(), c.end(), 25);
+    std::fill(m.begin(), m.end(), 1);
+    return true;
+  };
+  assert(!C::compose(t, tile, {side_effect, C::Layer{}}, costs, marks));
+  assert(preflight_invocations == 0);
+  assert(costs == original && marks == original_marks);
+  // The same roster is rejected via the verified wrapper without side effects.
+  assert(!C::compose_verified(t, tile,
+      {{"physical", true, true, side_effect},
+       {"inflation", true, true, C::Layer{}}},
+      "acoustic", costs, marks));
+  assert(preflight_invocations == 0);
+  assert(costs == original && marks == original_marks);
   auto throwing = [](const auto&, const auto&, auto&, auto&) -> bool {
     throw std::runtime_error("layer failed");
   };
