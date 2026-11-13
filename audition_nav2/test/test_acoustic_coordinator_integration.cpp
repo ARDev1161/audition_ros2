@@ -263,4 +263,41 @@ int main() {
   rebuild_and_overlay(after_roll, rolled, pm, pb);
   assert(pm == pb);
   assert(!paused.tick(1202, rolled).rebuild_required);
+
+  // Operator rollback while Nav2 is paused: a disabled layer must clear
+  // ownership at the first resumed cycle, without writing over a newer
+  // non-acoustic obstacle or accepting a replay from the revoked session.
+  AcousticLayerCoordinator emergency(3, 60);
+  emergency.enable();
+  const GridGeometry eg{6, 4, 0.5, -1.0, -0.5};
+  std::vector<std::uint8_t> eb(24, 0), em(24, 0);
+  eb[1 * 6 + 3] = 254;
+  eb[2 * 6 + 4] = 255;
+  em = eb;
+  assert(emergency.ingest_validated({41, 4000, 4500, 0.0, 0.0, true}, 4000));
+  auto authorized = emergency.tick(4000, eg);
+  rebuild_and_overlay(authorized, eg, em, eb);
+  assert(em[1 * 6 + 2] == 60);
+  emergency.disable();  // No updateMap() call while disabled.
+  assert(!emergency.ingest_validated({42, 4001, 4500, 0.5, 0.0, true}, 4001));
+  auto disabled_resume = emergency.tick(4100, eg);
+  assert(disabled_resume.rebuild_required);
+  assert(disabled_resume.update.own_cells.empty());
+  rebuild_and_overlay(disabled_resume, eg, em, eb);
+  assert(em == eb);
+  assert(!emergency.tick(4101, eg).rebuild_required);
+
+  // Reauthorization is not a new replay epoch: only newer metric evidence
+  // can create a cost, and the previous baseline must remain intact.
+  emergency.enable();
+  assert(!emergency.ingest_validated({41, 4000, 4500, 0.0, 0.0, true}, 4102));
+  assert(emergency.ingest_validated({41, 4103, 4300, 0.5, 0.0, true}, 4103));
+  auto reauthorized = emergency.tick(4103, eg);
+  rebuild_and_overlay(reauthorized, eg, em, eb);
+  assert(em[1 * 6 + 3] == 254);
+  assert(em[1 * 6 + 2] == 0);
+  emergency.disable();
+  auto second_rollback = emergency.tick(4104, eg);
+  rebuild_and_overlay(second_rollback, eg, em, eb);
+  assert(em == eb);
 }
