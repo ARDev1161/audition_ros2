@@ -181,14 +181,16 @@ int main() {
   // Stable composition must reject malformed input before querying the
   // roster, copying output buffers, or running any layer callback.
   int snapshots = 0;
+  // The one-layer fixture must report the one-layer roster, not the
+  // earlier two-layer fixture: stable composition validates exact ordering.
+  const C::RosterSnapshot counted_roster{17, "acoustic", {"obstacles"}};
   C::SnapshotProvider counted_snapshot = [&](C::RosterSnapshot& out) {
     ++snapshots;
-    out = roster;
+    out = counted_roster;
     return true;
   };
   invoked = 0;
   std::vector<V> counted_verified{{"obstacles", true, true, counted}};
-  const C::RosterSnapshot counted_roster{17, "acoustic", {"obstacles"}};
   auto bad_stable_tile = tile;
   bad_stable_tile.width = 0;
   assert(!C::compose_verified_stable(t, bad_stable_tile, counted_verified,
