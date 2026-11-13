@@ -10,12 +10,12 @@ int main() {
   const AcousticLayerTileCompositor::Tile tile{0, 0, 4, 2, 7};
   std::vector<std::uint8_t> costs(8, 99), marks(8, 0);
   const auto obstacle = [](const auto&, const auto&, auto& c, auto& m) {
-    c[2] = 254;
+    if (c.size() > 2) c[2] = 254; else c[0] = 254;
     std::fill(m.begin(), m.end(), 1);
     return true;
   };
   const auto inflation = [](const auto&, const auto&, auto& c, auto& m) {
-    c[1] = 100; c[2] = 80;
+    if (c.size() > 1) c[1] = 100; if (c.size() > 2) c[2] = 80;
     std::fill(m.begin(), m.end(), 1);
     return true;
   };
