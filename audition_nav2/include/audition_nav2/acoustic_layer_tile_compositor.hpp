@@ -51,6 +51,52 @@ class AcousticLayerTileCompositor {
     }
     return compose(ticket, tile, callbacks, costs, coverage);
   }
+  // A roster may change while external callbacks reconstruct a tile (e.g.
+  // plugin reload, reorder, or layer removal). Admit a tile only when the
+  // provider's ordered roster and generation match before AND after work.
+  // The provider must derive this snapshot from actual Nav2 plugin identity,
+  // not from caller-controlled labels. This is a TOCTOU guard, not proof of
+  // independent layer data or a replacement for Nav2 adapter validation.
+  struct RosterSnapshot {
+    std::uint64_t generation = 0;
+    std::string acoustic_identity;
+    std::vector<std::string> ordered_identities;
+  };
+  using SnapshotProvider = std::function<bool(RosterSnapshot&)>;
+  static bool compose_verified_stable(
+      const BaselineTicket& ticket, const Tile& tile,
+      const std::vector<VerifiedLayer>& sources,
+      const RosterSnapshot& expected, const SnapshotProvider& snapshot,
+      std::vector<std::uint8_t>& costs,
+      std::vector<std::uint8_t>& coverage) {
+    if (!snapshot || expected.generation == 0 ||
+        expected.acoustic_identity.empty() ||
+        expected.ordered_identities.size() != sources.size()) return false;
+    for (std::size_t i = 0; i < sources.size(); ++i)
+      if (expected.ordered_identities[i] != sources[i].identity) return false;
+    const auto matches = [&](const RosterSnapshot& current) {
+      return current.generation == expected.generation &&
+             current.acoustic_identity == expected.acoustic_identity &&
+             current.ordered_identities == expected.ordered_identities;
+    };
+    try {
+      RosterSnapshot before;
+      if (!snapshot(before) || !matches(before)) return false;
+      // Stage privately: a roster change or callback failure must never
+      // partially replace the caller's previously committed buffers.
+      std::vector<std::uint8_t> staged_costs = costs;
+      std::vector<std::uint8_t> staged_coverage = coverage;
+      if (!compose_verified(ticket, tile, sources, expected.acoustic_identity,
+                            staged_costs, staged_coverage)) return false;
+      RosterSnapshot after;
+      if (!snapshot(after) || !matches(after)) return false;
+      costs.swap(staged_costs);
+      coverage.swap(staged_coverage);
+      return true;
+    } catch (...) {
+      return false;
+    }
+  }
   // All callbacks must reconstruct their own layer tile, not read the
   // acoustic-contaminated master. The caller is responsible for validating
   // layer identities and Nav2 ordering before constructing this list.
