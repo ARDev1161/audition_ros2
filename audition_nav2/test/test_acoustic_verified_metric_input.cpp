@@ -136,3 +136,34 @@ TEST(VerifiedMetricInput, EmptyVerifiedBatchClearsAndIdsFollowGenerations) {
   ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
   EXPECT_TRUE(output.empty());
 }
+
+TEST(VerifiedMetricInput, RejectsSameLogicalSourceAcrossGenerationsAtomically) {
+  const std::int64_t now = 10100000000LL;
+  auto batch = verified_array();
+  std::vector<StampedMetricEvidence> output;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 1u);
+  const auto retained_id = output.front().cell.source_id;
+
+  // A single logical source cannot simultaneously occupy two cells merely
+  // by presenting two distinct source generations in one snapshot.
+  auto second = batch.sources.front();
+  second.source_generation += 1;
+  second.position.x = 5.0;
+  batch.sources.push_back(second);
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 1u);
+  EXPECT_EQ(output.front().cell.source_id, retained_id);
+
+  // Distinct names may legitimately coexist in the same verified snapshot.
+  batch.sources.back().source_id = "speaker_B";
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 2u);
+  EXPECT_NE(output[0].cell.source_id, output[1].cell.source_id);
+
+  // Duplicate logical names also fail when generations are identical.
+  batch.sources.back().source_generation = batch.sources.front().source_generation;
+  batch.sources.back().source_id = batch.sources.front().source_id;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 2u);
+}
