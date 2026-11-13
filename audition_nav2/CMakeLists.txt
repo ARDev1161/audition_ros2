@@ -134,5 +134,23 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME acoustic_layer_tile_compositor_contract
     COMMAND test_acoustic_layer_tile_compositor)
+
+  # Nav2's real updateMap resets the requested window before invoking
+  # plugins in roster order. These two ROS-independent tests exercise that
+  # contract and the Nav2 empty-bounds sentinel even in native CI images
+  # that do not install nav2_costmap_2d.
+  add_executable(test_acoustic_world_bounds test/test_acoustic_world_bounds.cpp)
+  add_executable(test_acoustic_nav2_cycle_adapter
+    test/test_acoustic_nav2_cycle_adapter.cpp)
+  foreach(target IN ITEMS test_acoustic_world_bounds test_acoustic_nav2_cycle_adapter)
+    target_compile_features(${target} PRIVATE cxx_std_17)
+    target_include_directories(${target} PRIVATE include)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      target_compile_options(${target} PRIVATE -UNDEBUG)
+    endif()
+  endforeach()
+  add_test(NAME acoustic_world_bounds_contract COMMAND test_acoustic_world_bounds)
+  add_test(NAME acoustic_nav2_cycle_adapter_contract
+    COMMAND test_acoustic_nav2_cycle_adapter)
 endif()
 ament_package()
