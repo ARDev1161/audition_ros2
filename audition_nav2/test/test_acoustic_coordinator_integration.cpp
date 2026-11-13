@@ -291,10 +291,11 @@ int main() {
   // can create a cost, and the previous baseline must remain intact.
   emergency.enable();
   assert(!emergency.ingest_validated({41, 4000, 4500, 0.0, 0.0, true}, 4102));
-  assert(emergency.ingest_validated({41, 4103, 4300, 0.5, 0.0, true}, 4103));
+  assert(emergency.ingest_validated({41, 4103, 4300, -0.5, 0.0, true}, 4103));
   auto reauthorized = emergency.tick(4103, eg);
   rebuild_and_overlay(reauthorized, eg, em, eb);
   assert(em[1 * 6 + 3] == 254);
+  assert(em[1 * 6 + 1] == 60);
   assert(em[1 * 6 + 2] == 0);
   emergency.disable();
   auto second_rollback = emergency.tick(4104, eg);
