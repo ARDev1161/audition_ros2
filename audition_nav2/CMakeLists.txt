@@ -39,6 +39,16 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND audition_msgs_
       ament_target_dependencies(test_acoustic_verified_metric_input
         audition_msgs rclcpp)
     endif()
+    # Exercise the actual Humble LayeredCostmap::updateMap() reset/rebuild
+    # sequence rather than assuming it in a pure unit-test mock.
+    ament_add_gtest(test_acoustic_nav2_layered_costmap
+      test/test_acoustic_nav2_layered_costmap.cpp)
+    if(TARGET test_acoustic_nav2_layered_costmap)
+      target_compile_features(test_acoustic_nav2_layered_costmap PUBLIC cxx_std_17)
+      target_include_directories(test_acoustic_nav2_layered_costmap PRIVATE include)
+      ament_target_dependencies(test_acoustic_nav2_layered_costmap
+        nav2_costmap_2d rclcpp)
+    endif()
   endif()
 else()
   message(STATUS "audition_nav2: Nav2/pluginlib/rclcpp/audition_msgs absent; optional costmap plugin not built")
