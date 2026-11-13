@@ -18,6 +18,7 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND audition_msgs_
   pluginlib_export_plugin_description_file(nav2_costmap_2d acoustic_layer_plugin.xml)
   install(TARGETS acoustic_costmap_layer DESTINATION lib)
   install(DIRECTORY include/ DESTINATION include)
+  install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
 
   if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
