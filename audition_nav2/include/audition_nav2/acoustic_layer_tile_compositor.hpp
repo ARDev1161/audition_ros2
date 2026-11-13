@@ -79,9 +79,16 @@ class AcousticLayerTileCompositor {
       const RosterSnapshot& expected, const SnapshotProvider& snapshot,
       std::vector<std::uint8_t>& costs,
       std::vector<std::uint8_t>& coverage) {
-    if (!snapshot || expected.generation == 0 ||
-        expected.acoustic_identity.empty() ||
-        expected.ordered_identities.size() != sources.size()) return false;
+    // Preflight before invoking even the roster provider or copying caller
+    // buffers. In particular, untrusted tile dimensions must never cause
+    // unbounded allocation in the stable wrapper.
+    if (!valid_tile(ticket, tile) || !snapshot ||
+        expected.generation == 0 || expected.acoustic_identity.empty() ||
+        sources.empty() || sources.size() > 64 ||
+        sources.size() > kMaxLayerCellVisits / tile_cells(tile) ||
+        expected.ordered_identities.size() != sources.size() ||
+        costs.size() != tile_cells(tile) ||
+        coverage.size() != tile_cells(tile)) return false;
     for (std::size_t i = 0; i < sources.size(); ++i)
       if (expected.ordered_identities[i] != sources[i].identity) return false;
     const auto matches = [&](const RosterSnapshot& current) {
