@@ -83,7 +83,8 @@ class AcousticLayerTileCompositor {
     // buffers. In particular, untrusted tile dimensions must never cause
     // unbounded allocation in the stable wrapper.
     if (!valid_tile(ticket, tile) || !snapshot ||
-        expected.generation == 0 || expected.acoustic_identity.empty() ||
+        expected.generation == 0 || expected.generation != ticket.generation ||
+        expected.acoustic_identity.empty() ||
         sources.empty() || sources.size() > 64 ||
         sources.size() > kMaxLayerCellVisits / tile_cells(tile) ||
         expected.ordered_identities.size() != sources.size() ||
