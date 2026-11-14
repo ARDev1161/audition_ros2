@@ -184,3 +184,36 @@ TEST(Nav2RealUpdateMap, PausedUpdatesPreserveIndependentSourceUntilItsOwnTTL) {
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+TEST(Nav2RealUpdateMap, ResizeAfterPausedTTLDoesNotResurrectOldCell) {
+  LayeredCostmap layered("map", false, false);
+  layered.resizeMap(8, 8, 0.5, 0., 0.);
+  auto obstacle = std::make_shared<FixedObstacleLayer>();
+  auto acoustic = std::make_shared<MockVerifiedAcousticLayer>(layered);
+  layered.addPlugin(obstacle);
+  layered.addPlugin(acoustic);
+
+  constexpr std::int64_t t0 = 1000000000LL;
+  ASSERT_TRUE(acoustic->ingest(21, t0, t0 + 200000000LL,
+                              1.25, 1.25, t0 + 10000000LL));
+  acoustic->set_time(t0 + 10000000LL);
+  layered.updateMap(1., 1., 0.);
+  ASSERT_EQ(layered.getCostmap()->getCost(2, 2), 100);
+
+  // The Nav2 loop pauses while the source expires. The costmap is then
+  // resized with a different origin before the next update cycle.
+  acoustic->set_time(t0 + 300000000LL);
+  layered.resizeMap(10, 10, 0.5, -0.5, -0.5);
+  layered.updateMap(1., 1., 0.);
+  const auto* master = layered.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(3, 3), 0);
+  EXPECT_EQ(master->getCost(2, 2), 254);
+  EXPECT_EQ(master->getCost(4, 4), 175);
+
+  // Subsequent full updates must not recreate an expired source.
+  layered.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(3, 3), 0);
+  EXPECT_EQ(master->getCost(2, 2), 254);
+  EXPECT_EQ(master->getCost(4, 4), 175);
+}
