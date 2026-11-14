@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <vector>
 #include "audition_nav2/acoustic_costmap_layer.hpp"
@@ -317,4 +318,21 @@ TEST(AcousticCostmapPlugin, StagedOverlayExpiresAcrossNav2CallbackDelay) {
   EXPECT_TRUE(Access::fresh(kStart, kStart));
   EXPECT_TRUE(Access::fresh(kStart, kStart + kTtl));
   EXPECT_FALSE(Access::fresh(kStart, kStart + kTtl + 1));
+}
+
+TEST(AcousticCostmapPlugin, StagedOverlayTimestampArithmeticIsOverflowSafe) {
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  const auto max = std::numeric_limits<std::int64_t>::max();
+  const auto min = std::numeric_limits<std::int64_t>::min();
+  constexpr auto ttl = audition_nav2::AcousticVerifiedMetricInput::kTtlNs;
+  // A large positive clock jump must fail closed without signed overflow.
+  EXPECT_FALSE(Access::fresh(1, max));
+  EXPECT_FALSE(Access::fresh(1, max - 1));
+  EXPECT_FALSE(Access::fresh(1, min));
+  EXPECT_FALSE(Access::fresh(min, max));
+  // The upper representable timestamp boundary remains inclusive at TTL.
+  EXPECT_TRUE(Access::fresh(max - ttl, max));
+  EXPECT_FALSE(Access::fresh(max - ttl - 1, max));
+  EXPECT_FALSE(Access::fresh(max, max - 1));
+  EXPECT_FALSE(Access::fresh(max, min));
 }
