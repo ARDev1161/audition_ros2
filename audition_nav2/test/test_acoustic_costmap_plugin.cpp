@@ -336,3 +336,48 @@ TEST(AcousticCostmapPlugin, StagedOverlayTimestampArithmeticIsOverflowSafe) {
   EXPECT_FALSE(Access::fresh(max, max - 1));
   EXPECT_FALSE(Access::fresh(max, min));
 }
+
+TEST(AcousticCostmapPlugin, DiscardedBoundsAreRebuiltAfterMetricRevocation) {
+  // A bounds pass consumes dirty ownership. If ingress invalidates that
+  // pass before costs, its dirty region must be included in the next pass.
+  audition_nav2::AcousticLayerCoordinator coordinator;
+  coordinator.enable();
+  const audition_nav2::GridGeometry grid{12, 12, 0.5, 0.0, 0.0};
+  constexpr std::int64_t now = 1000000000LL;
+  ASSERT_TRUE(coordinator.ingest_validated(
+      {7, now, now + 500000000LL, 2.0, 2.0, true}, now));
+  const auto staged = coordinator.tick(now, grid);
+  ASSERT_TRUE(staged.rebuild_required);
+  ASSERT_EQ(staged.update.own_cells.size(), 1u);
+  coordinator.defer_staged_cycle(staged, grid);
+  coordinator.revoke_all();
+  const auto retry = coordinator.tick(now + 1, grid);
+  EXPECT_TRUE(retry.rebuild_required);
+  EXPECT_TRUE(retry.update.own_cells.empty());
+  EXPECT_LE(retry.dirty.min_i, 4u);
+  EXPECT_GT(retry.dirty.max_i, 4u);
+  EXPECT_LE(retry.dirty.min_j, 4u);
+  EXPECT_GT(retry.dirty.max_j, 4u);
+  // Once the rebuild has been consumed, no phantom dirty work remains.
+  EXPECT_FALSE(coordinator.tick(now + 2, grid).rebuild_required);
+}
+
+TEST(AcousticCostmapPlugin, DeferredBoundsNeverCrossRollingMapGeometry) {
+  audition_nav2::AcousticLayerCoordinator coordinator;
+  coordinator.enable();
+  const audition_nav2::GridGeometry first{12, 12, 0.5, 0.0, 0.0};
+  const audition_nav2::GridGeometry shifted{12, 12, 0.5, 1.0, 0.0};
+  constexpr std::int64_t now = 1000000000LL;
+  ASSERT_TRUE(coordinator.ingest_validated(
+      {7, now, now + 500000000LL, 2.0, 2.0, true}, now));
+  const auto staged = coordinator.tick(now, first);
+  ASSERT_TRUE(staged.rebuild_required);
+  coordinator.defer_staged_cycle(staged, first);
+  coordinator.revoke_all();
+  const auto retry = coordinator.tick(now + 1, shifted);
+  EXPECT_TRUE(retry.rebuild_required);
+  EXPECT_EQ(retry.dirty.min_i, 0u);
+  EXPECT_EQ(retry.dirty.min_j, 0u);
+  EXPECT_EQ(retry.dirty.max_i, shifted.width);
+  EXPECT_EQ(retry.dirty.max_j, shifted.height);
+}
