@@ -3,6 +3,7 @@
 #include <limits>
 #include <vector>
 #include "audition_nav2/acoustic_verified_metric_input.hpp"
+#include "audition_nav2/acoustic_layer_coordinator.hpp"
 #include "audition_msgs/msg/localized_source.hpp"
 #include "audition_msgs/msg/localized_source_array.hpp"
 
@@ -325,4 +326,96 @@ TEST(VerifiedMetricInput, RejectsLateFrameAndObservationSkewWithoutMutation) {
   batch.header.frame_id = "odom";
   EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
   EXPECT_EQ(output.size(), 1u);
+}
+
+TEST(VerifiedMetricInput, DecodedEvidenceDrivesBoundedSoftCostsAndExpiresWithoutMessages) {
+  using audition_nav2::AcousticLayerCoordinator;
+  using audition_nav2::GridGeometry;
+  constexpr std::int64_t observed = 10000000000LL;
+  constexpr std::int64_t admitted_at = observed + 100000000LL;
+  const GridGeometry grid{16, 16, 0.5, 0.0, 0.0};
+  auto batch = verified_array();
+  auto second = batch.sources.front();
+  second.source_id = "speaker_B";
+  second.position.x = 4.5;
+  second.position.y = 4.5;
+  batch.sources.push_back(second);
+
+  std::vector<StampedMetricEvidence> decoded;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(
+      batch, "map", admitted_at, decoded));
+  ASSERT_EQ(decoded.size(), 2u);
+  AcousticLayerCoordinator coordinator;
+  // Even valid decoded evidence cannot authorize a disabled layer.
+  EXPECT_FALSE(coordinator.ingest_evidence(decoded[0], admitted_at));
+  EXPECT_EQ(coordinator.source_count(), 0u);
+  coordinator.enable();
+  for (const auto& evidence : decoded)
+    ASSERT_TRUE(coordinator.ingest_evidence(evidence, admitted_at));
+  EXPECT_EQ(coordinator.source_count(), 2u);
+  const auto live = coordinator.tick(admitted_at, grid);
+  ASSERT_FALSE(live.update.own_cells.empty());
+  for (const auto& cell : live.update.own_cells) {
+    EXPECT_GT(cell.cost, 0);
+    EXPECT_LT(cell.cost, 253);  // Never INSCRIBED/LETHAL/UNKNOWN.
+  }
+
+  // The Nav2 update loop can be paused: expiry must be based on the
+  // observation timestamp, not the time of the previous tick.
+  const auto expired = coordinator.tick(
+      observed + AcousticVerifiedMetricInput::kTtlNs + 1, grid);
+  EXPECT_EQ(coordinator.source_count(), 0u);
+  EXPECT_TRUE(expired.update.own_cells.empty());
+  EXPECT_TRUE(expired.rebuild_required);
+  // A later tick must not resurrect a retired acoustic source.
+  const auto stable = coordinator.tick(
+      observed + AcousticVerifiedMetricInput::kTtlNs + 100000000LL, grid);
+  EXPECT_TRUE(stable.update.own_cells.empty());
+
+  // Decode must refuse replay after its hard freshness boundary.
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      batch, "map", observed + AcousticVerifiedMetricInput::kTtlNs + 1,
+      decoded));
+  ASSERT_EQ(decoded.size(), 2u);  // Atomic rejection preserves output.
+  coordinator.disable();
+  EXPECT_EQ(coordinator.source_count(), 0u);
+}
+
+TEST(VerifiedMetricInput, InvalidLateBatchCannotPartiallyRepopulateCoordinator) {
+  using audition_nav2::AcousticLayerCoordinator;
+  constexpr std::int64_t now = 10100000000LL;
+  auto batch = verified_array();
+  auto second = batch.sources.front();
+  second.source_id = "speaker_B";
+  second.position.x = 3.0;
+  batch.sources.push_back(second);
+  std::vector<StampedMetricEvidence> decoded;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, decoded));
+  AcousticLayerCoordinator coordinator;
+  coordinator.enable();
+  for (const auto& item : decoded)
+    ASSERT_TRUE(coordinator.ingest_evidence(item, now));
+  ASSERT_EQ(coordinator.source_count(), 2u);
+
+  // A bad second source invalidates the *whole* snapshot; no prefix is
+  // admitted and the previously accepted evidence is not overwritten.
+  batch.sources[1].localization_method = "av_pair";
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, decoded));
+  ASSERT_EQ(decoded.size(), 2u);
+  EXPECT_EQ(coordinator.source_count(), 2u);
+
+  // The production receiver revokes the old snapshot on invalid ingress.
+  coordinator.revoke_all();
+  EXPECT_EQ(coordinator.source_count(), 0u);
+  batch.sources[1].localization_method =
+      AcousticVerifiedMetricInput::kRequiredMethod;
+  batch.sources[0].header.stamp.nanosec = 100000000u;
+  batch.sources[0].last_observed.nanosec = 100000000u;
+  batch.sources[1].header.stamp.nanosec = 100000000u;
+  batch.sources[1].last_observed.nanosec = 100000000u;
+  batch.header.stamp.nanosec = 100000000u;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, decoded));
+  for (const auto& item : decoded)
+    ASSERT_TRUE(coordinator.ingest_evidence(item, now));
+  EXPECT_EQ(coordinator.source_count(), 2u);
 }
