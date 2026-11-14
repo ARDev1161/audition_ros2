@@ -1,0 +1,144 @@
+#pragma once
+// Transactional, bounded staging of a non-acoustic baseline. The producer
+// must reconstruct each tile independently; this class cannot certify that.
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+#include <utility>
+#include "audition_nav2/acoustic_baseline_tile_cursor.hpp"
+
+namespace audition_nav2 {
+class AcousticBaselineTilePipeline {
+ public:
+  using Tile = AcousticBaselineTileCursor::Tile;
+  bool begin(const BaselineTicket& ticket, unsigned tile_width, unsigned tile_height) {
+    reset();
+    if (!cursor_.begin(ticket, tile_width, tile_height) || !staging_.begin(ticket)) {
+      reset();
+      return false;
+    }
+    ticket_ = ticket;
+    started_ = std::chrono::steady_clock::now();
+    active_ = true;
+    return true;
+  }
+  // Exactly one producer tile can be outstanding. A caller-supplied budget
+  // limits the work admitted during a tick, not the total map size.
+  bool next(const BaselineTicket& current, std::size_t budget, Tile& tile) {
+    if (expire_if_stalled() || !active_ || !cursor_.matches(current) || !staging_.matches(current)) {
+      reset();
+      return false;
+    }
+    return cursor_.next(current, budget, tile);
+  }
+  bool submit(const BaselineTicket& producer, const Tile& tile,
+              const std::uint8_t* costs, const std::uint8_t* coverage,
+              std::size_t size) {
+    if (expire_if_stalled() || !active_ || !cursor_.pending(producer, tile) || !staging_.matches(producer) ||
+        !staging_.add_checked(producer, tile.x, tile.y, tile.width,
+                              tile.height, costs, coverage, size) ||
+        !cursor_.acknowledge(producer, tile, true)) {
+      reset();
+      return false;
+    }
+    return true;
+  }
+  // Run at most one independently reconstructed tile per call. The producer
+  // receives the immutable ticket and exact tile geometry; it must attest
+  // non-acoustic provenance outside this staging helper. Exceptions, failed
+  // callbacks and malformed buffers revoke all staged work. This is NOT a
+  // Nav2 master-map reconstruction implementation.
+  template <class Producer>
+  bool produce_one(const BaselineTicket& current, std::size_t budget,
+                   Producer&& producer) {
+    Tile tile{};
+    if (!next(current, budget, tile)) return false;
+    const std::size_t count = static_cast<std::size_t>(tile.width) * tile.height;
+    // A producer is external code: it may synchronously cancel or restart
+    // the pipeline. Never accept its result into a replacement transaction,
+    // even when the replacement happens to reuse the same ticket (ABA).
+    const auto epoch = epoch_;
+    try {
+      std::vector<std::uint8_t> costs(count);
+      std::vector<std::uint8_t> coverage(count, 0);
+      const bool produced = std::forward<Producer>(producer)(current, tile, costs, coverage);
+      if (epoch != epoch_ || expire_if_stalled()) return false;
+      if (!produced) {
+        reset();
+        return false;
+      }
+      if (costs.size() != count || coverage.size() != count) {
+        reset();
+        return false;
+      }
+      return submit(current, tile, costs.data(), coverage.data(), count);
+    } catch (...) {
+      if (epoch == epoch_) reset();
+      return false;
+    }
+  }
+  bool active() const noexcept { return active_; }
+  // Timer-facing watchdog: a live transaction gets a fixed wall-clock
+  // deadline from begin(), not from each arriving tile or ROS/sim time.
+  // The timer must not revoke healthy in-flight work on every 100-ms tick.
+  bool expire_if_stalled() {
+    if (!active_) return false;
+    const auto now = std::chrono::steady_clock::now();
+    if (now < started_ || now - started_ >= std::chrono::seconds(2)) {
+      reset();
+      return true;
+    }
+    return false;
+  }
+  // Monotonic watchdog for stalled asynchronous reconstruction. The caller
+  // supplies timestamps from ONE steady clock domain (never ROS/sim time).
+  // A timeout revokes all outstanding leases and partial tiles. Invalid
+  // timestamps fail closed; the caller must begin a fresh transaction.
+  bool expire_if_stalled(const BaselineTicket& current,
+                         std::uint64_t started_ns, std::uint64_t now_ns,
+                         std::uint64_t max_age_ns) {
+    if (!active_) return false;
+    if (!cursor_.matches(current) || !staging_.matches(current) ||
+        max_age_ns == 0 || now_ns < started_ns ||
+        now_ns - started_ns >= max_age_ns) {
+      reset();
+      return true;
+    }
+    return false;
+  }
+  // Explicit cancellation for asynchronous producer failure / shutdown.
+  void abort() { reset(); }
+  // Do not expose a partial buffer. A successful take consumes both states.
+  bool take_ready(const BaselineTicket& current, std::vector<std::uint8_t>& out) {
+    if (expire_if_stalled() || !active_) return false;
+    // A changed map generation, cycle, or rolling origin invalidates the
+    // whole pending transaction even if no more tiles are requested.
+    if (!cursor_.matches(current) || !staging_.matches(current)) {
+      reset();
+      return false;
+    }
+    if (!cursor_.finished(current) || !staging_.ready(current)) return false;
+    if (!staging_.take_ready(current, out)) {
+      reset();
+      return false;
+    }
+    reset();
+    return true;
+  }
+  void reset() {
+    ++epoch_;
+    cursor_.reset();
+    staging_.reset();
+    active_ = false;
+    started_ = {};
+  }
+ private:
+  BaselineTicket ticket_{};
+  AcousticBaselineTileCursor cursor_;
+  AcousticTiledBaseline staging_;
+  bool active_ = false;
+  std::chrono::steady_clock::time_point started_{};
+  std::uint64_t epoch_ = 0;
+};
+}  // namespace audition_nav2

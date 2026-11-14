@@ -1,0 +1,188 @@
+cmake_minimum_required(VERSION 3.8)
+project(audition_nav2)
+find_package(ament_cmake REQUIRED)
+find_package(nav2_costmap_2d QUIET)
+find_package(pluginlib QUIET)
+find_package(rclcpp QUIET)
+find_package(audition_msgs QUIET)
+# Native ODAS/YAMNet/Speech CI images deliberately omit Nav2. Keep the
+# ROS-independent admission/ownership contracts available without requiring
+# those unrelated jobs to install the navigation stack.
+if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND audition_msgs_FOUND)
+  add_library(acoustic_costmap_layer SHARED src/acoustic_costmap_layer.cpp)
+  target_compile_features(acoustic_costmap_layer PUBLIC cxx_std_17)
+  target_include_directories(acoustic_costmap_layer PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+  ament_target_dependencies(acoustic_costmap_layer nav2_costmap_2d pluginlib rclcpp audition_msgs)
+  pluginlib_export_plugin_description_file(nav2_costmap_2d acoustic_layer_plugin.xml)
+  install(TARGETS acoustic_costmap_layer DESTINATION lib)
+  install(DIRECTORY include/ DESTINATION include)
+  install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
+
+  if(BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_acoustic_costmap_plugin
+      test/test_acoustic_costmap_plugin.cpp)
+    if(TARGET test_acoustic_costmap_plugin)
+      target_compile_features(test_acoustic_costmap_plugin PUBLIC cxx_std_17)
+      target_include_directories(test_acoustic_costmap_plugin PRIVATE include)
+      target_link_libraries(test_acoustic_costmap_plugin acoustic_costmap_layer)
+      ament_target_dependencies(test_acoustic_costmap_plugin
+        nav2_costmap_2d pluginlib rclcpp audition_msgs)
+    endif()
+    ament_add_gtest(test_acoustic_verified_metric_input
+      test/test_acoustic_verified_metric_input.cpp)
+    if(TARGET test_acoustic_verified_metric_input)
+      target_compile_features(test_acoustic_verified_metric_input PUBLIC cxx_std_17)
+      target_include_directories(test_acoustic_verified_metric_input PRIVATE include)
+      ament_target_dependencies(test_acoustic_verified_metric_input
+        audition_msgs rclcpp)
+    endif()
+    # Exercise the actual Humble LayeredCostmap::updateMap() reset/rebuild
+    # sequence rather than assuming it in a pure unit-test mock.
+    ament_add_gtest(test_acoustic_nav2_layered_costmap
+      test/test_acoustic_nav2_layered_costmap.cpp)
+    if(TARGET test_acoustic_nav2_layered_costmap)
+      target_compile_features(test_acoustic_nav2_layered_costmap PUBLIC cxx_std_17)
+      target_include_directories(test_acoustic_nav2_layered_costmap PRIVATE include)
+      ament_target_dependencies(test_acoustic_nav2_layered_costmap
+        nav2_costmap_2d rclcpp)
+    endif()
+  endif()
+else()
+  message(STATUS "audition_nav2: Nav2/pluginlib/rclcpp/audition_msgs absent; optional costmap plugin not built")
+endif()
+# The merge contract is ROS-independent: exercise it even in CI images
+# without Nav2. The standalone assert-based executable returns nonzero on
+# contract violations, and is registered with CTest.
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_acoustic_master_merge test/test_acoustic_master_merge.cpp)
+  target_compile_features(test_acoustic_master_merge PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_master_merge PRIVATE include)
+  # Assertions are the test oracle; keep them enabled in Release CI too.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_master_merge PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_master_merge_contract COMMAND test_acoustic_master_merge)
+  add_executable(test_acoustic_rebuild_tiles test/test_acoustic_rebuild_tiles.cpp)
+  target_compile_features(test_acoustic_rebuild_tiles PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_rebuild_tiles PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_rebuild_tiles PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_rebuild_tiles_contract COMMAND test_acoustic_rebuild_tiles)
+  add_executable(test_acoustic_map_generation test/test_acoustic_map_generation.cpp)
+  target_compile_features(test_acoustic_map_generation PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_map_generation PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_map_generation PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_map_generation_contract COMMAND test_acoustic_map_generation)
+  add_executable(test_acoustic_baseline_gate test/test_acoustic_baseline_gate.cpp)
+  target_compile_features(test_acoustic_baseline_gate PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_baseline_gate PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_baseline_gate PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_baseline_gate_contract COMMAND test_acoustic_baseline_gate)
+  add_executable(test_acoustic_baseline_transaction test/test_acoustic_baseline_transaction.cpp)
+  target_compile_features(test_acoustic_baseline_transaction PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_baseline_transaction PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_baseline_transaction PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_baseline_transaction_contract COMMAND test_acoustic_baseline_transaction)
+  add_executable(test_acoustic_baseline_transaction_edge_cases
+    test/test_acoustic_baseline_transaction_edge_cases.cpp)
+  target_compile_features(test_acoustic_baseline_transaction_edge_cases PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_baseline_transaction_edge_cases PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_baseline_transaction_edge_cases PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_baseline_transaction_edge_cases
+    COMMAND test_acoustic_baseline_transaction_edge_cases)
+  add_executable(test_acoustic_independent_baseline_adapter
+    test/test_acoustic_independent_baseline_adapter.cpp)
+  target_compile_features(test_acoustic_independent_baseline_adapter PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_independent_baseline_adapter PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_independent_baseline_adapter PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_independent_baseline_adapter_contract
+    COMMAND test_acoustic_independent_baseline_adapter)
+  add_executable(test_acoustic_independent_baseline_lifecycle
+    test/test_acoustic_independent_baseline_lifecycle.cpp)
+  target_compile_features(test_acoustic_independent_baseline_lifecycle PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_independent_baseline_lifecycle PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_independent_baseline_lifecycle PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_independent_baseline_lifecycle_contract
+    COMMAND test_acoustic_independent_baseline_lifecycle)
+  add_executable(test_acoustic_tiled_baseline
+    test/test_acoustic_tiled_baseline.cpp)
+  target_compile_features(test_acoustic_tiled_baseline PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_tiled_baseline PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_tiled_baseline PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_tiled_baseline_contract COMMAND test_acoustic_tiled_baseline)
+  add_executable(test_acoustic_baseline_tile_cursor test/test_acoustic_baseline_tile_cursor.cpp)
+  target_compile_features(test_acoustic_baseline_tile_cursor PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_baseline_tile_cursor PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_baseline_tile_cursor PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_baseline_tile_cursor_contract COMMAND test_acoustic_baseline_tile_cursor)
+  add_executable(test_acoustic_baseline_tile_pipeline
+    test/test_acoustic_baseline_tile_pipeline.cpp)
+  target_compile_features(test_acoustic_baseline_tile_pipeline PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_baseline_tile_pipeline PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_baseline_tile_pipeline PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_baseline_tile_pipeline_contract
+    COMMAND test_acoustic_baseline_tile_pipeline)
+  add_executable(test_acoustic_layer_tile_compositor
+    test/test_acoustic_layer_tile_compositor.cpp)
+  target_compile_features(test_acoustic_layer_tile_compositor PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_layer_tile_compositor PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_layer_tile_compositor PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_layer_tile_compositor_contract
+    COMMAND test_acoustic_layer_tile_compositor)
+
+  # Bound source count, independent TTL and replay fencing during paused
+  # update loops, including rollback and simulated-clock rewind.
+  add_executable(test_acoustic_pause_replay_capacity
+    test/test_acoustic_pause_replay_capacity.cpp)
+  target_compile_features(test_acoustic_pause_replay_capacity PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_pause_replay_capacity PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_pause_replay_capacity PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_pause_replay_capacity_contract
+    COMMAND test_acoustic_pause_replay_capacity)
+
+  # Nav2's real updateMap resets the requested window before invoking
+  # plugins in roster order. These two ROS-independent tests exercise that
+  # contract and the Nav2 empty-bounds sentinel even in native CI images
+  # that do not install nav2_costmap_2d.
+  add_executable(test_acoustic_world_bounds test/test_acoustic_world_bounds.cpp)
+  add_executable(test_acoustic_nav2_cycle_adapter
+    test/test_acoustic_nav2_cycle_adapter.cpp)
+  foreach(target IN ITEMS test_acoustic_world_bounds test_acoustic_nav2_cycle_adapter)
+    target_compile_features(${target} PRIVATE cxx_std_17)
+    target_include_directories(${target} PRIVATE include)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      target_compile_options(${target} PRIVATE -UNDEBUG)
+    endif()
+  endforeach()
+  add_test(NAME acoustic_world_bounds_contract COMMAND test_acoustic_world_bounds)
+  add_test(NAME acoustic_nav2_cycle_adapter_contract
+    COMMAND test_acoustic_nav2_cycle_adapter)
+endif()
+ament_package()

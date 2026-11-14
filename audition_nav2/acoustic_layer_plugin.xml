@@ -1,0 +1,7 @@
+<library path="acoustic_costmap_layer">
+  <class name="audition_nav2::AcousticCostmapLayer"
+         type="audition_nav2::AcousticCostmapLayer"
+         base_class_type="nav2_costmap_2d::Layer">
+    <description>Disabled-by-default advisory layer. No audio-only lethal obstacles.</description>
+  </class>
+</library>

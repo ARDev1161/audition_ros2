@@ -29,7 +29,52 @@ jobs:
             ros-humble-action-msgs \
             ros-humble-rclcpp \
             ros-humble-rclcpp-components \
+            ros-humble-nav2-costmap-2d \
+            ros-humble-pluginlib \
             ros-humble-launch-ros
+      - name: M5 metric admission contract (ROS-independent)
+        run: |
+          python3 -m unittest discover -s audition_nav2/test -p 'test_*.py' -v
+          python3 -m py_compile audition_nav2/nav_admission.py audition_nav2/evidence_cache.py audition_nav2/soft_cost_cells.py audition_nav2/stamped_tf_gate.py audition_nav2/ros_tf_adapter.py audition_nav2/grid_projection.py audition_nav2/advisory_gate.py audition_nav2/layer_policy.py
+
+      - name: M5 C++ acoustic cell ownership contract
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_cell_buffer.cpp \
+            -o /tmp/test_acoustic_cell_buffer
+          /tmp/test_acoustic_cell_buffer
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_master_merge.cpp \
+            -o /tmp/test_acoustic_master_merge
+          /tmp/test_acoustic_master_merge
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_dirty_bounds.cpp \
+            -o /tmp/test_acoustic_dirty_bounds
+          /tmp/test_acoustic_dirty_bounds
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_world_bounds.cpp \
+            -o /tmp/test_acoustic_world_bounds
+          /tmp/test_acoustic_world_bounds
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_layer_coordinator.cpp \
+            -o /tmp/test_acoustic_layer_coordinator
+          /tmp/test_acoustic_layer_coordinator
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_metric_admission.cpp \
+            -o /tmp/test_acoustic_metric_admission
+          /tmp/test_acoustic_metric_admission
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -I audition_nav2/include \
+            audition_nav2/test/test_acoustic_coordinator_integration.cpp \
+            -o /tmp/test_acoustic_coordinator_integration
+          /tmp/test_acoustic_coordinator_integration
+
       - name: Build all packages
         shell: bash
         run: |

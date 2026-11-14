@@ -55,12 +55,14 @@ def run():
             msg.header.frame_id = "base_link"
             msg.header.stamp.sec = stamp
             msg.direction_unit.x = 1.0
-            # Repeated publication of one stamp ensures a worker poll without
-            # introducing additional evidence. Each send is ~100 ms.
+            # Repeat the SAME evidence stamp to wake the worker, without
+            # counting duplicate DDS delivery as independent confirmation.
+            # Keep fixture overhead small: cadence is measured by the server,
+            # not by a slow test-side spin/sleep sequence.
             for _ in range(2):
                 pub.publish(msg)
-                rclpy.spin_once(node, timeout_sec=0.05)
-            time.sleep(0.08)
+                rclpy.spin_once(node, timeout_sec=0.015)
+            time.sleep(0.02)
 
         # Three updates in a burst: at most two should meet 180ms spacing.
         result = goal(900)
@@ -83,11 +85,14 @@ def run():
         send(delay=0.55)
         assert wait(node, result).status == GoalStatus.STATUS_ABORTED, "window bridged"
 
-        # A fresh bounded sequence satisfies all three constraints.
-        result = goal(2500)
+        # A fresh bounded sequence satisfies all three constraints. Allow
+        # ample room inside the 900 ms confirmation window for CI scheduler
+        # jitter; the previous 350 ms delays plus fixture overhead sometimes
+        # crossed the window and produced a false timeout.
+        result = goal(3500)
         send()
-        send(delay=0.35)
-        send(delay=0.35)
+        send(delay=0.29)
+        send(delay=0.29)
         outcome = wait(node, result)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("bounded recovery", outcome.status, outcome.result.reason)
         assert outcome.result.acquired

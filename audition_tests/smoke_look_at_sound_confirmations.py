@@ -58,6 +58,7 @@ def run():
             request.timeout_ms = timeout_ms
             handle = wait(node, client.send_goal_async(request, feedback_callback=feedback_callback))
             assert handle.accepted
+            feedback_states.clear()  # Each goal has an independent confirmation epoch.
             return handle
 
         def send(observation, repeats=3):
@@ -92,9 +93,17 @@ def run():
         await_progress("confirming_bearing:1/3")
         send(target(201, 1))
         await_progress("confirming_bearing:2/3")
+        reset_count_before = feedback_states.count("confirming_bearing:1/3")
         send(target(202, 2))
         assert not future.done(), "source generation transition reused prior evidence"
-        assert feedback_states[-1] == "confirming_bearing:1/3", ("generation reset progress", feedback_states[-3:])
+        # Feedback is delivered asynchronously. The last received state may
+        # still describe the previous generation even after DDS publish.
+        # Require a NEW 1/3 acknowledgement rather than inspecting the tail.
+        deadline = time.monotonic() + 3.0
+        while feedback_states.count("confirming_bearing:1/3") <= reset_count_before and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        assert feedback_states.count("confirming_bearing:1/3") > reset_count_before, (
+            "generation reset progress", feedback_states[-6:])
         send(target(203, 2))
         assert not future.done(), "only two observations of new generation"
         send(target(204, 2))
@@ -119,7 +128,9 @@ def run():
         handle = goal(6000)
         future = handle.get_result_async()
         send(target(400, 2))
+        await_progress("confirming_bearing:1/3")
         send(target(401, 2))
+        await_progress("confirming_bearing:2/3")
         stale = target(399, 2)
         stale.valid = False
         send(stale)
@@ -130,7 +141,9 @@ def run():
         handle = goal(6000)
         future = handle.get_result_async()
         send(target(500, 2))
+        await_progress("confirming_bearing:1/3")
         send(target(501, 2))
+        await_progress("confirming_bearing:2/3")
         revoked = target(502, 2)
         revoked.valid = False
         send(revoked)

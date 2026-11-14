@@ -1,0 +1,37 @@
+# M5 optional soft-cost plugin -- configuration FRAGMENT, not a standalone
+# Nav2 configuration. Merge into an existing local_costmap (or global_costmap)
+# with collision-monitor / obstacle sensors remaining independent.
+#
+# IMPORTANT: append acoustic_layer LAST to the existing "plugins" array:
+#   plugins: ["static_layer", "obstacle_layer", "inflation_layer", "acoustic_layer"]
+# Nav2 will reset each dirty window and rebuild all ordinary layers BEFORE
+# this plugin overlays a non-lethal acoustic cost. Do not include the plugin
+# in the "filters" array; never run it before another ordinary costmap layer.
+#
+# Leave disabled until a separately validated metric-position publisher exists
+# and its frame, calibration and provenance have been independently audited.
+# M4 bearing/AV/diagnostic intersections MUST NOT be connected directly.
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      acoustic_layer:
+        plugin: "audition_nav2::AcousticCostmapLayer"
+        enable_soft_costs: false
+        trusted_metric_topic: ""
+
+# To opt in, set both:
+#   enable_soft_costs: true
+#   trusted_metric_topic: "/robot_a/audition/verified_metric_sources"
+#
+# The publisher MUST emit audition_msgs/msg/LocalizedSourceArray with:
+# - source/array header.frame_id identical to this Nav2 costmap global frame
+#   (no implicit TF, range inference or bearing conversion is performed).
+# - source.localization_method exactly "independently_verified_metric_3d".
+# - nonzero source generation, fresh capture and array timestamps.
+# - finite 3D metric position and well-conditioned bounded 3D covariance.
+# - independent, externally validated physical source localization.
+#
+# Treat the method string as an interface CONTRACT, not proof or
+# authentication. Use DDS security / publisher ACLs in a real deployment.
+# Default cost is 100 (soft only); TTL is 500 ms after the observation stamp.
+# No LETHAL_OBSTACLE, cmd_vel or motion actuator is driven by this plugin.
