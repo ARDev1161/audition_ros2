@@ -154,7 +154,8 @@ void AcousticCostmapLayer::expireOnTimer() {
 bool AcousticCostmapLayer::pending_fresh(std::int64_t staged_ns,
                                           std::int64_t now_ns) {
   return staged_ns > 0 && now_ns >= staged_ns &&
-      static_cast<std::uint64_t>(now_ns - staged_ns) <=
+      (static_cast<std::uint64_t>(now_ns) -
+       static_cast<std::uint64_t>(staged_ns)) <=
           static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs);
 }
 
