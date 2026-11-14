@@ -189,3 +189,62 @@ TEST(AcousticCostmapPlugin, DisabledRealLayeredCostmapNeverCreatesAudioCosts) {
   check_empty(0.0, 0.0);
   check_empty(1.0, 0.0);
 }
+
+namespace audition_nav2 {
+// This accessor exercises the production subscription callback's invalidation
+// contract without DDS timing or a simulated substitute costmap plugin.
+struct AcousticCostmapLayerTestAccess {
+  static void prepare(AcousticCostmapLayer& layer,
+                      nav2_costmap_2d::LayeredCostmap& map) {
+    layer.clock_ = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+    layer.layered_costmap_ = &map;
+    layer.enabled_ = true;
+    layer.coordinator_.enable();
+    layer.last_metric_generation_ = 5;
+    layer.pending_valid_ = true;  // updateBounds already staged a cycle.
+  }
+  static bool pending(const AcousticCostmapLayer& layer) {
+    return layer.pending_valid_;
+  }
+  static void stage(AcousticCostmapLayer& layer) {
+    layer.pending_valid_ = true;
+  }
+  static void ingress(AcousticCostmapLayer& layer, std::uint64_t generation) {
+    audition_msgs::msg::LocalizedSourceArray message;
+    message.generation = generation;
+    layer.onTrustedMetricArray(message);
+  }
+};
+}  // namespace audition_nav2
+
+TEST(AcousticCostmapPlugin, TrustedIngressFencesStagedBoundsCycle) {
+  // The callbacks are intentionally invoked in the interleaving that caused
+  // the race: bounds staged -> subscription callback -> costs. A packet from
+  // the current or a newer epoch must revoke the staged overlay, including
+  // malformed/empty packets. A replay from an older epoch is a no-op.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(8, 8, 0.5, -2.0, -2.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  Access::ingress(layer, 4);
+  EXPECT_TRUE(Access::pending(layer))
+      << "old-generation replay must not invalidate current bounds";
+  Access::ingress(layer, 5);
+  EXPECT_FALSE(Access::pending(layer))
+      << "same-generation ingress must discard staged acoustic costs";
+  Access::stage(layer);
+  Access::ingress(layer, 6);
+  EXPECT_FALSE(Access::pending(layer))
+      << "new-generation ingress must discard staged acoustic costs";
+
+  // Even if Nav2 calls updateCosts before another updateBounds, the
+  // invalidated half-cycle cannot write to its master costmap.
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  master->setCost(2, 2, 254);
+  master->setCost(3, 3, 175);
+  layer.updateCosts(*master, 0, 0, 8, 8);
+  EXPECT_EQ(master->getCost(2, 2), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
