@@ -206,6 +206,18 @@ struct AcousticCostmapLayerTestAccess {
   static bool pending(const AcousticCostmapLayer& layer) {
     return layer.pending_valid_;
   }
+  static void seed(AcousticCostmapLayer& layer, std::uint64_t id, std::int64_t stamp) {
+    layer.last_metric_stamp_[id] = stamp;
+  }
+  static std::size_t watermark_count(const AcousticCostmapLayer& layer) {
+    return layer.last_metric_stamp_.size();
+  }
+  static std::uint64_t generation(const AcousticCostmapLayer& layer) {
+    return layer.last_metric_generation_;
+  }
+  static std::size_t sources(const AcousticCostmapLayer& layer) {
+    return layer.coordinator_.source_count();
+  }
   static void stage(AcousticCostmapLayer& layer) {
     layer.pending_valid_ = true;
   }
@@ -247,4 +259,40 @@ TEST(AcousticCostmapPlugin, TrustedIngressFencesStagedBoundsCycle) {
   layer.updateCosts(*master, 0, 0, 8, 8);
   EXPECT_EQ(master->getCost(2, 2), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
+}
+
+TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
+  // A rejected same-epoch snapshot must not poison deduplication: a later
+  // independently verified retry with the same stamp must remain admissible.
+  // An older epoch, by contrast, cannot revoke a current staged cycle.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(8, 8, 0.5, -2.0, -2.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  Access::seed(layer, 101, 100);
+  Access::seed(layer, 102, 200);
+  ASSERT_EQ(Access::watermark_count(layer), 2u);
+  Access::ingress(layer, 4);
+  EXPECT_EQ(Access::watermark_count(layer), 2u);
+  EXPECT_TRUE(Access::pending(layer));
+  Access::ingress(layer, 5);  // Empty trusted snapshot revokes all.
+  EXPECT_EQ(Access::watermark_count(layer), 0u);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_EQ(Access::sources(layer), 0u);
+  EXPECT_EQ(Access::generation(layer), 5u);
+
+  Access::seed(layer, 103, 300);
+  Access::stage(layer);
+  Access::ingress(layer, 6);
+  EXPECT_EQ(Access::watermark_count(layer), 0u);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_EQ(Access::generation(layer), 6u);
+
+  Access::seed(layer, 104, 400);
+  layer.reset();
+  EXPECT_EQ(Access::watermark_count(layer), 0u);
+  EXPECT_EQ(Access::generation(layer), 0u);
+  EXPECT_EQ(Access::sources(layer), 0u);
+  EXPECT_FALSE(Access::pending(layer));
 }
