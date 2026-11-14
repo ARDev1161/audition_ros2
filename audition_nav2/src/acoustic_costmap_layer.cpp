@@ -168,6 +168,12 @@ void AcousticCostmapLayer::updateBounds(
     double* max_x, double* max_y) {
   if (!min_x || !min_y || !max_x || !max_y) return;
   std::lock_guard<std::mutex> lock(mutex_);
+  // Nav2 may invoke updateBounds twice without a matching updateCosts
+  // (interrupted updateMap, lifecycle transition, or a changed window).
+  // The first pass already consumed coordinator dirty ownership. Preserve
+  // that region for the next full pass instead of silently dropping it.
+  if (pending_valid_)
+    coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!layered_costmap_) return;
   const auto* map = layered_costmap_->getCostmap();
