@@ -248,8 +248,13 @@ void AcousticCostmapLayer::updateCosts(
   pending_valid_ = false;  // consume once, including on any failed gate
   // Nav2 may stall between bounds and costs. Never apply an expired staged
   // overlay, including after ROS simulation time jumps backwards.
-  if (!clock_ || !pending_fresh(pending_stamp_ns_, clock_->now().nanoseconds()))
+  if (!clock_ || !pending_fresh(pending_stamp_ns_, clock_->now().nanoseconds())) {
+    // updateBounds already consumed the dirty region. If this half-cycle
+    // expires before updateCosts, Nav2 must revisit the same region on the
+    // next full reset/rebuild pass; otherwise stale master costs can survive.
+    coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
     return;
+  }
   const auto& g = pending_geometry_;
   if (g.width != geometry.width || g.height != geometry.height ||
       g.resolution != geometry.resolution ||
