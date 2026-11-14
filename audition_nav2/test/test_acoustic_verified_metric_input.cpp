@@ -356,8 +356,8 @@ TEST(VerifiedMetricInput, DecodedEvidenceDrivesBoundedSoftCostsAndExpiresWithout
   const auto live = coordinator.tick(admitted_at, grid);
   ASSERT_FALSE(live.update.own_cells.empty());
   for (const auto& cell : live.update.own_cells) {
-    EXPECT_GT(cell.cost, 0);
-    EXPECT_LT(cell.cost, 253);  // Never INSCRIBED/LETHAL/UNKNOWN.
+    EXPECT_GT(cell.second, 0);
+    EXPECT_LT(cell.second, 253);  // Never INSCRIBED/LETHAL/UNKNOWN.
   }
 
   // The Nav2 update loop can be paused: expiry must be based on the
