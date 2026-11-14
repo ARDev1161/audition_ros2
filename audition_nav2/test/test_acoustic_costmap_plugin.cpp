@@ -4,6 +4,7 @@
 #include <vector>
 #include "audition_nav2/acoustic_costmap_layer.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
+#include "nav2_costmap_2d/layered_costmap.hpp"
 #include "pluginlib/class_loader.hpp"
 
 TEST(AcousticCostmapPlugin, ExportedAndInertByDefault) {
@@ -154,4 +155,37 @@ TEST(AcousticCostmapPlugin, ReobservesGeometryBetweenCallbacksWithoutWriting) {
   layer->updateCosts(master, 0, 0, 9, 7);
   EXPECT_EQ(std::vector<std::uint8_t>(master.getCharMap(),
                                       master.getCharMap() + 63), restored);
+}
+
+TEST(AcousticCostmapPlugin, DisabledRealLayeredCostmapNeverCreatesAudioCosts) {
+  // Exercise Nav2's actual reset/updateBounds/updateCosts ordering with the
+  // exported production plugin, not a coordinator or substitute Layer.
+  // Without explicit trusted metric opt-in it must remain inert through
+  // rolling-window movement, resize, repeated updates and reset.
+  nav2_costmap_2d::LayeredCostmap layered("map", true, false);
+  layered.resizeMap(12, 12, 0.5, -1.0, -1.0);
+  pluginlib::ClassLoader<nav2_costmap_2d::Layer> loader(
+      "nav2_costmap_2d", "nav2_costmap_2d::Layer");
+  auto acoustic = loader.createSharedInstance(
+      "audition_nav2::AcousticCostmapLayer");
+  ASSERT_NE(acoustic, nullptr);
+  layered.addPlugin(acoustic);
+  const auto check_empty = [&layered](double x, double y) {
+    layered.updateMap(x, y, 0.0);
+    const auto* map = layered.getCostmap();
+    ASSERT_NE(map, nullptr);
+    for (unsigned j = 0; j < map->getSizeInCellsY(); ++j) {
+      for (unsigned i = 0; i < map->getSizeInCellsX(); ++i) {
+        EXPECT_EQ(map->getCost(i, j), 0)
+            << "unexpected cost at " << i << "," << j;
+      }
+    }
+  };
+  check_empty(2.0, 2.0);
+  check_empty(3.0, 2.0);
+  acoustic->reset();
+  check_empty(3.0, 2.0);
+  layered.resizeMap(15, 9, 0.25, -2.0, -0.5);
+  check_empty(0.0, 0.0);
+  check_empty(1.0, 0.0);
 }
