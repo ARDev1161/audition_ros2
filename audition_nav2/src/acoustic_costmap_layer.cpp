@@ -65,8 +65,14 @@ void AcousticCostmapLayer::onTrustedMetricArray(
       msg, layered_costmap_->getGlobalFrameID(), now_ns, evidence);
   std::lock_guard<std::mutex> lock(mutex_);
   if (!enabled_) return;
-  // Replayed older sessions cannot revoke a newer trusted observation.
+  // updateBounds() and updateCosts() are separate Nav2 callbacks. A trusted
+  // ingress may arrive between them, so the previously staged overlay is no
+  // longer a snapshot of the coordinator. Reject that half-cycle and rebuild
+  // on the next complete updateMap() pass. This also fences revocations and
+  // clock/epoch changes against stale soft-cost writes.
+  // Old-generation replay is a no-op and must not disrupt a valid cycle.
   if (msg.generation < last_metric_generation_) return;
+  pending_valid_ = false;
   if (!valid) {
     coordinator_.revoke_all();
     // Revocation invalidates ingress deduplication as well. Otherwise a
