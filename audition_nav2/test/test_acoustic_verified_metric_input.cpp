@@ -251,3 +251,77 @@ TEST(VerifiedMetricInput, EnforcesExactFreshnessBoundaryAndAtomicRecovery) {
   ASSERT_EQ(output.size(), 1u);
   EXPECT_EQ(output.front().cell.source_id, id);
 }
+
+
+TEST(VerifiedMetricInput, CapacityBoundaryAndLateInvalidSourceAreAtomic) {
+  constexpr std::int64_t now = 10100000000LL;
+  auto batch = verified_array();
+  std::vector<StampedMetricEvidence> output;
+  for (unsigned i = 1; i < AcousticVerifiedMetricInput::kMaxSources; ++i) {
+    auto source = batch.sources.front();
+    source.source_id = "speaker_" + std::to_string(i);
+    source.position.x = 1.5 + static_cast<double>(i) * 0.01;
+    batch.sources.push_back(source);
+  }
+  ASSERT_EQ(batch.sources.size(), AcousticVerifiedMetricInput::kMaxSources);
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), AcousticVerifiedMetricInput::kMaxSources);
+  const auto original = output.front().cell.source_id;
+
+  // A late malformed entry must not publish the valid prefix, even when
+  // the batch is at the exact configured capacity.
+  auto malformed = batch;
+  malformed.sources.back().localization_method = "diagnostic_intersection_2d";
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      malformed, "map", now, output));
+  ASSERT_EQ(output.size(), AcousticVerifiedMetricInput::kMaxSources);
+  EXPECT_EQ(output.front().cell.source_id, original);
+
+  malformed = batch;
+  malformed.sources.back().position.z =
+      std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      malformed, "map", now, output));
+  EXPECT_EQ(output.size(), AcousticVerifiedMetricInput::kMaxSources);
+
+  malformed = batch;
+  malformed.sources.push_back(batch.sources.front());
+  malformed.sources.back().source_id = "overflow";
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      malformed, "map", now, output));
+  EXPECT_EQ(output.size(), AcousticVerifiedMetricInput::kMaxSources);
+
+  // A subsequent valid snapshot is still accepted after each rejection.
+  batch.sources.back().position.x += 0.5;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(
+      batch, "map", now, output));
+  ASSERT_EQ(output.size(), AcousticVerifiedMetricInput::kMaxSources);
+  EXPECT_DOUBLE_EQ(output.back().cell.x_m, batch.sources.back().position.x);
+}
+
+TEST(VerifiedMetricInput, RejectsLateFrameAndObservationSkewWithoutMutation) {
+  constexpr std::int64_t now = 10100000000LL;
+  auto batch = verified_array();
+  std::vector<StampedMetricEvidence> output;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 1u);
+  const auto source_id = output.front().cell.source_id;
+
+  // A 50 ms discrepancy between source header and observation is allowed;
+  // 50 ms + 1 ns is not. The surrounding snapshot remains fresh.
+  batch.sources.front().header.stamp.nanosec = 50000000u;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.front().header.stamp.nanosec = 50000001u;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 1u);
+  EXPECT_EQ(output.front().cell.source_id, source_id);
+
+  batch = verified_array();
+  batch.sources.front().last_observed.nanosec = 1u;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 1u);
+  batch = verified_array();
+  batch.header.frame_id = "odom";
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 1u);
+}
