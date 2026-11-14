@@ -208,6 +208,23 @@ struct AcousticCostmapLayerTestAccess {
     layer.last_metric_generation_ = 5;
     layer.pending_valid_ = true;  // updateBounds already staged a cycle.
   }
+  static bool seed_staged_dirty(AcousticCostmapLayer& layer,
+                                const GridGeometry& geometry,
+                                std::int64_t now) {
+    layer.pending_valid_ = false;
+    if (!layer.coordinator_.ingest_validated(
+            {42, now, now + 200000000LL, 1.25, 1.25, true}, now))
+      return false;
+    layer.pending_cycle_ = layer.coordinator_.tick(now, geometry);
+    layer.pending_geometry_ = geometry;
+    layer.pending_valid_ = true;
+    return layer.pending_cycle_.rebuild_required;
+  }
+  static AcousticCycle retry(AcousticCostmapLayer& layer,
+                             const GridGeometry& geometry,
+                             std::int64_t now) {
+    return layer.coordinator_.tick(now, geometry);
+  }
   static bool pending(const AcousticCostmapLayer& layer) {
     return layer.pending_valid_;
   }
@@ -380,4 +397,26 @@ TEST(AcousticCostmapPlugin, DeferredBoundsNeverCrossRollingMapGeometry) {
   EXPECT_EQ(retry.dirty.min_j, 0u);
   EXPECT_EQ(retry.dirty.max_i, shifted.width);
   EXPECT_EQ(retry.dirty.max_j, shifted.height);
+}
+
+TEST(AcousticCostmapPlugin, RepeatedBoundsCannotLoseStagedDirtyRegion) {
+  // A second bounds callback may supersede a staged cycle without costs.
+  // The dirty region from the first pass must survive the interruption.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(8, 8, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  const audition_nav2::GridGeometry geometry{8, 8, 0.5, 0.0, 0.0};
+  constexpr std::int64_t now = 1000000000LL;
+  ASSERT_TRUE(Access::seed_staged_dirty(layer, geometry, now));
+  double min_x = -1, min_y = -1, max_x = 5, max_y = 5;
+  layer.updateBounds(0, 0, 0, &min_x, &min_y, &max_x, &max_y);
+  EXPECT_FALSE(Access::pending(layer));
+  const auto retry = Access::retry(layer, geometry, now + 1);
+  EXPECT_TRUE(retry.rebuild_required);
+  EXPECT_LE(retry.dirty.min_i, 2u);
+  EXPECT_GT(retry.dirty.max_i, 2u);
+  EXPECT_LE(retry.dirty.min_j, 2u);
+  EXPECT_GT(retry.dirty.max_j, 2u);
 }
