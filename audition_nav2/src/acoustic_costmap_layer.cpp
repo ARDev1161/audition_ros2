@@ -69,6 +69,10 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   if (msg.generation < last_metric_generation_) return;
   if (!valid) {
     coordinator_.revoke_all();
+    // Revocation invalidates ingress deduplication as well. Otherwise a
+    // subsequent fresh snapshot with the same timestamps is silently skipped,
+    // leaving the coordinator empty until a newer observation arrives.
+    last_metric_stamp_.clear();
     return;
   }
   if (msg.generation != last_metric_generation_) {
@@ -107,6 +111,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   }
   if (last_metric_stamp_.size() + unseen > 128) {
     coordinator_.revoke_all();
+    last_metric_stamp_.clear();
     return;
   }
   for (const auto& item : evidence) {
@@ -116,6 +121,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
     if (!coordinator_.ingest_evidence(item, now_ns)) {
       // A partially accepted batch is never exposed to the next Nav2 tick.
       coordinator_.revoke_all();
+      last_metric_stamp_.clear();
       return;
     }
     last_metric_stamp_[item.cell.source_id] = item.cell.stamp_ns;
