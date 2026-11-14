@@ -246,37 +246,56 @@ void AcousticCostmapLayer::updateCosts(
   }
   if (!enabled_ || !pending_valid_ || !layered_costmap_) return;
   pending_valid_ = false;  // consume once, including on any failed gate
+  // A rejected costs callback has not completed Nav2's baseline rebuild.
+  // Return its consumed bounds so a subsequent complete cycle can clear
+  // previously written acoustic costs. The coordinator checks geometry
+  // before replaying them (resize/rolling origin requires a full rebuild).
+  const auto defer_rejected_cycle = [this]() {
+    coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+  };
   // Nav2 may stall between bounds and costs. Never apply an expired staged
   // overlay, including after ROS simulation time jumps backwards.
   if (!clock_ || !pending_fresh(pending_stamp_ns_, clock_->now().nanoseconds())) {
     // updateBounds already consumed the dirty region. If this half-cycle
     // expires before updateCosts, Nav2 must revisit the same region on the
     // next full reset/rebuild pass; otherwise stale master costs can survive.
-    coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+    defer_rejected_cycle();
     return;
   }
   const auto& g = pending_geometry_;
   if (g.width != geometry.width || g.height != geometry.height ||
       g.resolution != geometry.resolution ||
-      g.origin_x != geometry.origin_x || g.origin_y != geometry.origin_y)
+      g.origin_x != geometry.origin_x || g.origin_y != geometry.origin_y) {
+    defer_rejected_cycle();
     return;
+  }
 
   const auto* plugins = layered_costmap_->getPlugins();
   const auto* filters = layered_costmap_->getFilters();
   if (!AcousticNav2CycleAdapter::terminal_nonacoustic_baseline(
-          plugins, filters, static_cast<const nav2_costmap_2d::Layer*>(this)))
+          plugins, filters, static_cast<const nav2_costmap_2d::Layer*>(this))) {
+    defer_rejected_cycle();
     return;
+  }
 
   // Without filters Nav2 passes combined_costmap_; with filters it passes
   // private primary_costmap_, then copies it and applies filters. Reject
   // unexpected buffers in either mode, without dereferencing stale pointers.
   const auto* combined = layered_costmap_->getCostmap();
-  if (!combined || !filters) return;
-  if (filters->empty() ? (&master != combined) : (&master == combined))
+  if (!combined || !filters) {
+    defer_rejected_cycle();
     return;
+  }
+  if (filters->empty() ? (&master != combined) : (&master == combined)) {
+    defer_rejected_cycle();
+    return;
+  }
 
   const auto count = static_cast<std::uint64_t>(geometry.width) * geometry.height;
-  if (count == 0 || count > 4000000ULL) return;
+  if (count == 0 || count > 4000000ULL) {
+    defer_rejected_cycle();
+    return;
+  }
   AcousticNav2CycleAdapter::overlay_after_nav2_reset(
       pending_cycle_, geometry, min_i, min_j, max_i, max_j,
       master.getCharMap(), static_cast<std::size_t>(count), true);
