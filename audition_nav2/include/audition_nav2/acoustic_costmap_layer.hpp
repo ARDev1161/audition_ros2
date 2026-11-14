@@ -58,5 +58,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   AcousticCycle pending_cycle_;
   GridGeometry pending_geometry_{};
   bool pending_valid_ = false;
+  // A staged overlay cannot outlive the verified metric TTL while Nav2 stalls.
+  std::int64_t pending_stamp_ns_ = 0;
+  static bool pending_fresh(std::int64_t staged_ns, std::int64_t now_ns);
 };
 }  // namespace audition_nav2
