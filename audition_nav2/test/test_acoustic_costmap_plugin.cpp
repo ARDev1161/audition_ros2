@@ -194,6 +194,9 @@ namespace audition_nav2 {
 // This accessor exercises the production subscription callback's invalidation
 // contract without DDS timing or a simulated substitute costmap plugin.
 struct AcousticCostmapLayerTestAccess {
+  static bool fresh(std::int64_t staged, std::int64_t now) {
+    return AcousticCostmapLayer::pending_fresh(staged, now);
+  }
   static void prepare(AcousticCostmapLayer& layer,
                       nav2_costmap_2d::LayeredCostmap& map) {
     layer.clock_ = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
@@ -301,4 +304,16 @@ TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
   EXPECT_EQ(Access::generation(layer), 0u);
   EXPECT_EQ(Access::sources(layer), 0u);
   EXPECT_FALSE(Access::pending(layer));
+}
+
+TEST(AcousticCostmapPlugin, StagedOverlayExpiresAcrossNav2CallbackDelay) {
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  constexpr std::int64_t kTtl =
+      audition_nav2::AcousticVerifiedMetricInput::kTtlNs;
+  constexpr std::int64_t kStart = 1000000000LL;
+  EXPECT_FALSE(Access::fresh(0, kStart));
+  EXPECT_FALSE(Access::fresh(kStart, kStart - 1));
+  EXPECT_TRUE(Access::fresh(kStart, kStart));
+  EXPECT_TRUE(Access::fresh(kStart, kStart + kTtl));
+  EXPECT_FALSE(Access::fresh(kStart, kStart + kTtl + 1));
 }
