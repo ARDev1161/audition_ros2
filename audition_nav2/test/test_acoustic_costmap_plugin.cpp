@@ -220,6 +220,16 @@ struct AcousticCostmapLayerTestAccess {
     layer.pending_valid_ = true;
     return layer.pending_cycle_.rebuild_required;
   }
+  static void expire(AcousticCostmapLayer& layer) {
+    layer.expireOnTimer();
+  }
+  static void set_clock(AcousticCostmapLayer& layer,
+                        const rclcpp::Clock::SharedPtr& clock) {
+    layer.clock_ = clock;
+  }
+  static std::size_t staged_cells(const AcousticCostmapLayer& layer) {
+    return layer.pending_cycle_.update.own_cells.size();
+  }
   static AcousticCycle retry(AcousticCostmapLayer& layer,
                              const GridGeometry& geometry,
                              std::int64_t now) {
@@ -419,4 +429,47 @@ TEST(AcousticCostmapPlugin, RepeatedBoundsCannotLoseStagedDirtyRegion) {
   EXPECT_GT(retry.dirty.max_i, 2u);
   EXPECT_LE(retry.dirty.min_j, 2u);
   EXPECT_GT(retry.dirty.max_j, 2u);
+}
+
+TEST(AcousticCostmapPlugin, TimerRetirementPreservesStagedDirtyWithoutNav2Tick) {
+  // Real production timer callback, with no incoming ROS messages and no
+  // updateMap() in between. A staged soft cost must be cleared on the next
+  // complete Nav2 cycle, even when its bounds were already consumed.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
+  clock->set_ros_time_override_enabled(true);
+  constexpr std::int64_t observed = 1000000000LL;
+  clock->set_ros_time_override(observed);
+  Access::set_clock(layer, clock);
+  const audition_nav2::GridGeometry geometry{12, 12, 0.5, 0.0, 0.0};
+  ASSERT_TRUE(Access::seed_staged_dirty(layer, geometry, observed));
+  ASSERT_EQ(Access::staged_cells(layer), 1u);
+  ASSERT_TRUE(Access::pending(layer));
+  ASSERT_EQ(Access::sources(layer), 1u);
+
+  // Timer before TTL is a no-op for a pending Nav2 half-cycle.
+  clock->set_ros_time_override(observed + 100000000LL);
+  Access::expire(layer);
+  EXPECT_EQ(Access::sources(layer), 1u);
+  EXPECT_TRUE(Access::pending(layer));
+
+  // After expiry the timer must invalidate the half-cycle and requeue its
+  // consumed dirty bounds, without ticking or modifying the master map.
+  clock->set_ros_time_override(observed + 300000000LL);
+  Access::expire(layer);
+  EXPECT_EQ(Access::sources(layer), 0u);
+  EXPECT_FALSE(Access::pending(layer));
+  const auto next = Access::retry(layer, geometry, observed + 300000001LL);
+  EXPECT_TRUE(next.rebuild_required);
+  EXPECT_TRUE(next.update.own_cells.empty());
+  EXPECT_LE(next.dirty.min_i, 2u);
+  EXPECT_GT(next.dirty.max_i, 2u);
+  EXPECT_LE(next.dirty.min_j, 2u);
+  EXPECT_GT(next.dirty.max_j, 2u);
+  EXPECT_FALSE(Access::retry(layer, geometry, observed + 300000002LL)
+                   .rebuild_required);
 }
