@@ -167,3 +167,87 @@ TEST(VerifiedMetricInput, RejectsSameLogicalSourceAcrossGenerationsAtomically) {
   EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
   EXPECT_EQ(output.size(), 2u);
 }
+
+TEST(VerifiedMetricInput, RejectsAdversarialTimeAndCovarianceWithoutPartialCommit) {
+  constexpr std::int64_t now = 10250000000LL;
+  auto batch = verified_array();
+  std::vector<StampedMetricEvidence> output;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 1u);
+  const auto retained = output.front().cell.source_id;
+
+  // A valid first source must not leak through if a later source fails.
+  auto second = batch.sources.front();
+  second.source_id = "speaker_B";
+  second.position.x = 4.0;
+  batch.sources.push_back(second);
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  ASSERT_EQ(output.size(), 2u);
+  batch.sources.back().covariance[1] = 0.19;
+  batch.sources.back().covariance[3] = 0.19;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 2u);
+  EXPECT_EQ(output.front().cell.source_id, retained);
+
+  // Off-diagonal covariance can be symmetric yet not positive definite.
+  batch.sources.back().covariance[1] = 0.0;
+  batch.sources.back().covariance[3] = 0.0;
+  batch.sources.back().covariance[0] = -0.01;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.back().covariance[0] = 0.04;
+
+  // All three timestamps must be valid and in the declared clock domain.
+  batch.sources.back().last_observed.nanosec = 1000000000u;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.back().last_observed.nanosec = 0;
+  batch.sources.back().header.stamp.nanosec = 1000000000u;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.back().header.stamp.nanosec = 0;
+  batch.sources.back().header.stamp.sec = 9;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.back().header.stamp.sec = 10;
+
+  // No silent acceptance of a source newer than the enclosing snapshot.
+  batch.sources.back().last_observed.sec = 11;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  batch.sources.back().last_observed.sec = 10;
+
+  // A single out-of-frame source invalidates the entire snapshot.
+  batch.sources.back().header.frame_id = "odom";
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 2u);
+  batch.sources.back().header.frame_id = "map";
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
+  EXPECT_EQ(output.size(), 2u);
+}
+
+TEST(VerifiedMetricInput, EnforcesExactFreshnessBoundaryAndAtomicRecovery) {
+  auto batch = verified_array();
+  std::vector<StampedMetricEvidence> output;
+  constexpr std::int64_t stamp = 10000000000LL;
+  constexpr std::int64_t max_age = AcousticVerifiedMetricInput::kMaxAgeNs;
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(
+      batch, "map", stamp + max_age, output));
+  ASSERT_EQ(output.size(), 1u);
+  const auto id = output.front().cell.source_id;
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      batch, "map", stamp + max_age + 1, output));
+  ASSERT_EQ(output.size(), 1u);
+  EXPECT_EQ(output.front().cell.source_id, id);
+
+  // Future-dated snapshots must fail even by one nanosecond.
+  EXPECT_FALSE(AcousticVerifiedMetricInput::decode(
+      batch, "map", stamp - 1, output));
+  EXPECT_EQ(output.size(), 1u);
+
+  // A fresh empty snapshot is an explicit revocation, not a parse failure.
+  batch.sources.clear();
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(
+      batch, "map", stamp + max_age, output));
+  EXPECT_TRUE(output.empty());
+  batch = verified_array();
+  ASSERT_TRUE(AcousticVerifiedMetricInput::decode(
+      batch, "map", stamp + max_age, output));
+  ASSERT_EQ(output.size(), 1u);
+  EXPECT_EQ(output.front().cell.source_id, id);
+}
