@@ -230,6 +230,10 @@ struct AcousticCostmapLayerTestAccess {
     layer.map_generation_.observe(geometry);
     layer.pending_stamp_ns_ = 1;  // Valid but far older than wall-clock TTL.
   }
+  static void prime_fresh_costs(AcousticCostmapLayer& layer,
+                                std::int64_t now) {
+    layer.pending_stamp_ns_ = now;
+  }
   static void set_clock(AcousticCostmapLayer& layer,
                         const rclcpp::Clock::SharedPtr& clock) {
     layer.clock_ = clock;
@@ -494,6 +498,40 @@ TEST(AcousticCostmapPlugin, ExpiredBoundsToCostsPassRetainsDirtyForRebuild) {
   auto* master = map.getCostmap();
   ASSERT_NE(master, nullptr);
   master->setCost(2, 2, 175);  // Must never overwrite a non-acoustic cost.
+  layer.updateCosts(*master, 0, 0, 12, 12);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_EQ(master->getCost(2, 2), 175);
+  const auto retry = Access::retry(layer, geometry, now + 1);
+  EXPECT_TRUE(retry.rebuild_required);
+  EXPECT_LE(retry.dirty.min_i, 2u);
+  EXPECT_GT(retry.dirty.max_i, 2u);
+  EXPECT_LE(retry.dirty.min_j, 2u);
+  EXPECT_GT(retry.dirty.max_j, 2u);
+}
+
+TEST(AcousticCostmapPlugin, RejectedCostsGateRequeuesConsumedDirtyBounds) {
+  // Nav2 may reject a costs pass when the acoustic plugin is not terminal.
+  // Bounds were already consumed by updateBounds; rejecting the overlay
+  // must not lose the region needed to clear old master acoustic costs.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  const audition_nav2::GridGeometry geometry{12, 12, 0.5, 0.0, 0.0};
+  const auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(layer, clock);
+  const auto now = clock->now().nanoseconds();
+  ASSERT_TRUE(Access::seed_staged_dirty(layer, geometry, now));
+  // Establish a matching map generation, as updateBounds normally does.
+  Access::prime_expired_costs(layer, geometry);
+  // Override the artificial expired timestamp with a fresh one.
+  Access::prime_fresh_costs(layer, now);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  master->setCost(2, 2, 175);
+  // No plugin is registered with the layered map: terminal baseline gate
+  // must reject the update, preserving the independent master cost.
   layer.updateCosts(*master, 0, 0, 12, 12);
   EXPECT_FALSE(Access::pending(layer));
   EXPECT_EQ(master->getCost(2, 2), 175);
