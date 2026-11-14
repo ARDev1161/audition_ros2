@@ -217,3 +217,42 @@ TEST(Nav2RealUpdateMap, ResizeAfterPausedTTLDoesNotResurrectOldCell) {
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+TEST(Nav2RealUpdateMap, RollingOriginReprojectsLiveSourceThenClearsOnTTL) {
+  LayeredCostmap layered("map", true, false);
+  layered.resizeMap(8, 8, 0.5, 0., 0.);
+  auto obstacle = std::make_shared<FixedObstacleLayer>();
+  auto acoustic = std::make_shared<MockVerifiedAcousticLayer>(layered);
+  layered.addPlugin(obstacle);
+  layered.addPlugin(acoustic);
+
+  constexpr std::int64_t t0 = 1000000000LL;
+  // A fixed world-space source must follow rolling-window geometry rather
+  // than retaining the previous grid index. No new observation is delivered.
+  ASSERT_TRUE(acoustic->ingest(31, t0, t0 + 600000000LL,
+                              2.25, 1.25, t0 + 10000000LL));
+  acoustic->set_time(t0 + 10000000LL);
+  layered.updateMap(2., 2., 0.);
+  auto* master = layered.getCostmap();
+  ASSERT_NE(master, nullptr);
+  unsigned int old_x = 0, old_y = 0;
+  ASSERT_TRUE(master->worldToMap(2.25, 1.25, old_x, old_y));
+  EXPECT_EQ(master->getCost(old_x, old_y), 100);
+
+  // Moving the robot shifts the rolling origin. The source remains at its
+  // world position; a stale cell index must never become a ghost cost.
+  acoustic->set_time(t0 + 200000000LL);
+  layered.updateMap(3., 2., 0.);
+  unsigned int new_x = 0, new_y = 0;
+  ASSERT_TRUE(master->worldToMap(2.25, 1.25, new_x, new_y));
+  EXPECT_NE(new_x, old_x);
+  EXPECT_EQ(master->getCost(new_x, new_y), 100);
+
+  // TTL expires while the update loop is paused. On resumption Nav2 must
+  // remove the soft cost without an acoustic message or a fresh TF.
+  acoustic->set_time(t0 + 700000000LL);
+  layered.updateMap(3., 2., 0.);
+  EXPECT_EQ(master->getCost(new_x, new_y), 0);
+  layered.updateMap(3., 2., 0.);
+  EXPECT_EQ(master->getCost(new_x, new_y), 0);
+}
