@@ -309,9 +309,10 @@ TEST(VerifiedMetricInput, RejectsLateFrameAndObservationSkewWithoutMutation) {
 
   // A 50 ms discrepancy between source header and observation is allowed;
   // 50 ms + 1 ns is not. The surrounding snapshot remains fresh.
-  batch.sources.front().header.stamp.nanosec = 50000000u;
+  batch.sources.front().header.stamp.sec = 9;
+  batch.sources.front().header.stamp.nanosec = 950000000u;
   ASSERT_TRUE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
-  batch.sources.front().header.stamp.nanosec = 50000001u;
+  batch.sources.front().header.stamp.nanosec = 949999999u;
   EXPECT_FALSE(AcousticVerifiedMetricInput::decode(batch, "map", now, output));
   ASSERT_EQ(output.size(), 1u);
   EXPECT_EQ(output.front().cell.source_id, source_id);
