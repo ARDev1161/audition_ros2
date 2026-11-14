@@ -225,6 +225,11 @@ struct AcousticCostmapLayerTestAccess {
   static void expire(AcousticCostmapLayer& layer) {
     layer.expireOnTimer();
   }
+  static void prime_expired_costs(AcousticCostmapLayer& layer,
+                                  const GridGeometry& geometry) {
+    layer.map_generation_.observe(geometry);
+    layer.pending_stamp_ns_ = 1;  // Valid but far older than wall-clock TTL.
+  }
   static void set_clock(AcousticCostmapLayer& layer,
                         const rclcpp::Clock::SharedPtr& clock) {
     layer.clock_ = clock;
@@ -471,4 +476,31 @@ TEST(AcousticCostmapPlugin, TimerRetirementPreservesStagedDirtyWithoutNav2Tick) 
   EXPECT_GT(next.dirty.max_j, 2u);
   EXPECT_FALSE(Access::retry(layer, geometry, clock->now().nanoseconds())
                    .rebuild_required);
+}
+
+TEST(AcousticCostmapPlugin, ExpiredBoundsToCostsPassRetainsDirtyForRebuild) {
+  // The real production updateCosts callback must not consume dirty bounds
+  // permanently when a prepared overlay expires during a Nav2 stall.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  const audition_nav2::GridGeometry geometry{12, 12, 0.5, 0.0, 0.0};
+  const auto now = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME)
+                       ->now().nanoseconds();
+  ASSERT_TRUE(Access::seed_staged_dirty(layer, geometry, now));
+  Access::prime_expired_costs(layer, geometry);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  master->setCost(2, 2, 175);  // Must never overwrite a non-acoustic cost.
+  layer.updateCosts(*master, 0, 0, 12, 12);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_EQ(master->getCost(2, 2), 175);
+  const auto retry = Access::retry(layer, geometry, now + 1);
+  EXPECT_TRUE(retry.rebuild_required);
+  EXPECT_LE(retry.dirty.min_i, 2u);
+  EXPECT_GT(retry.dirty.max_i, 2u);
+  EXPECT_LE(retry.dirty.min_j, 2u);
+  EXPECT_GT(retry.dirty.max_j, 2u);
 }
