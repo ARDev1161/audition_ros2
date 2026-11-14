@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdint>
 #include <chrono>
 #include <thread>
@@ -221,6 +222,11 @@ struct AcousticCostmapLayerTestAccess {
     layer.pending_geometry_ = geometry;
     layer.pending_valid_ = true;
     return layer.pending_cycle_.rebuild_required;
+  }
+  static bool seed_live(AcousticCostmapLayer& layer,
+                        std::uint64_t id, std::int64_t now) {
+    return layer.coordinator_.ingest_validated(
+        {id, now, now + 120000000LL, 1.25, 1.25, true}, now);
   }
   static void expire(AcousticCostmapLayer& layer) {
     layer.expireOnTimer();
@@ -541,4 +547,58 @@ TEST(AcousticCostmapPlugin, RejectedCostsGateRequeuesConsumedDirtyBounds) {
   EXPECT_GT(retry.dirty.max_i, 2u);
   EXPECT_LE(retry.dirty.min_j, 2u);
   EXPECT_GT(retry.dirty.max_j, 2u);
+}
+
+// Exercise the production plugin through LayeredCostmap::updateMap, including
+// Nav2's actual reset/rebuild order. Unlike coordinator-only tests, this
+// verifies the master grid after TTL without any subsequent ROS observation.
+namespace {
+class AcousticTestPhysicalLayer final : public nav2_costmap_2d::Layer {
+ public:
+  void updateBounds(double, double, double, double* x0, double* y0,
+                    double* x1, double* y1) override {
+    *x0 = std::min(*x0, 0.0);
+    *y0 = std::min(*y0, 0.0);
+    *x1 = std::max(*x1, 4.0);
+    *y1 = std::max(*y1, 4.0);
+  }
+  void updateCosts(nav2_costmap_2d::Costmap2D& master,
+                   int, int, int, int) override {
+    master.setCost(1, 1, 254);
+    master.setCost(3, 3, 175);
+  }
+  void reset() override {}
+  bool isClearable() override { return true; }
+};
+}  // namespace
+
+TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsExpiredSoftCosts) {
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(8, 8, 0.5, 0.0, 0.0);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);  // Terminal acoustic layer after physical baseline.
+  Access::prepare(*acoustic, map);
+  const auto now = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME)->now().nanoseconds();
+  ASSERT_TRUE(Access::seed_live(*acoustic, 77, now));
+  map.updateMap(1.0, 1.0, 0.0);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // No new DDS messages or Nav2 updates during the pause. The actual
+  // production expiry callback retires the source without consuming dirty.
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  Access::expire(*acoustic);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(2, 2), 0);
 }
