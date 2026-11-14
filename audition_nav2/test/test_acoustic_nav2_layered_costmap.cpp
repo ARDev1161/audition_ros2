@@ -138,3 +138,49 @@ TEST(Nav2RealUpdateMap, ReorderedPluginCannotOverlayOldMaster) {
   EXPECT_EQ(layered.getCostmap()->getCost(2, 2), 0);
   EXPECT_EQ(layered.getCostmap()->getCost(1, 1), 254);
 }
+
+TEST(Nav2RealUpdateMap, PausedUpdatesPreserveIndependentSourceUntilItsOwnTTL) {
+  LayeredCostmap layered("map", false, false);
+  layered.resizeMap(8, 8, 0.5, 0., 0.);
+  auto obstacle = std::make_shared<FixedObstacleLayer>();
+  auto acoustic = std::make_shared<MockVerifiedAcousticLayer>(layered);
+  layered.addPlugin(obstacle);
+  layered.addPlugin(acoustic);
+
+  constexpr std::int64_t t0 = 1000000000LL;
+  // Two independently verified sources overlap the same master cell.
+  // Expiration of one must not erase the other's still-live contribution.
+  ASSERT_TRUE(acoustic->ingest(10, t0, t0 + 200000000LL,
+                              1.25, 1.25, t0 + 10000000LL));
+  ASSERT_TRUE(acoustic->ingest(11, t0, t0 + 600000000LL,
+                              1.25, 1.25, t0 + 10000000LL));
+  acoustic->set_time(t0 + 10000000LL);
+  layered.updateMap(1., 1., 0.);
+  const auto* master = layered.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Nav2's update loop is paused: there are no incoming acoustic messages
+  // and no updateMap calls while the first source expires.
+  acoustic->set_time(t0 + 300000000LL);
+  layered.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // A second pause expires the remaining source. On the first resumed
+  // Nav2 update the dirty region must be reset, not merely stop growing.
+  acoustic->set_time(t0 + 700000000LL);
+  layered.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Repeated cycles must not resurrect retired acoustic ownership.
+  layered.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
