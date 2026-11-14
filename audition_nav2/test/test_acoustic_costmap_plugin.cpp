@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstdint>
+#include <chrono>
+#include <thread>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -440,10 +442,8 @@ TEST(AcousticCostmapPlugin, TimerRetirementPreservesStagedDirtyWithoutNav2Tick) 
   audition_nav2::AcousticCostmapLayer layer;
   using Access = audition_nav2::AcousticCostmapLayerTestAccess;
   Access::prepare(layer, map);
-  auto clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
-  clock->set_ros_time_override_enabled(true);
-  constexpr std::int64_t observed = 1000000000LL;
-  clock->set_ros_time_override(observed);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  const std::int64_t observed = clock->now().nanoseconds();
   Access::set_clock(layer, clock);
   const audition_nav2::GridGeometry geometry{12, 12, 0.5, 0.0, 0.0};
   ASSERT_TRUE(Access::seed_staged_dirty(layer, geometry, observed));
@@ -452,24 +452,23 @@ TEST(AcousticCostmapPlugin, TimerRetirementPreservesStagedDirtyWithoutNav2Tick) 
   ASSERT_EQ(Access::sources(layer), 1u);
 
   // Timer before TTL is a no-op for a pending Nav2 half-cycle.
-  clock->set_ros_time_override(observed + 100000000LL);
   Access::expire(layer);
   EXPECT_EQ(Access::sources(layer), 1u);
   EXPECT_TRUE(Access::pending(layer));
 
   // After expiry the timer must invalidate the half-cycle and requeue its
   // consumed dirty bounds, without ticking or modifying the master map.
-  clock->set_ros_time_override(observed + 300000000LL);
+  std::this_thread::sleep_for(std::chrono::milliseconds(310));
   Access::expire(layer);
   EXPECT_EQ(Access::sources(layer), 0u);
   EXPECT_FALSE(Access::pending(layer));
-  const auto next = Access::retry(layer, geometry, observed + 300000001LL);
+  const auto next = Access::retry(layer, geometry, clock->now().nanoseconds());
   EXPECT_TRUE(next.rebuild_required);
   EXPECT_TRUE(next.update.own_cells.empty());
   EXPECT_LE(next.dirty.min_i, 2u);
   EXPECT_GT(next.dirty.max_i, 2u);
   EXPECT_LE(next.dirty.min_j, 2u);
   EXPECT_GT(next.dirty.max_j, 2u);
-  EXPECT_FALSE(Access::retry(layer, geometry, observed + 300000002LL)
+  EXPECT_FALSE(Access::retry(layer, geometry, clock->now().nanoseconds())
                    .rebuild_required);
 }
