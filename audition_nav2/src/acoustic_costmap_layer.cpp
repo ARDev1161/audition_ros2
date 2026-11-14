@@ -144,6 +144,13 @@ void AcousticCostmapLayer::expireOnTimer() {
   baseline_pipeline_.expire_if_stalled();
 }
 
+bool AcousticCostmapLayer::pending_fresh(std::int64_t staged_ns,
+                                          std::int64_t now_ns) {
+  return staged_ns > 0 && now_ns >= staged_ns &&
+      static_cast<std::uint64_t>(now_ns - staged_ns) <=
+          static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs);
+}
+
 void AcousticCostmapLayer::updateBounds(
     double, double, double, double* min_x, double* min_y,
     double* max_x, double* max_y) {
@@ -184,7 +191,8 @@ void AcousticCostmapLayer::updateBounds(
 
   const auto node = node_.lock();
   if (!node) return;
-  pending_cycle_ = coordinator_.tick(node->now().nanoseconds(), geometry);
+  pending_stamp_ns_ = node->now().nanoseconds();
+  pending_cycle_ = coordinator_.tick(pending_stamp_ns_, geometry);
   pending_geometry_ = geometry;
   pending_valid_ = true;
 
@@ -217,6 +225,10 @@ void AcousticCostmapLayer::updateCosts(
   }
   if (!enabled_ || !pending_valid_ || !layered_costmap_) return;
   pending_valid_ = false;  // consume once, including on any failed gate
+  // Nav2 may stall between bounds and costs. Never apply an expired staged
+  // overlay, including after ROS simulation time jumps backwards.
+  if (!clock_ || !pending_fresh(pending_stamp_ns_, clock_->now().nanoseconds()))
+    return;
   const auto& g = pending_geometry_;
   if (g.width != geometry.width || g.height != geometry.height ||
       g.resolution != geometry.resolution ||
