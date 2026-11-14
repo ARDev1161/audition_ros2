@@ -155,6 +155,18 @@ if(BUILD_TESTING)
   add_test(NAME acoustic_layer_tile_compositor_contract
     COMMAND test_acoustic_layer_tile_compositor)
 
+  # Bound source count, independent TTL and replay fencing during paused
+  # update loops, including rollback and simulated-clock rewind.
+  add_executable(test_acoustic_pause_replay_capacity
+    test/test_acoustic_pause_replay_capacity.cpp)
+  target_compile_features(test_acoustic_pause_replay_capacity PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_pause_replay_capacity PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_pause_replay_capacity PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_pause_replay_capacity_contract
+    COMMAND test_acoustic_pause_replay_capacity)
+
   # Nav2's real updateMap resets the requested window before invoking
   # plugins in roster order. These two ROS-independent tests exercise that
   # contract and the Nav2 empty-bounds sentinel even in native CI images
