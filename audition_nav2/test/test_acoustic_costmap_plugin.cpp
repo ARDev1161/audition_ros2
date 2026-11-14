@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include "audition_nav2/acoustic_costmap_layer.hpp"
+#include "audition_nav2/acoustic_verified_metric_input.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_costmap_2d/layered_costmap.hpp"
 #include "pluginlib/class_loader.hpp"
