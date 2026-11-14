@@ -141,6 +141,28 @@ class AcousticCellBuffer {
     latest_stamp_[s.source_id] = {s.stamp_ns, s.expires_ns};
     return true;
   }
+  // Timer-only expiry: retire source hypotheses without consuming owned_
+  // or dirty cells. The next Nav2 updateMap must still rebuild the old
+  // master window from non-acoustic layers before acoustic costs disappear.
+  // Also revoke on clock rewind, including during a paused Nav2 update loop.
+  void expire_without_tick(std::int64_t now_ns) {
+    if (now_ns <= 0 || (last_clock_ && now_ns < last_clock_)) {
+      sources_.clear();
+      latest_stamp_.clear();
+      last_clock_ = 0;
+      return;
+    }
+    last_clock_ = now_ns;
+    for (auto it = sources_.begin(); it != sources_.end();) {
+      if (it->second.expires_ns <= now_ns || it->second.stamp_ns > now_ns)
+        it = sources_.erase(it);
+      else ++it;
+    }
+    for (auto it = latest_stamp_.begin(); it != latest_stamp_.end();) {
+      if (it->second.second <= now_ns) it = latest_stamp_.erase(it);
+      else ++it;
+    }
+  }
   void revoke(std::uint64_t id) { sources_.erase(id); }
   // Reject delayed invalidations: an old packet cannot revoke a newer
   // independently validated observation for the same source.

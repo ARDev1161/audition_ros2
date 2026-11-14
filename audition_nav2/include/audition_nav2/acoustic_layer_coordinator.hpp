@@ -55,6 +55,9 @@ class AcousticLayerCoordinator {
   void disable() { enabled_ = false; buffer_.revoke_all(); }
   void enable() { enabled_ = true; }
   void revoke_all() { buffer_.revoke_all(); }
+  void expire_without_tick(std::int64_t now_ns) {
+    buffer_.expire_without_tick(now_ns);
+  }
   void revoke(std::uint64_t id) { buffer_.revoke(id); }
   std::size_t source_count() const { return buffer_.source_count(); }
   // Called on a timer regardless of incoming messages.

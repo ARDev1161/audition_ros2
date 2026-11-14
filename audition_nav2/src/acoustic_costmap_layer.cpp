@@ -136,11 +136,15 @@ void AcousticCostmapLayer::onTrustedMetricArray(
 
 void AcousticCostmapLayer::expireOnTimer() {
   std::lock_guard<std::mutex> lock(mutex_);
-  // Only inactive/untrusted evidence is revoked here. Once a verified
-  // ingress exists, TTL is checked by coordinator.tick() on each Nav2
-  // updateBounds call. Do NOT tick here: that would consume retired/dirty
-  // cells before Nav2 has a chance to rebuild them.
+  // Expire hypotheses even when Nav2 updateMap is paused. Do not tick:
+  // consuming dirty cells here would lose the master-map rebuild request.
   if (!enabled_) coordinator_.revoke_all();
+  else if (clock_) {
+    const auto now_ns = clock_->now().nanoseconds();
+    coordinator_.expire_without_tick(now_ns);
+    // Never allow a staged overlay to survive source TTL or clock rewind.
+    pending_valid_ = false;
+  }
   baseline_pipeline_.expire_if_stalled();
 }
 
