@@ -60,11 +60,42 @@ class AcousticLayerCoordinator {
   }
   void revoke(std::uint64_t id) { buffer_.revoke(id); }
   std::size_t source_count() const { return buffer_.source_count(); }
+  // Requeue a staged bounds region if ingress invalidates the half-cycle.
+  // tick() already advances ownership, so without this a revoked cost could
+  // survive forever when no further source changes occur.
+  void defer_staged_cycle(const AcousticCycle& cycle,
+                          const GridGeometry& geometry) {
+    if (!cycle.rebuild_required) return;
+    if (!deferred_valid_ || !same_geometry(deferred_geometry_, geometry)) {
+      deferred_dirty_ = cycle.dirty;
+    } else {
+      deferred_dirty_.min_i = std::min(deferred_dirty_.min_i, cycle.dirty.min_i);
+      deferred_dirty_.min_j = std::min(deferred_dirty_.min_j, cycle.dirty.min_j);
+      deferred_dirty_.max_i = std::max(deferred_dirty_.max_i, cycle.dirty.max_i);
+      deferred_dirty_.max_j = std::max(deferred_dirty_.max_j, cycle.dirty.max_j);
+    }
+    deferred_geometry_ = geometry;
+    deferred_valid_ = true;
+  }
   // Called on a timer regardless of incoming messages.
   AcousticCycle tick(std::int64_t now_ns, const GridGeometry& geometry) {
     AcousticCycle cycle;
     cycle.update = buffer_.tick(now_ns, geometry);
     cycle.dirty = AcousticDirtyBounds::compute(cycle.update, geometry);
+    if (deferred_valid_) {
+      if (same_geometry(deferred_geometry_, geometry) &&
+          !deferred_dirty_.empty()) {
+        if (cycle.dirty.empty()) cycle.dirty = deferred_dirty_;
+        else {
+          cycle.dirty.min_i = std::min(cycle.dirty.min_i, deferred_dirty_.min_i);
+          cycle.dirty.min_j = std::min(cycle.dirty.min_j, deferred_dirty_.min_j);
+          cycle.dirty.max_i = std::max(cycle.dirty.max_i, deferred_dirty_.max_i);
+          cycle.dirty.max_j = std::max(cycle.dirty.max_j, deferred_dirty_.max_j);
+        }
+      }
+      deferred_valid_ = false;
+      deferred_dirty_ = {};
+    }
     cycle.rebuild_required = !cycle.dirty.empty();
     return cycle;
   }
@@ -79,6 +110,14 @@ class AcousticLayerCoordinator {
                                      max_i, max_j, master, master_size);
   }
  private:
+  static bool same_geometry(const GridGeometry& a, const GridGeometry& b) {
+    return a.width == b.width && a.height == b.height &&
+           a.resolution == b.resolution && a.origin_x == b.origin_x &&
+           a.origin_y == b.origin_y;
+  }
+  CellBounds deferred_dirty_{};
+  GridGeometry deferred_geometry_{};
+  bool deferred_valid_ = false;
   AcousticCellBuffer buffer_;
   // Optional acoustic navigation is fail-closed until explicitly authorized.
   bool enabled_ = false;
