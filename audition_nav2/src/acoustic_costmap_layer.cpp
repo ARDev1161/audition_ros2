@@ -141,9 +141,12 @@ void AcousticCostmapLayer::expireOnTimer() {
   if (!enabled_) coordinator_.revoke_all();
   else if (clock_) {
     const auto now_ns = clock_->now().nanoseconds();
+    const auto count_before = coordinator_.source_count();
     coordinator_.expire_without_tick(now_ns);
-    // Never allow a staged overlay to survive source TTL or clock rewind.
-    pending_valid_ = false;
+    // A normal timer tick must not invalidate an otherwise fresh Nav2
+    // bounds/costs pair. Only a real source retirement fences staged cells;
+    // updateCosts independently checks the staging timestamp and clock.
+    if (coordinator_.source_count() != count_before) pending_valid_ = false;
   }
   baseline_pipeline_.expire_if_stalled();
 }
