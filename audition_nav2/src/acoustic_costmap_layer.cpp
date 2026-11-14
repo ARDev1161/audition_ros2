@@ -189,9 +189,12 @@ void AcousticCostmapLayer::updateBounds(
     return;
   }
 
-  const auto node = node_.lock();
-  if (!node) return;
-  pending_stamp_ns_ = node->now().nanoseconds();
+  // Use the same clock domain as trusted ingress and updateCosts. A node
+  // clock can differ from the layer clock during /clock activation or test
+  // injection; mixing them would admit an expired or future staged overlay.
+  if (!clock_) return;
+  pending_stamp_ns_ = clock_->now().nanoseconds();
+  if (pending_stamp_ns_ <= 0) return;
   pending_cycle_ = coordinator_.tick(pending_stamp_ns_, geometry);
   pending_geometry_ = geometry;
   pending_valid_ = true;
