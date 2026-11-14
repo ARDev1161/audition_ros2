@@ -26,6 +26,9 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   void reset() override;
   bool isClearable() override { return true; }
  private:
+  // Narrow white-box regression seam for the bounds/ingress/costs race.
+  // Never exposed by the plugin ABI or production ROS interface.
+  friend struct AcousticCostmapLayerTestAccess;
   // Expire ownership on a wall-clock cadence even without incoming messages.
   // No acoustic observation source is wired yet; the timer is fail-closed.
   void expireOnTimer();
