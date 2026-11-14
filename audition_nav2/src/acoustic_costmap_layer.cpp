@@ -72,6 +72,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   // clock/epoch changes against stale soft-cost writes.
   // Old-generation replay is a no-op and must not disrupt a valid cycle.
   if (msg.generation < last_metric_generation_) return;
+  if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!valid) {
     coordinator_.revoke_all();
@@ -146,7 +147,10 @@ void AcousticCostmapLayer::expireOnTimer() {
     // A normal timer tick must not invalidate an otherwise fresh Nav2
     // bounds/costs pair. Only a real source retirement fences staged cells;
     // updateCosts independently checks the staging timestamp and clock.
-    if (coordinator_.source_count() != count_before) pending_valid_ = false;
+    if (coordinator_.source_count() != count_before) {
+      if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+      pending_valid_ = false;
+    }
   }
   baseline_pipeline_.expire_if_stalled();
 }
