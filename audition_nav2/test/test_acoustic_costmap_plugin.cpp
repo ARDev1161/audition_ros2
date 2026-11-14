@@ -284,10 +284,16 @@ TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
 
   Access::seed(layer, 103, 300);
   Access::stage(layer);
-  Access::ingress(layer, 6);
+  Access::ingress(layer, 6);  // Missing header: invalid, not a verified epoch.
   EXPECT_EQ(Access::watermark_count(layer), 0u);
   EXPECT_FALSE(Access::pending(layer));
-  EXPECT_EQ(Access::generation(layer), 6u);
+  EXPECT_EQ(Access::generation(layer), 5u)
+      << "invalid higher-generation input must not advance the replay fence";
+  // The same invalid generation may be retried; it must remain fail-closed.
+  Access::stage(layer);
+  Access::ingress(layer, 6);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_EQ(Access::generation(layer), 5u);
 
   Access::seed(layer, 104, 400);
   layer.reset();
