@@ -1298,3 +1298,81 @@ TEST(AcousticCostmapPlugin, RealDdsCompleteSnapshotOmitsOneOfTwoMetricSources) {
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+
+TEST(AcousticCostmapPlugin, RealDdsMetricReprojectsAfterNav2Resize) {
+  // Verify a live world-frame metric hypothesis survives a resolution change
+  // without retaining its old grid index or corrupting independent layers.
+  const bool own_context = !rclcpp::ok();
+  if (own_context) rclcpp::init(0, nullptr);
+  struct ContextGuard {
+    bool owned;
+    ~ContextGuard() { if (owned && rclcpp::ok()) rclcpp::shutdown(); }
+  } guard{own_context};
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  auto node = std::make_shared<rclcpp::Node>("acoustic_dds_resize_gate");
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const std::string topic = "/audition/test_metric_resize";
+  Access::subscribe(*acoustic, node, topic);
+  auto publisher = node->create_publisher<audition_msgs::msg::LocalizedSourceArray>(
+      topic, rclcpp::QoS(10).reliable());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  const auto pump_until = [&](const std::function<bool()>& ready) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      if (ready()) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return ready();
+  };
+  ASSERT_TRUE(pump_until([&] { return publisher->get_subscription_count() > 0; }));
+  const auto ns = clock->now().nanoseconds() - 1000000LL;
+  builtin_interfaces::msg::Time stamp;
+  stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+  stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp;
+  snapshot.generation = 96;
+  audition_msgs::msg::LocalizedSource source;
+  source.header = snapshot.header;
+  source.last_observed = stamp;
+  source.source_id = "resize_dds_metric";
+  source.source_generation = 1;
+  source.localization_method = "independently_verified_metric_3d";
+  source.position.x = 1.25;
+  source.position.y = 1.25;
+  source.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  snapshot.sources = {source};
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 1u; }));
+  map.updateMap(1., 1., 0.);
+  ASSERT_NE(map.getCostmap(), nullptr);
+  ASSERT_EQ(map.getCostmap()->getCost(2, 2), 100);
+
+  // No new DDS message: the same metric world point moves from cell (2,2)
+  // to cell (5,5) after resolution changes from 0.5 to 0.25 metres.
+  map.resizeMap(24, 24, 0.25, 0.0, 0.0);
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(Access::sources(*acoustic), 1u);
+  EXPECT_EQ(master->getCost(5, 5), 100);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(5, 5), 100);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+}
