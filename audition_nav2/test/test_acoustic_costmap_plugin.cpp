@@ -330,7 +330,8 @@ TEST(AcousticCostmapPlugin, TrustedIngressFencesStagedBoundsCycle) {
 TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
   // A rejected same-epoch snapshot must not poison deduplication: a later
   // independently verified retry with the same stamp must remain admissible.
-  // An older epoch, by contrast, cannot revoke a current staged cycle.
+  // An older epoch cannot revoke a current staged cycle. A malformed newer
+  // epoch must still fence older valid DDS replay after revocation.
   nav2_costmap_2d::LayeredCostmap map("map", false, false);
   map.resizeMap(8, 8, 0.5, -2.0, -2.0);
   audition_nav2::AcousticCostmapLayer layer;
@@ -353,13 +354,17 @@ TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
   Access::ingress(layer, 6);  // Missing header: invalid, not a verified epoch.
   EXPECT_EQ(Access::watermark_count(layer), 0u);
   EXPECT_FALSE(Access::pending(layer));
-  EXPECT_EQ(Access::generation(layer), 5u)
-      << "invalid higher-generation input must not advance the replay fence";
-  // The same invalid generation may be retried; it must remain fail-closed.
+  EXPECT_EQ(Access::generation(layer), 6u)
+      << "invalid higher-generation input must fence older valid DDS replay";
+  // A stale epoch must not invalidate a staged cycle after revocation.
   Access::stage(layer);
+  Access::ingress(layer, 5);
+  EXPECT_TRUE(Access::pending(layer));
+  EXPECT_EQ(Access::generation(layer), 6u);
+  // The same invalid generation may be retried; it remains fail-closed.
   Access::ingress(layer, 6);
   EXPECT_FALSE(Access::pending(layer));
-  EXPECT_EQ(Access::generation(layer), 5u);
+  EXPECT_EQ(Access::generation(layer), 6u);
 
   Access::seed(layer, 104, 400);
   layer.reset();
