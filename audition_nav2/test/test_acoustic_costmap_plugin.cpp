@@ -1769,3 +1769,110 @@ TEST(AcousticCostmapPlugin, RealDdsInvalidCovarianceRevokesEntireMetricBatch) {
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+TEST(AcousticCostmapPlugin, RealDdsBearingOnlyMemberRevokesEntireMetricBatch) {
+  // Reject a complete snapshot atomically: one verified source must not survive
+  // alongside a second source with bearing-only localization evidence.
+  // A later fresh, fully verified snapshot is required to restore both cells.
+  const bool own_context = !rclcpp::ok();
+  if (own_context) rclcpp::init(0, nullptr);
+  struct ContextGuard {
+    bool owned;
+    ~ContextGuard() { if (owned && rclcpp::ok()) rclcpp::shutdown(); }
+  } guard{own_context};
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  auto node = std::make_shared<rclcpp::Node>("acoustic_dds_bearing_batch_gate");
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0., 0.);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const std::string topic = "/audition/test_bearing_batch_gate";
+  Access::subscribe(*acoustic, node, topic);
+  auto publisher = node->create_publisher<audition_msgs::msg::LocalizedSourceArray>(
+      topic, rclcpp::QoS(10).reliable());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  const auto pump_until = [&](const std::function<bool()>& ready) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      if (ready()) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return ready();
+  };
+  ASSERT_TRUE(pump_until([&] { return publisher->get_subscription_count() > 0; }));
+  const auto stamp_now = [&] {
+    const auto ns = clock->now().nanoseconds() - 1000000LL;
+    builtin_interfaces::msg::Time stamp;
+    stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return stamp;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp_now();
+  snapshot.generation = 150;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = snapshot.header.stamp;
+  first.source_id = "verified_left";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "verified_right";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 2u; }));
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+  ASSERT_EQ(master->getCost(4, 2), 100);
+
+  // A newer snapshot is invalid as a whole even though the first member
+  // remains well-formed. Neither previous acoustic cell may persist.
+  snapshot.generation++;
+  snapshot.header.stamp = stamp_now();
+  for (auto& source : snapshot.sources) {
+    source.header.stamp = snapshot.header.stamp;
+    source.last_observed = snapshot.header.stamp;
+  }
+  snapshot.sources[1].localization_method = "bearing_only";  // Never promote DOA to a cell.
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 0u; }));
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+
+  // Recovery requires a new, fully validated complete snapshot.
+  snapshot.generation++;
+  snapshot.header.stamp = stamp_now();
+  snapshot.sources[1].localization_method = "independently_verified_metric_3d";
+  for (auto& source : snapshot.sources) {
+    source.header.stamp = snapshot.header.stamp;
+    source.last_observed = snapshot.header.stamp;
+  }
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 2u; }));
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(4, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
