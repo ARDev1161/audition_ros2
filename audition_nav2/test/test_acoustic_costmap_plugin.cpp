@@ -720,3 +720,62 @@ TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsOmittedSourceWithoutTTL) {
   EXPECT_EQ(master->getCost(4, 2), 0);
   EXPECT_EQ(master->getCost(2, 2), 100);
 }
+
+TEST(AcousticCostmapPlugin, ReorderedCompleteSnapshotCannotResurrectOmittedSource) {
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  Access::prepare(layer, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(layer, clock);
+  const auto now = clock->now().nanoseconds();
+  const auto to_stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time stamp;
+    stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return stamp;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = to_stamp(now - 30000000LL);
+  snapshot.generation = 5;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = snapshot.header.stamp;
+  first.source_id = "first";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "second";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  const auto old_snapshot = snapshot;
+  Access::ingress_message(layer, snapshot);
+  ASSERT_EQ(Access::sources(layer), 2u);
+
+  // A newer complete snapshot omits the second source while retaining
+  // the first source's unchanged observation timestamp.
+  snapshot.header.stamp = to_stamp(now - 10000000LL);
+  snapshot.sources.pop_back();
+  Access::ingress_message(layer, snapshot);
+  ASSERT_EQ(Access::sources(layer), 1u);
+  ASSERT_EQ(Access::watermark_count(layer), 1u);
+
+  // Reliable DDS can deliver the older complete array late. It must not
+  // resurrect the omitted source or invalidate an in-flight Nav2 cycle.
+  Access::stage(layer);
+  Access::ingress_message(layer, old_snapshot);
+  EXPECT_EQ(Access::sources(layer), 1u);
+  EXPECT_EQ(Access::watermark_count(layer), 1u);
+  EXPECT_TRUE(Access::pending(layer));
+
+  // A still-newer valid snapshot may legitimately reintroduce the source.
+  snapshot.header.stamp = to_stamp(now);
+  snapshot.sources.push_back(second);
+  Access::ingress_message(layer, snapshot);
+  EXPECT_EQ(Access::sources(layer), 2u);
+}
