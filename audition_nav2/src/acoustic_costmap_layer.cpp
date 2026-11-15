@@ -23,6 +23,7 @@ void AcousticCostmapLayer::onInitialize() {
   baseline_pipeline_.abort();
   pending_valid_ = false;
   last_metric_generation_ = 0;
+  last_snapshot_stamp_ns_ = 0;
   last_metric_stamp_.clear();
   auto node = node_.lock();
   if (node) {
@@ -73,6 +74,14 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   // clock/epoch changes against stale soft-cost writes.
   // Old-generation replay is a no-op and must not disrupt a valid cycle.
   if (msg.generation < last_metric_generation_) return;
+  // A delayed complete snapshot must not resurrect a source that a newer
+  // snapshot already omitted. Compare the array's own publication stamp,
+  // not individual source observation stamps (which may legitimately repeat).
+  const auto snapshot_ns =
+      static_cast<std::int64_t>(msg.header.stamp.sec) * 1000000000LL +
+      static_cast<std::int64_t>(msg.header.stamp.nanosec);
+  if (msg.generation == last_metric_generation_ &&
+      snapshot_ns < last_snapshot_stamp_ns_) return;
   if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!valid) {
@@ -84,11 +93,13 @@ void AcousticCostmapLayer::onTrustedMetricArray(
     return;
   }
   if (msg.generation != last_metric_generation_) {
+    last_snapshot_stamp_ns_ = 0;
     coordinator_.revoke_all();
     last_metric_stamp_.clear();
     last_metric_generation_ = msg.generation;
   }
   if (evidence.empty()) {
+    if (valid) last_snapshot_stamp_ns_ = snapshot_ns;
     coordinator_.revoke_all();  // Explicit empty verified snapshot.
     last_metric_stamp_.clear();
     return;
@@ -134,6 +145,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
     }
     last_metric_stamp_[item.cell.source_id] = item.cell.stamp_ns;
   }
+  last_snapshot_stamp_ns_ = snapshot_ns;
   // The trusted array is a complete snapshot, not an incremental stream.
   // A source omitted from a newer valid snapshot must lose ownership now,
   // rather than retaining a ghost soft cost until its previous TTL. Keep
@@ -328,6 +340,7 @@ void AcousticCostmapLayer::reset() {
   baseline_pipeline_.abort();
   pending_valid_ = false;
   last_metric_generation_ = 0;
+  last_snapshot_stamp_ns_ = 0;
   last_metric_stamp_.clear();
   current_ = true;
 }
