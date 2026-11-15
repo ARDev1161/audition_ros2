@@ -38,6 +38,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   rclcpp::Subscription<audition_msgs::msg::LocalizedSourceArray>::SharedPtr
       verified_metric_subscription_;
   std::uint64_t last_metric_generation_ = 0;
+  // Complete-snapshot order fence, independent of per-source timestamps.
+  std::int64_t last_snapshot_stamp_ns_ = 0;
   // Bounded ingress watermark. Repeated reliable ROS snapshots must not
   // revoke an otherwise live, verified source; older timestamps cannot
   // resurrect one after TTL expiry.
