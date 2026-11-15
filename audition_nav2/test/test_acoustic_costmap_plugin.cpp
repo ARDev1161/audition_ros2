@@ -774,7 +774,10 @@ TEST(AcousticCostmapPlugin, ReorderedCompleteSnapshotCannotResurrectOmittedSourc
   EXPECT_TRUE(Access::pending(layer));
 
   // A still-newer valid snapshot may legitimately reintroduce the source.
-  snapshot.header.stamp = to_stamp(now);
+  // Use a timestamp strictly in the past. The callback reads its own clock;
+  // stamping with the earlier test-side `now` can otherwise be future-dated
+  // on clock implementations with coarse/adjusted wall-time resolution.
+  snapshot.header.stamp = to_stamp(now - 1000000LL);
   snapshot.sources.push_back(second);
   Access::ingress_message(layer, snapshot);
   EXPECT_EQ(Access::sources(layer), 2u);
