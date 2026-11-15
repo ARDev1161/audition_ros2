@@ -654,6 +654,6 @@ TEST(AcousticCostmapPlugin, CompleteSnapshotRevokesOmittedMetricSourceImmediatel
   const auto cycle = Access::retry(layer, geometry, clock->now().nanoseconds());
   ASSERT_TRUE(cycle.rebuild_required);
   ASSERT_EQ(cycle.update.own_cells.size(), 1u);
-  EXPECT_EQ(cycle.update.own_cells.front().x, 2u);
-  EXPECT_EQ(cycle.update.own_cells.front().y, 2u);
+  EXPECT_EQ(cycle.update.own_cells.begin()->first.first, 2u);
+  EXPECT_EQ(cycle.update.own_cells.begin()->first.second, 2u);
 }
