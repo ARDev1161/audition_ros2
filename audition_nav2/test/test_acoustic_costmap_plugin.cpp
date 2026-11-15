@@ -1563,3 +1563,101 @@ TEST(AcousticCostmapPlugin, RealDdsWrongFrameRevokesMetricUntilReverified) {
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
 
+
+
+TEST(AcousticCostmapPlugin, RealDdsStaleMetricEvidenceRevokesUntilFreshVerification) {
+  // A current snapshot generation does not refresh an old observation.
+  // In particular, a stale TF-derived metric estimate cannot keep a cell
+  // alive merely because its wrapper was republished with a fresh header.
+  const bool own_context = !rclcpp::ok();
+  if (own_context) rclcpp::init(0, nullptr);
+  struct ContextGuard {
+    bool owned;
+    ~ContextGuard() { if (owned && rclcpp::ok()) rclcpp::shutdown(); }
+  } guard{own_context};
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  auto node = std::make_shared<rclcpp::Node>("acoustic_dds_stale_metric_gate");
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0., 0.);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const std::string topic = "/audition/test_stale_metric_evidence";
+  Access::subscribe(*acoustic, node, topic);
+  auto publisher = node->create_publisher<audition_msgs::msg::LocalizedSourceArray>(
+      topic, rclcpp::QoS(10).reliable());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  const auto pump_until = [&](const std::function<bool()>& ready) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      if (ready()) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return ready();
+  };
+  ASSERT_TRUE(pump_until([&] { return publisher->get_subscription_count() > 0; }));
+  const auto as_stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time stamp;
+    stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return stamp;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = as_stamp(clock->now().nanoseconds() - 1000000LL);
+  snapshot.generation = 130;
+  audition_msgs::msg::LocalizedSource source;
+  source.header = snapshot.header;
+  source.last_observed = snapshot.header.stamp;
+  source.source_id = "stale_metric_dds";
+  source.source_generation = 1;
+  source.localization_method = "independently_verified_metric_3d";
+  source.position.x = 1.25;
+  source.position.y = 1.25;
+  source.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  snapshot.sources = {source};
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 1u; }));
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+  ASSERT_EQ(master->getCost(1, 1), 254);
+  ASSERT_EQ(master->getCost(3, 3), 175);
+
+  // The envelope is fresh, but the metric observation predates the TTL.
+  // A complete snapshot must revoke the old cost immediately.
+  snapshot.generation++;
+  snapshot.header.stamp = as_stamp(clock->now().nanoseconds() - 1000000LL);
+  const auto stale = as_stamp(clock->now().nanoseconds() -
+      audition_nav2::AcousticVerifiedMetricInput::kTtlNs - 100000000LL);
+  snapshot.sources.front().header.stamp = stale;
+  snapshot.sources.front().last_observed = stale;
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 0u; }));
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+
+  // Only a newly verified metric observation can restore the soft cost.
+  snapshot.generation++;
+  snapshot.header.stamp = as_stamp(clock->now().nanoseconds() - 1000000LL);
+  snapshot.sources.front().header.stamp = snapshot.header.stamp;
+  snapshot.sources.front().last_observed = snapshot.header.stamp;
+  publisher->publish(snapshot);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 1u; }));
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
