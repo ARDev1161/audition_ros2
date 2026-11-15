@@ -1770,10 +1770,10 @@ TEST(AcousticCostmapPlugin, RealDdsInvalidCovarianceRevokesEntireMetricBatch) {
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
 
-TEST(AcousticCostmapPlugin, RealDdsBearingOnlyMemberRevokesEntireMetricBatch) {
-  // Reject a complete snapshot atomically: one verified source must not survive
-  // alongside a second source with bearing-only localization evidence.
-  // A later fresh, fully verified snapshot is required to restore both cells.
+TEST(AcousticCostmapPlugin, RealDdsUnverifiedLocalizationMethodsRevokeEntireMetricBatch) {
+  // Reject mixed snapshots atomically for every unverified localization class.
+  // A 3-D-looking position/covariance is not proof of metric localization.
+  // Only a subsequent independently verified complete snapshot can recover.
   const bool own_context = !rclcpp::ok();
   if (own_context) rclcpp::init(0, nullptr);
   struct ContextGuard {
@@ -1840,39 +1840,45 @@ TEST(AcousticCostmapPlugin, RealDdsBearingOnlyMemberRevokesEntireMetricBatch) {
   ASSERT_EQ(master->getCost(2, 2), 100);
   ASSERT_EQ(master->getCost(4, 2), 100);
 
-  // A newer snapshot is invalid as a whole even though the first member
-  // remains well-formed. Neither previous acoustic cell may persist.
-  snapshot.generation++;
-  snapshot.header.stamp = stamp_now();
-  for (auto& source : snapshot.sources) {
-    source.header.stamp = snapshot.header.stamp;
-    source.last_observed = snapshot.header.stamp;
-  }
-  snapshot.sources[1].localization_method = "bearing_only";  // Never promote DOA to a cell.
-  publisher->publish(snapshot);
-  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 0u; }));
-  map.updateMap(1., 1., 0.);
-  EXPECT_EQ(master->getCost(2, 2), 0);
-  EXPECT_EQ(master->getCost(4, 2), 0);
-  EXPECT_EQ(master->getCost(1, 1), 254);
-  EXPECT_EQ(master->getCost(3, 3), 175);
-  map.updateMap(1., 1., 0.);
-  EXPECT_EQ(master->getCost(2, 2), 0);
-  EXPECT_EQ(master->getCost(4, 2), 0);
+  // Every case starts with two trusted cells. The unverified second member
+  // must revoke the entire snapshot, not merely its own cell. Repeat after
+  // recovery to catch stale generation/watermark or dirty-region leakage.
+  const std::array<std::string, 4> invalid_methods = {
+      "bearing_only", "av_pair", "diagnostic_2d_intersection",
+      "unverified_metric"};
+  for (const auto& method : invalid_methods) {
+    SCOPED_TRACE(method);
+    snapshot.generation++;
+    snapshot.header.stamp = stamp_now();
+    for (auto& member : snapshot.sources) {
+      member.header.stamp = snapshot.header.stamp;
+      member.last_observed = snapshot.header.stamp;
+    }
+    snapshot.sources[1].localization_method = method;
+    publisher->publish(snapshot);
+    ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 0u; }));
+    map.updateMap(1., 1., 0.);
+    EXPECT_EQ(master->getCost(2, 2), 0);
+    EXPECT_EQ(master->getCost(4, 2), 0);
+    EXPECT_EQ(master->getCost(1, 1), 254);
+    EXPECT_EQ(master->getCost(3, 3), 175);
+    map.updateMap(1., 1., 0.);
+    EXPECT_EQ(master->getCost(2, 2), 0);
+    EXPECT_EQ(master->getCost(4, 2), 0);
 
-  // Recovery requires a new, fully validated complete snapshot.
-  snapshot.generation++;
-  snapshot.header.stamp = stamp_now();
-  snapshot.sources[1].localization_method = "independently_verified_metric_3d";
-  for (auto& source : snapshot.sources) {
-    source.header.stamp = snapshot.header.stamp;
-    source.last_observed = snapshot.header.stamp;
+    snapshot.generation++;
+    snapshot.header.stamp = stamp_now();
+    snapshot.sources[1].localization_method = "independently_verified_metric_3d";
+    for (auto& member : snapshot.sources) {
+      member.header.stamp = snapshot.header.stamp;
+      member.last_observed = snapshot.header.stamp;
+    }
+    publisher->publish(snapshot);
+    ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 2u; }));
+    map.updateMap(1., 1., 0.);
+    EXPECT_EQ(master->getCost(2, 2), 100);
+    EXPECT_EQ(master->getCost(4, 2), 100);
+    EXPECT_EQ(master->getCost(1, 1), 254);
+    EXPECT_EQ(master->getCost(3, 3), 175);
   }
-  publisher->publish(snapshot);
-  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 2u; }));
-  map.updateMap(1., 1., 0.);
-  EXPECT_EQ(master->getCost(2, 2), 100);
-  EXPECT_EQ(master->getCost(4, 2), 100);
-  EXPECT_EQ(master->getCost(1, 1), 254);
-  EXPECT_EQ(master->getCost(3, 3), 175);
 }
