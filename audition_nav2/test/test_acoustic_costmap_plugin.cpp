@@ -778,6 +778,13 @@ TEST(AcousticCostmapPlugin, ReorderedCompleteSnapshotCannotResurrectOmittedSourc
   // stamping with the earlier test-side `now` can otherwise be future-dated
   // on clock implementations with coarse/adjusted wall-time resolution.
   snapshot.header.stamp = to_stamp(now - 1000000LL);
+  // Reappearance is a new metric observation, not a replay of the retired
+  // source's old timestamp. Refresh both per-source observation stamps to
+  // satisfy the coordinator's strict per-source ordering contract.
+  snapshot.sources.front().header.stamp = snapshot.header.stamp;
+  snapshot.sources.front().last_observed = snapshot.header.stamp;
+  second.header.stamp = snapshot.header.stamp;
+  second.last_observed = snapshot.header.stamp;
   snapshot.sources.push_back(second);
   Access::ingress_message(layer, snapshot);
   EXPECT_EQ(Access::sources(layer), 2u);
