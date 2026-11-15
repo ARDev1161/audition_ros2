@@ -1024,3 +1024,100 @@ TEST(AcousticCostmapPlugin, RealDdsInvalidMetricRevokesAndClearsMaster) {
   map.updateMap(1., 1., 0.);
   EXPECT_EQ(master->getCost(2, 2), 0);
 }
+
+TEST(AcousticCostmapPlugin, RealDdsReorderedSnapshotCannotRestoreRetiredCost) {
+  // Exercise the full DDS -> production subscription -> Nav2 master path.
+  // Replaying an older complete snapshot must not resurrect retired cells.
+  const bool own_context = !rclcpp::ok();
+  if (own_context) rclcpp::init(0, nullptr);
+  struct ContextGuard {
+    bool owned;
+    ~ContextGuard() { if (owned && rclcpp::ok()) rclcpp::shutdown(); }
+  } guard{own_context};
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  auto node = std::make_shared<rclcpp::Node>("acoustic_dds_reorder_gate");
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const std::string topic = "/audition/test_reordered_metric_costmap";
+  Access::subscribe(*acoustic, node, topic);
+  auto publisher = node->create_publisher<audition_msgs::msg::LocalizedSourceArray>(
+      topic, rclcpp::QoS(10).reliable());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  const auto pump_until = [&](const std::function<bool()>& ready) {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < deadline) {
+      executor.spin_some();
+      if (ready()) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return ready();
+  };
+  ASSERT_TRUE(pump_until([&] { return publisher->get_subscription_count() > 0; }));
+  const auto to_stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time stamp;
+    stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return stamp;
+  };
+  audition_msgs::msg::LocalizedSourceArray first;
+  first.header.frame_id = "map";
+  first.header.stamp = to_stamp(clock->now().nanoseconds() - 1000000LL);
+  first.generation = 91;
+  audition_msgs::msg::LocalizedSource source;
+  source.header = first.header;
+  source.last_observed = first.header.stamp;
+  source.source_id = "reordered_dds_metric";
+  source.source_generation = 1;
+  source.localization_method = "independently_verified_metric_3d";
+  source.position.x = 1.25;
+  source.position.y = 1.25;
+  source.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  first.sources = {source};
+  publisher->publish(first);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 1u; }));
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+
+  // Ensure strict ordering even on coarse wall clocks; the snapshot epoch
+  // remains unchanged, while the complete publication timestamp advances.
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  auto retired = first;
+  retired.header.stamp = to_stamp(clock->now().nanoseconds() - 1000000LL);
+  ASSERT_GT(retired.header.stamp.sec * 1000000000LL +
+                retired.header.stamp.nanosec,
+            first.header.stamp.sec * 1000000000LL +
+                first.header.stamp.nanosec);
+  retired.sources.clear();
+  publisher->publish(retired);
+  ASSERT_TRUE(pump_until([&] { return Access::sources(*acoustic) == 0u; }));
+  map.updateMap(1., 1., 0.);
+  ASSERT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // The delayed packet contains valid metric evidence but is older than
+  // the complete retirement snapshot. It must be rejected before mutation.
+  publisher->publish(first);
+  // Spin the executor after publish; a stale packet cannot be detected
+  // through source_count alone because it must leave that count unchanged.
+  for (unsigned i = 0; i < 30; ++i) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
