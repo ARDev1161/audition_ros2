@@ -77,7 +77,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   // A delayed complete snapshot must not resurrect a source that a newer
   // snapshot already omitted. Compare the array's own publication stamp,
   // not individual source observation stamps (which may legitimately repeat).
-  const auto snapshot_ns =
+  const std::int64_t snapshot_ns =
       static_cast<std::int64_t>(msg.header.stamp.sec) * 1000000000LL +
       static_cast<std::int64_t>(msg.header.stamp.nanosec);
   if (msg.generation == last_metric_generation_ &&
