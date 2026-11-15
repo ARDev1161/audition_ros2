@@ -657,3 +657,66 @@ TEST(AcousticCostmapPlugin, CompleteSnapshotRevokesOmittedMetricSourceImmediatel
   EXPECT_EQ(cycle.update.own_cells.begin()->first.first, 2u);
   EXPECT_EQ(cycle.update.own_cells.begin()->first.second, 2u);
 }
+
+
+TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsOmittedSourceWithoutTTL) {
+  // Exercise complete-snapshot revocation through the real Nav2 master
+  // reset/rebuild sequence. No timer or synthetic coordinator tick is used.
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const auto ns = clock->now().nanoseconds();
+  builtin_interfaces::msg::Time stamp;
+  stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+  stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp;
+  snapshot.generation = 8;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = stamp;
+  first.source_id = "first";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "second";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 2u);
+  map.updateMap(1.0, 1.0, 0.0);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(4, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // An unchanged observation for the retained source is legal in a
+  // complete snapshot; omission immediately retires the other source.
+  snapshot.sources.pop_back();
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 1u);
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Repeated cycles must not resurrect retired costs.
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+}
