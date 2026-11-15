@@ -1290,6 +1290,11 @@ TEST(AcousticCostmapPlugin, RealDdsCompleteSnapshotOmitsOneOfTwoMetricSources) {
   EXPECT_EQ(master->getCost(4, 4), 0);
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
+  // A second Nav2 cycle must preserve the retained source while never
+  // resurrecting the omitted source or overwriting independent layers.
   map.updateMap(1., 1., 0.);
-  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(4, 4), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
 }
