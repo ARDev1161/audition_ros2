@@ -1988,3 +1988,75 @@ TEST(AcousticCostmapPlugin, RealDdsDuplicateIdentityRevokesWholeSnapshot) {
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+
+TEST(AcousticCostmapPlugin, RejectedSnapshotFencesOlderValidDdsReplay) {
+  // Regression: a newer invalid complete snapshot revokes the acoustic
+  // overlay. A delayed previously-valid DDS sample must not restore it.
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const auto now = clock->now().nanoseconds();
+  const auto stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time t;
+    t.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    t.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return t;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp(now - 30000000LL);
+  snapshot.generation = 40;
+  audition_msgs::msg::LocalizedSource source;
+  source.header = snapshot.header;
+  source.last_observed = snapshot.header.stamp;
+  source.source_id = "replay";
+  source.source_generation = 1;
+  source.localization_method = "independently_verified_metric_3d";
+  source.position.x = 1.25;
+  source.position.y = 1.25;
+  source.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  snapshot.sources = {source};
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 1u);
+  map.updateMap(1.0, 1.0, 0.0);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+
+  const auto old_valid = snapshot;
+  snapshot.generation = 41;
+  snapshot.header.stamp = stamp(now - 20000000LL);
+  snapshot.sources.front().localization_method = "bearing_only";
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1.0, 1.0, 0.0);
+  ASSERT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // A stale generation cannot resurrect revoked cells.
+  Access::ingress_message(*acoustic, old_valid);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+
+  // A new valid generation restores the source, not the stale replay.
+  snapshot.generation = 42;
+  snapshot.header.stamp = stamp(now - 10000000LL);
+  snapshot.sources.front().header = snapshot.header;
+  snapshot.sources.front().last_observed = snapshot.header.stamp;
+  snapshot.sources.front().localization_method =
+      "independently_verified_metric_3d";
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 1u);
+  map.updateMap(1.0, 1.0, 0.0);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+}
