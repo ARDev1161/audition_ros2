@@ -1,5 +1,6 @@
 #include "audition_nav2/acoustic_costmap_layer.hpp"
 #include "pluginlib/class_list_macros.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -132,6 +133,24 @@ void AcousticCostmapLayer::onTrustedMetricArray(
       return;
     }
     last_metric_stamp_[item.cell.source_id] = item.cell.stamp_ns;
+  }
+  // The trusted array is a complete snapshot, not an incremental stream.
+  // A source omitted from a newer valid snapshot must lose ownership now,
+  // rather than retaining a ghost soft cost until its previous TTL. Keep
+  // replay watermarks only for members of the current snapshot; a later
+  // reappearance still undergoes timestamp/epoch admission.
+  for (auto it = last_metric_stamp_.begin();
+       it != last_metric_stamp_.end();) {
+    const bool present = std::any_of(evidence.begin(), evidence.end(),
+        [id = it->first](const StampedMetricEvidence& item) {
+          return item.cell.source_id == id;
+        });
+    if (!present) {
+      coordinator_.revoke(it->first);
+      it = last_metric_stamp_.erase(it);
+    } else {
+      ++it;
+    }
   }
 }
 
