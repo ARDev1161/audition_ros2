@@ -86,9 +86,21 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   pending_valid_ = false;
   if (!valid) {
     coordinator_.revoke_all();
-    // Revocation invalidates ingress deduplication as well. Otherwise a
-    // subsequent fresh snapshot with the same timestamps is silently skipped,
-    // leaving the coordinator empty until a newer observation arrives.
+    // A rejected complete snapshot is still a revocation barrier. Without
+    // advancing its generation/publication watermark, an older valid DDS
+    // snapshot can arrive later and resurrect a source we just revoked.
+    // Do not trust malformed/future timestamps as replay fences: generation
+    // remains the conservative barrier until a newer valid snapshot arrives.
+    if (msg.generation > last_metric_generation_) {
+      last_metric_generation_ = msg.generation;
+      last_snapshot_stamp_ns_ = 0;
+    }
+    if (snapshot_ns > 0 && snapshot_ns <= now_ns &&
+        static_cast<std::uint64_t>(now_ns - snapshot_ns) <=
+            static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs)) {
+      last_snapshot_stamp_ns_ =
+          std::max(last_snapshot_stamp_ns_, snapshot_ns);
+    }
     last_metric_stamp_.clear();
     return;
   }
