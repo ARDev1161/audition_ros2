@@ -270,6 +270,10 @@ struct AcousticCostmapLayerTestAccess {
   static void stage(AcousticCostmapLayer& layer) {
     layer.pending_valid_ = true;
   }
+  static void ingress_message(AcousticCostmapLayer& layer,
+                              const audition_msgs::msg::LocalizedSourceArray& message) {
+    layer.onTrustedMetricArray(message);
+  }
   static void ingress(AcousticCostmapLayer& layer, std::uint64_t generation) {
     audition_msgs::msg::LocalizedSourceArray message;
     message.generation = generation;
@@ -601,4 +605,55 @@ TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsExpiredSoftCosts) {
   EXPECT_EQ(master->getCost(3, 3), 175);
   map.updateMap(1.0, 1.0, 0.0);
   EXPECT_EQ(master->getCost(2, 2), 0);
+}
+
+TEST(AcousticCostmapPlugin, CompleteSnapshotRevokesOmittedMetricSourceImmediately) {
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  Access::prepare(layer, map);
+  const auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(layer, clock);
+  const auto now = clock->now().nanoseconds();
+  auto stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time t;
+    t.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    t.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return t;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp(now);
+  snapshot.generation = 5;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = snapshot.header.stamp;
+  first.source_id = "first";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "second";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  Access::ingress_message(layer, snapshot);
+  ASSERT_EQ(Access::sources(layer), 2u);
+  ASSERT_EQ(Access::watermark_count(layer), 2u);
+
+  // The next complete verified snapshot still contains the first source,
+  // but explicitly omits the second. Do not wait 500 ms for its TTL.
+  snapshot.sources.pop_back();
+  Access::ingress_message(layer, snapshot);
+  EXPECT_EQ(Access::sources(layer), 1u);
+  EXPECT_EQ(Access::watermark_count(layer), 1u);
+
+  const audition_nav2::GridGeometry geometry{12, 12, 0.5, 0., 0.};
+  const auto cycle = Access::retry(layer, geometry, clock->now().nanoseconds());
+  ASSERT_TRUE(cycle.rebuild_required);
+  ASSERT_EQ(cycle.update.own_cells.size(), 1u);
+  EXPECT_EQ(cycle.update.own_cells.front().x, 2u);
+  EXPECT_EQ(cycle.update.own_cells.front().y, 2u);
 }
