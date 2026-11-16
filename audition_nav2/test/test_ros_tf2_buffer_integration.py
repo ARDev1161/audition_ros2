@@ -75,14 +75,43 @@ class RealTf2BufferAdmissionTests(unittest.TestCase):
         self.assertAlmostEqual(x, 2., places=6)
         self.assertAlmostEqual(y, 4., places=6)
 
-    def test_invalid_transform_quaternion_rejected(self):
+    def test_tf2_normalizes_quaternion_before_lookup(self):
+        # tf2 normalizes rotations on ingestion; malformed input cannot be
+        # tested by round-tripping through a real Buffer.
         buf = Buffer()
         bad = transform(NS)
         bad.transform.rotation.w = 2.
-        buf.set_transform(bad, 'm5-test')
-        with self.assertRaises(ValueError):
-            stamped_tf_lookup(buf, timeout_sec=0.01)(
-                'map', 'microphone_array', NS, (1., 0., 0.))
+        self.assertTrue(buf.set_transform(bad, 'm5-test'))
+        result = stamped_tf_lookup(buf, timeout_sec=0.01)(
+            'map', 'microphone_array', NS, (1., 0., 0.))
+        self.assertAlmostEqual(result[0], 1.)
+        self.assertAlmostEqual(result[1], 0.)
+
+    def test_adapter_rejects_malformed_buffer_response(self):
+        # Inject a deliberately broken Buffer result to cover the adapter's
+        # fail-closed boundary, which a real Buffer sanitizes internally.
+        class BrokenBuffer:
+            def __init__(self, reply):
+                self.reply = reply
+
+            def lookup_transform(self, target, source, stamp, timeout):
+                return self.reply
+
+        cases = []
+        bad_norm = transform(NS)
+        bad_norm.transform.rotation.w = 2.
+        cases.append(('nonunit quaternion', bad_norm, ValueError))
+        bad_nan = transform(NS)
+        bad_nan.transform.translation.x = float('nan')
+        cases.append(('nonfinite translation', bad_nan, ValueError))
+        bad_frame = transform(NS, parent='odom')
+        cases.append(('mismatched parent frame', bad_frame, LookupError))
+        bad_child = transform(NS, child='wrong_mic')
+        cases.append(('mismatched child frame', bad_child, LookupError))
+        for name, reply, error in cases:
+            with self.subTest(name=name), self.assertRaises(error):
+                stamped_tf_lookup(BrokenBuffer(reply), timeout_sec=0.01)(
+                    'map', 'microphone_array', NS, (1., 0., 0.))
 
 
 if __name__ == '__main__':
