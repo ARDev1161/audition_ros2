@@ -373,7 +373,8 @@ TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
   Access::seed(layer, 104, 400);
   layer.reset();
   EXPECT_EQ(Access::watermark_count(layer), 0u);
-  EXPECT_EQ(Access::generation(layer), 0u);
+  EXPECT_EQ(Access::generation(layer), 6u)
+      << "rollback must retain the epoch replay barrier";
   EXPECT_EQ(Access::sources(layer), 0u);
   EXPECT_FALSE(Access::pending(layer));
 }
@@ -2656,8 +2657,15 @@ TEST(AcousticCostmapPlugin, ResetRevokesMultiSourceAndRequiresFreshMetricAdmissi
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 
-  // A reset clears the epoch state. Do not replay the old packet; require a
-  // newer publication carrying independently verified fresh observations.
+  // An old valid DDS packet cannot undo rollback, even if its data are
+  // independently verified and still within TTL.
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+
+  // Recovery requires a newer generation and fresh verified observations.
   snapshot.header.stamp = stamp(now - 20000000LL);
   snapshot.generation = 202;
   for (auto& source : snapshot.sources) {
