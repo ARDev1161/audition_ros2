@@ -2426,3 +2426,92 @@ TEST(AcousticCostmapPlugin, NewSnapshotWithRegressedObservationRevokesAndQuarant
   map.updateMap(1., 1., 0.);
   EXPECT_EQ(master->getCost(2, 2), 100);
 }
+
+
+TEST(AcousticCostmapPlugin, OneRegressedSourceRevokesEntireMultiSourceSnapshot) {
+  // A mixed batch must never leave a plausible-looking partial acoustic map.
+  // In particular, a second valid source must not survive a first source's
+  // observation-time regression, even when it is independently verified.
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0., 0.);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const auto now = clock->now().nanoseconds();
+  const auto stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time t;
+    t.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    t.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return t;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp(now - 60000000LL);
+  snapshot.generation = 31;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = snapshot.header.stamp;
+  first.source_id = "first";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "second";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 2u);
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+  ASSERT_EQ(master->getCost(4, 2), 100);
+
+  // A newer publication contains one regressed observation, while the other
+  // source has a fresh stamp and a different position.
+  snapshot.header.stamp = stamp(now - 30000000LL);
+  snapshot.sources[0].header.stamp = stamp(now - 80000000LL);
+  snapshot.sources[0].last_observed = stamp(now - 80000000LL);
+  snapshot.sources[1].header.stamp = snapshot.header.stamp;
+  snapshot.sources[1].last_observed = snapshot.header.stamp;
+  snapshot.sources[1].position.x = 3.25;
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  EXPECT_EQ(Access::watermark_count(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(6, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // A corrected publication in the quarantined epoch is not sufficient.
+  snapshot.header.stamp = stamp(now - 20000000LL);
+  for (auto& source : snapshot.sources) {
+    source.header.stamp = snapshot.header.stamp;
+    source.last_observed = snapshot.header.stamp;
+  }
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(6, 2), 0);
+
+  // Only a new generation with both independently verified metric sources
+  // may restore the two soft costs; physical costs remain authoritative.
+  snapshot.generation = 32;
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 2u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(6, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
