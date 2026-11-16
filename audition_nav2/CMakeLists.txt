@@ -167,6 +167,18 @@ if(BUILD_TESTING)
   add_test(NAME acoustic_pause_replay_capacity_contract
     COMMAND test_acoustic_pause_replay_capacity)
 
+  # Deterministic TF freshness/provenance fault injection; no ROS installation
+  # required. This is an admission-contract test, not a real tf2 buffer test.
+  add_executable(test_acoustic_tf_admission_faults
+    test/test_acoustic_tf_admission_faults.cpp)
+  target_compile_features(test_acoustic_tf_admission_faults PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_tf_admission_faults PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_tf_admission_faults PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_tf_admission_faults_contract
+    COMMAND test_acoustic_tf_admission_faults)
+
   # Nav2's real updateMap resets the requested window before invoking
   # plugins in roster order. These two ROS-independent tests exercise that
   # contract and the Nav2 empty-bounds sentinel even in native CI images
