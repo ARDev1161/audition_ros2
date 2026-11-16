@@ -24,6 +24,7 @@ void AcousticCostmapLayer::onInitialize() {
   pending_valid_ = false;
   last_metric_generation_ = 0;
   last_snapshot_stamp_ns_ = 0;
+  quarantined_generation_ = false;
   last_metric_stamp_.clear();
   auto node = node_.lock();
   if (node) {
@@ -73,7 +74,8 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   // on the next complete updateMap() pass. This also fences revocations and
   // clock/epoch changes against stale soft-cost writes.
   // Old-generation replay is a no-op and must not disrupt a valid cycle.
-  if (msg.generation < last_metric_generation_) return;
+  if (msg.generation < last_metric_generation_ ||
+      (quarantined_generation_ && msg.generation == last_metric_generation_)) return;
   // A delayed complete snapshot must not resurrect a source that a newer
   // snapshot already omitted. Compare the array's own publication stamp,
   // not individual source observation stamps (which may legitimately repeat).
@@ -100,11 +102,16 @@ void AcousticCostmapLayer::onTrustedMetricArray(
             static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs)) {
       last_snapshot_stamp_ns_ =
           std::max(last_snapshot_stamp_ns_, snapshot_ns);
+    } else {
+      // No trustworthy publication time: reject all subsequent packets in
+      // this epoch, including previously valid DDS replays.
+      quarantined_generation_ = true;
     }
     last_metric_stamp_.clear();
     return;
   }
   if (msg.generation != last_metric_generation_) {
+    quarantined_generation_ = false;
     last_snapshot_stamp_ns_ = 0;
     coordinator_.revoke_all();
     last_metric_stamp_.clear();
@@ -353,6 +360,7 @@ void AcousticCostmapLayer::reset() {
   pending_valid_ = false;
   last_metric_generation_ = 0;
   last_snapshot_stamp_ns_ = 0;
+  quarantined_generation_ = false;
   last_metric_stamp_.clear();
   current_ = true;
 }
