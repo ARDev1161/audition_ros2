@@ -2515,3 +2515,87 @@ TEST(AcousticCostmapPlugin, OneRegressedSourceRevokesEntireMultiSourceSnapshot) 
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+
+TEST(AcousticCostmapPlugin, VerifiedMultiSourceReprojectsAcrossRollingAndResize) {
+  // Real Nav2 layered map and production metric ingress: a change in grid
+  // geometry must reproject fresh world coordinates, never copy old indices.
+  // The physical layer must remain authoritative across both transitions.
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0., 0.);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const auto now = clock->now().nanoseconds();
+  const auto stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time t;
+    t.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    t.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return t;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp(now - 1000000LL);
+  snapshot.generation = 200;
+  audition_msgs::msg::LocalizedSource first;
+  first.header = snapshot.header;
+  first.last_observed = snapshot.header.stamp;
+  first.source_id = "rolling_a";
+  first.source_generation = 1;
+  first.localization_method = "independently_verified_metric_3d";
+  first.position.x = 1.25;
+  first.position.y = 1.25;
+  first.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+  auto second = first;
+  second.source_id = "rolling_b";
+  second.position.x = 2.25;
+  snapshot.sources = {first, second};
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 2u);
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  ASSERT_EQ(master->getCost(2, 2), 100);
+  ASSERT_EQ(master->getCost(4, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Nav2's rolling origin shifts the grid by exactly one old cell. Neither
+  // source has moved in the world and no fresh snapshot is published.
+  master->updateOrigin(0.5, 0.);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(1, 2), 100);
+  EXPECT_EQ(master->getCost(3, 2), 100);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // A resolution and size change must not resurrect old-index ownership.
+  map.resizeMap(20, 20, 0.25, 0., 0.);
+  map.updateMap(1., 1., 0.);
+  master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(5, 5), 100);
+  EXPECT_EQ(master->getCost(9, 5), 100);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // An explicit empty complete snapshot retires both sources after resize.
+  snapshot.header.stamp = stamp(now + 1000000LL);
+  snapshot.sources.clear();
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(5, 5), 0);
+  EXPECT_EQ(master->getCost(9, 5), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
