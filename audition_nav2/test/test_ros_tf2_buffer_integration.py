@@ -87,6 +87,44 @@ class RealTf2BufferAdmissionTests(unittest.TestCase):
         self.assertAlmostEqual(result[0], 1.)
         self.assertAlmostEqual(result[1], 0.)
 
+    def test_stale_dynamic_reply_and_nonfinite_geometry_fail_closed(self):
+        class ReplyBuffer:
+            def __init__(self, reply):
+                self.reply = reply
+
+            def lookup_transform(self, target, source, stamp, timeout):
+                return self.reply
+
+        for bad_stamp in (NS - 1, NS + 1, 3 * NS):
+            with self.subTest(stamp=bad_stamp), self.assertRaises(LookupError):
+                stamped_tf_lookup(ReplyBuffer(transform(bad_stamp)))(
+                    'map', 'microphone_array', NS, (1., 0., 0.))
+
+        lookup = stamped_tf_lookup(ReplyBuffer(transform(NS)))
+        for xyz in ((float('nan'), 0., 0.),
+                    (1., float('inf'), 0.), (1., 2.),
+                    (1., 2., 3., 4.)):
+            with self.subTest(xyz=xyz), self.assertRaises(ValueError):
+                lookup('map', 'microphone_array', NS, xyz)
+
+        overflow = transform(NS, tx=1e308)
+        with self.assertRaises(ValueError):
+            stamped_tf_lookup(ReplyBuffer(overflow))(
+                'map', 'microphone_array', NS, (1e308, 0., 0.))
+
+    def test_nearly_unit_quaternion_cannot_scale_metric_distance(self):
+        class ReplyBuffer:
+            def lookup_transform(self, target, source, stamp, timeout):
+                reply = transform(NS, yaw=math.pi / 2.)
+                reply.transform.rotation.z *= 1.001
+                reply.transform.rotation.w *= 1.001
+                return reply
+
+        x, y = stamped_tf_lookup(ReplyBuffer())(
+            'map', 'microphone_array', NS, (10., 0., 0.))
+        self.assertAlmostEqual(x, 0., places=5)
+        self.assertAlmostEqual(y, 10., places=5)
+
     def test_adapter_rejects_malformed_buffer_response(self):
         # Inject a deliberately broken Buffer result to cover the adapter's
         # fail-closed boundary, which a real Buffer sanitizes internally.
