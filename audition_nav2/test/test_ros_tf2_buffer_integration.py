@@ -15,6 +15,7 @@ from geometry_msgs.msg import TransformStamped
 from tf2_ros import Buffer
 from nav_admission import MetricSource
 from ros_tf_adapter import RosMetricTfGate, stamped_tf_lookup
+from soft_cost_cells import SoftCostCells
 
 NS = 1_000_000_000
 COV = (.04, 0., 0., 0., .04, 0., 0., 0., .04)
@@ -64,6 +65,41 @@ class RealTf2BufferAdmissionTests(unittest.TestCase):
             gate(source(validated=False))
         with self.assertRaises(LookupError):
             gate(source(frame='unknown_microphone'))
+
+    def test_real_buffer_tf_failure_revokes_existing_soft_costs(self):
+        # The first verified metric observation paints a reversible soft cell.
+        # A later observation beyond Buffer's TF history must remove that
+        # ownership, even when no valid replacement transform is available.
+        cells = SoftCostCells(resolution_m=1.)
+        gate = RosMetricTfGate('map', self.buffer, 2 * NS, timeout_sec=0.01)
+        painted, cleared = cells.reconcile(
+            [source()], 2 * NS, transform=gate)
+        self.assertEqual(painted, {(4, 0): 100})
+        self.assertEqual(cleared, ())
+
+        # A source with fresh validity but missing future TF cannot preserve
+        # an earlier source's costmap cell.
+        future = source(4 * NS)
+        gate = RosMetricTfGate('map', self.buffer, 4 * NS, timeout_sec=0.01)
+        painted, cleared = cells.reconcile(
+            [future], 4 * NS, transform=gate)
+        self.assertEqual(painted, {})
+        self.assertEqual(cleared, ((4, 0),))
+
+        # No new messages: the next reconciliation must remain empty.
+        painted, cleared = cells.reconcile(
+            [], 4 * NS + 1, transform=gate)
+        self.assertEqual((painted, cleared), ({}, ()))
+
+    def test_real_buffer_expiry_revokes_without_new_messages(self):
+        cells = SoftCostCells(resolution_m=1.)
+        gate = RosMetricTfGate('map', self.buffer, 2 * NS, timeout_sec=0.01)
+        self.assertEqual(cells.reconcile(
+            [source()], 2 * NS, transform=gate)[0], {(4, 0): 100})
+        # An expired source is not transformed or re-admitted.
+        gate = RosMetricTfGate('map', self.buffer, 3 * NS, timeout_sec=0.01)
+        self.assertEqual(cells.reconcile(
+            [source()], 3 * NS, transform=gate), ({}, ((4, 0),)))
 
     def test_rotation_and_static_transform(self):
         buf = Buffer()
