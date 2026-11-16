@@ -32,8 +32,11 @@ jobs:
             ros-humble-nav2-costmap-2d \
             ros-humble-pluginlib \
             ros-humble-launch-ros
-      - name: M5 metric admission contract (ROS-independent)
+      - name: M5 metric admission and real Humble TF2 Buffer integration
+        shell: bash
         run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
           python3 -m unittest discover -s audition_nav2/test -p 'test_*.py' -v
           python3 -m py_compile audition_nav2/nav_admission.py audition_nav2/evidence_cache.py audition_nav2/soft_cost_cells.py audition_nav2/stamped_tf_gate.py audition_nav2/ros_tf_adapter.py audition_nav2/grid_projection.py audition_nav2/advisory_gate.py audition_nav2/layer_policy.py
 
