@@ -88,6 +88,40 @@ int main() {
   assert(!AcousticMetricAdmission::admit(e, now));
   assert(!AcousticMetricAdmission::admit(original, 0));
 
+  // Fail closed on invalid metric geometry and a fabricated validation bit.
+  // Matching frame names or successful lookup cannot repair bad coordinates.
+  e = original;
+  e.cell.physically_validated = false;
+  assert(!AcousticMetricAdmission::admit(e, now));
+  e = original;
+  e.cell.x_m = std::numeric_limits<double>::quiet_NaN();
+  assert(!AcousticMetricAdmission::admit(e, now));
+  e = original;
+  e.cell.y_m = std::numeric_limits<double>::infinity();
+  assert(!AcousticMetricAdmission::admit(e, now));
+  e = original;
+  e.cell.x_m = -std::numeric_limits<double>::infinity();
+  assert(!AcousticMetricAdmission::admit(e, now));
+
+  // Clock-domain discontinuities and signed 64-bit extremes must not
+  // overflow age/skew arithmetic or accidentally authorize a stale TF.
+  e = original;
+  e.transform_stamp_ns = std::numeric_limits<std::int64_t>::min();
+  assert(!AcousticMetricAdmission::admit(e, now));
+  e = original;
+  e.cell.stamp_ns = std::numeric_limits<std::int64_t>::min();
+  assert(!AcousticMetricAdmission::admit(e, now));
+  e = verified(std::numeric_limits<std::int64_t>::max() - 100000000LL,
+               std::numeric_limits<std::int64_t>::max() - 100000000LL);
+  assert(AcousticMetricAdmission::admit(
+      e, std::numeric_limits<std::int64_t>::max()));
+  e.transform_stamp_ns = 1;
+  assert(!AcousticMetricAdmission::admit(
+      e, std::numeric_limits<std::int64_t>::max()));
+  e = original;
+  assert(!AcousticMetricAdmission::admit(e, observed - 1));
+  assert(!AcousticMetricAdmission::admit(e, -1));
+
   // A rejected stale transform must never reach the live costmap buffer.
   AcousticLayerCoordinator coordinator;
   coordinator.enable();
