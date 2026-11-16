@@ -43,8 +43,11 @@ def stamped_tf_lookup(buffer, *, timeout_sec=0.05):
             raise LookupError('TF frame mismatch')
         header = transform.header.stamp
         tf_stamp_ns = header.sec * 1_000_000_000 + header.nanosec
-        # Static TF edges may legally carry a zero timestamp in ROS 2.
-        # lookup_transform was explicitly requested at stamp_ns above.
+        # Dynamic TF must be interpolated at the requested observation time.
+        # Only static TF is allowed to report zero; never accept an older or
+        # newer dynamic response as a latest-transform fallback.
+        if tf_stamp_ns not in (0, stamp_ns):
+            raise LookupError('TF timestamp mismatch')
 
         t = transform.transform.translation
         q = transform.transform.rotation
@@ -57,15 +60,24 @@ def stamped_tf_lookup(buffer, *, timeout_sec=0.05):
 
         # Rotate metric xyz by unit quaternion and translate. This does not
         # turn a bearing-only source into metric evidence.
+        if (len(xyz_m) != 3 or
+                not all(type(v) in (int, float) and math.isfinite(v) for v in xyz_m)):
+            raise ValueError('invalid metric coordinates')
         x, y, z = xyz_m
-        ux, uy, uz = q.x, q.y, q.z
-        w = q.w
+        # Even an almost-unit quaternion must be normalized before rotation;
+        # otherwise the expression scales metric distance and can shift cells.
+        inv_norm = 1.0 / math.sqrt(norm2)
+        ux, uy, uz = q.x * inv_norm, q.y * inv_norm, q.z * inv_norm
+        w = q.w * inv_norm
         dot = ux*x + uy*y + uz*z
         cross_x = uy*z - uz*y
         cross_y = uz*x - ux*z
         rx = 2*dot*ux + (w*w - (ux*ux + uy*uy + uz*uz))*x + 2*w*cross_x
         ry = 2*dot*uy + (w*w - (ux*ux + uy*uy + uz*uz))*y + 2*w*cross_y
-        return (rx + t.x, ry + t.y)
+        result = (rx + t.x, ry + t.y)
+        if not all(math.isfinite(v) for v in result):
+            raise ValueError('nonfinite transformed metric coordinates')
+        return result
 
     return lookup
 
