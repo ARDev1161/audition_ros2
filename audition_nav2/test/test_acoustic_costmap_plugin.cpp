@@ -2762,3 +2762,82 @@ TEST(AcousticCostmapPlugin, OversizedCompleteSnapshotRevokesAllSourcesWithoutPar
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
 }
+
+TEST(AcousticCostmapPlugin, MaximumVerifiedBatchReplayAndExplicitRetirement) {
+  // Exercise the production 32-source boundary, not just the rejected
+  // 33-source case. Repeated reliable DDS delivery must not accumulate
+  // duplicate ownership or preserve cells after an empty complete snapshot.
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(20, 20, 0.5, 0., 0.);
+  auto physical = std::make_shared<AcousticTestPhysicalLayer>();
+  auto acoustic = std::make_shared<audition_nav2::AcousticCostmapLayer>();
+  map.addPlugin(physical);
+  map.addPlugin(acoustic);
+  Access::prepare(*acoustic, map);
+  auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+  Access::set_clock(*acoustic, clock);
+  const auto now = clock->now().nanoseconds();
+  const auto stamp = [](std::int64_t ns) {
+    builtin_interfaces::msg::Time t;
+    t.sec = static_cast<std::int32_t>(ns / 1000000000LL);
+    t.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+    return t;
+  };
+  audition_msgs::msg::LocalizedSourceArray snapshot;
+  snapshot.header.frame_id = "map";
+  snapshot.header.stamp = stamp(now - 60000000LL);
+  snapshot.generation = 401;
+  for (int i = 0; i < 32; ++i) {
+    audition_msgs::msg::LocalizedSource source;
+    source.header = snapshot.header;
+    source.last_observed = snapshot.header.stamp;
+    source.source_id = "boundary_" + std::to_string(i);
+    source.source_generation = 1;
+    source.localization_method = "independently_verified_metric_3d";
+    // Keep all observations in one cell: this is the maximum per-cell
+    // ownership fan-in, not a spatially sparse easy case.
+    source.position.x = 1.25;
+    source.position.y = 1.25;
+    source.covariance = {0.04, 0., 0., 0., 0.04, 0., 0., 0., 0.04};
+    snapshot.sources.push_back(source);
+  }
+  Access::ingress_message(*acoustic, snapshot);
+  ASSERT_EQ(Access::sources(*acoustic), 32u);
+  map.updateMap(1., 1., 0.);
+  auto* master = map.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Identical complete snapshots must not multiply retained ownership,
+  // consume a prepared Nav2 half-cycle, or produce partial cost changes.
+  Access::stage(*acoustic);
+  for (int replay = 0; replay < 16; ++replay) {
+    Access::ingress_message(*acoustic, snapshot);
+    EXPECT_EQ(Access::sources(*acoustic), 32u);
+    EXPECT_EQ(Access::watermark_count(*acoustic), 32u);
+    EXPECT_TRUE(Access::pending(*acoustic));
+  }
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 100);
+
+  // Retirement of a full overlapping batch must revoke every owner.
+  snapshot.header.stamp = stamp(now - 20000000LL);
+  snapshot.sources.clear();
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  EXPECT_EQ(Access::watermark_count(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // Old reliable DDS replay must not resurrect any of the 32 sources.
+  snapshot.header.stamp = stamp(now - 60000000LL);
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  map.updateMap(1., 1., 0.);
+  EXPECT_EQ(master->getCost(2, 2), 0);
+}
