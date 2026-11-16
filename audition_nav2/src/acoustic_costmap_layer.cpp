@@ -382,9 +382,12 @@ void AcousticCostmapLayer::reset() {
   baseline_gate_.invalidate();
   baseline_pipeline_.abort();
   pending_valid_ = false;
-  last_metric_generation_ = 0;
+  // Reset is a rollback barrier, not authorization to replay pre-reset
+  // observations. Preserve the last epoch number and quarantine it until a
+  // strictly newer verified generation arrives. Fresh uninitialized layers
+  // (generation zero) still admit their first valid snapshot normally.
+  quarantined_generation_ = last_metric_generation_ != 0;
   last_snapshot_stamp_ns_ = 0;
-  quarantined_generation_ = false;
   last_metric_stamp_.clear();
   current_ = true;
 }
