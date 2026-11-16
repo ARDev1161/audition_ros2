@@ -84,6 +84,13 @@ void AcousticCostmapLayer::onTrustedMetricArray(
       static_cast<std::int64_t>(msg.header.stamp.nanosec);
   if (msg.generation == last_metric_generation_ &&
       snapshot_ns < last_snapshot_stamp_ns_) return;
+  // Publication time identifies a complete snapshot within an epoch.
+  // A valid packet with the same timestamp is a DDS replay, not a new
+  // authorization to move/add acoustic cells. Ignore it before invalidating
+  // a prepared Nav2 half-cycle. Invalid packets are deliberately NOT ignored:
+  // conflicting unverified evidence must still revoke and fence this epoch.
+  if (valid && msg.generation == last_metric_generation_ &&
+      snapshot_ns > 0 && snapshot_ns == last_snapshot_stamp_ns_) return;
   if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!valid) {
