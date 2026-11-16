@@ -361,10 +361,14 @@ TEST(AcousticCostmapPlugin, RevocationClearsReplayWatermarksAndResetEpoch) {
   Access::ingress(layer, 5);
   EXPECT_TRUE(Access::pending(layer));
   EXPECT_EQ(Access::generation(layer), 6u);
-  // The same invalid generation may be retried; it remains fail-closed.
+  // The quarantined generation is ignored before touching a staged Nav2
+  // half-cycle. In particular, duplicate invalid DDS replay must not
+  // discard dirty bounds that the next complete updateMap needs to clear.
   Access::ingress(layer, 6);
-  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_TRUE(Access::pending(layer));
   EXPECT_EQ(Access::generation(layer), 6u);
+  EXPECT_EQ(Access::sources(layer), 0u);
+  EXPECT_EQ(Access::watermark_count(layer), 0u);
 
   Access::seed(layer, 104, 400);
   layer.reset();
