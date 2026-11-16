@@ -646,7 +646,7 @@ TEST(AcousticCostmapPlugin, CompleteSnapshotRevokesOmittedMetricSourceImmediatel
   };
   audition_msgs::msg::LocalizedSourceArray snapshot;
   snapshot.header.frame_id = "map";
-  snapshot.header.stamp = stamp(now);
+  snapshot.header.stamp = stamp(now - 20000000LL);
   snapshot.generation = 5;
   audition_msgs::msg::LocalizedSource first;
   first.header = snapshot.header;
@@ -668,6 +668,9 @@ TEST(AcousticCostmapPlugin, CompleteSnapshotRevokesOmittedMetricSourceImmediatel
   // The next complete verified snapshot still contains the first source,
   // but explicitly omits the second. Do not wait 500 ms for its TTL.
   snapshot.sources.pop_back();
+  // Changed membership requires a new publication stamp, even when the
+  // retained source's observation timestamp is unchanged.
+  snapshot.header.stamp = stamp(now - 10000000LL);
   Access::ingress_message(layer, snapshot);
   EXPECT_EQ(Access::sources(layer), 1u);
   EXPECT_EQ(Access::watermark_count(layer), 1u);
@@ -696,8 +699,8 @@ TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsOmittedSourceWithoutTTL) {
   Access::set_clock(*acoustic, clock);
   const auto ns = clock->now().nanoseconds();
   builtin_interfaces::msg::Time stamp;
-  stamp.sec = static_cast<std::int32_t>(ns / 1000000000LL);
-  stamp.nanosec = static_cast<std::uint32_t>(ns % 1000000000LL);
+  stamp.sec = static_cast<std::int32_t>((ns - 20000000LL) / 1000000000LL);
+  stamp.nanosec = static_cast<std::uint32_t>((ns - 20000000LL) % 1000000000LL);
 
   audition_msgs::msg::LocalizedSourceArray snapshot;
   snapshot.header.frame_id = "map";
@@ -729,6 +732,10 @@ TEST(AcousticCostmapPlugin, ProductionLayeredMapClearsOmittedSourceWithoutTTL) {
   // An unchanged observation for the retained source is legal in a
   // complete snapshot; omission immediately retires the other source.
   snapshot.sources.pop_back();
+  // Complete-snapshot membership changed; publish a newer array timestamp.
+  const auto next_ns = ns - 10000000LL;
+  snapshot.header.stamp.sec = static_cast<std::int32_t>(next_ns / 1000000000LL);
+  snapshot.header.stamp.nanosec = static_cast<std::uint32_t>(next_ns % 1000000000LL);
   Access::ingress_message(*acoustic, snapshot);
   ASSERT_EQ(Access::sources(*acoustic), 1u);
   map.updateMap(1.0, 1.0, 0.0);
