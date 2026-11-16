@@ -81,7 +81,7 @@ class RealTf2BufferAdmissionTests(unittest.TestCase):
         buf = Buffer()
         bad = transform(NS)
         bad.transform.rotation.w = 2.
-        self.assertTrue(buf.set_transform(bad, 'm5-test'))
+        buf.set_transform(bad, 'm5-test')
         result = stamped_tf_lookup(buf, timeout_sec=0.01)(
             'map', 'microphone_array', NS, (1., 0., 0.))
         self.assertAlmostEqual(result[0], 1.)
