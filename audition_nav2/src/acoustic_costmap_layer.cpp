@@ -100,8 +100,12 @@ void AcousticCostmapLayer::onTrustedMetricArray(
     if (snapshot_ns > 0 && snapshot_ns <= now_ns &&
         static_cast<std::uint64_t>(now_ns - snapshot_ns) <=
             static_cast<std::uint64_t>(AcousticVerifiedMetricInput::kTtlNs)) {
+      // A rejected snapshot must also fence a valid replay with the
+      // exact same publication stamp (DDS duplicates can differ in payload).
+      // Advance the watermark by one nanosecond; the timestamp is already
+      // bounded by now_ns and cannot overflow int64_t here.
       last_snapshot_stamp_ns_ =
-          std::max(last_snapshot_stamp_ns_, snapshot_ns);
+          std::max(last_snapshot_stamp_ns_, snapshot_ns + 1);
     } else {
       // No trustworthy publication time: reject all subsequent packets in
       // this epoch, including previously valid DDS replays.
