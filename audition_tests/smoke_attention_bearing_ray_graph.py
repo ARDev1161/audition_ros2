@@ -18,10 +18,10 @@ def main():
     sub = node.create_subscription(Marker, NS + '/attention/bearing_marker',
                                    lambda m: received.append(m), 10)
     try:
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + 45
         while pub.get_subscription_count() == 0 and time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.05)
-        assert pub.get_subscription_count(), 'marker node missing'
+        assert pub.get_subscription_count(), (\n            'marker node missing after 45s DDS discovery; nodes=%r; topics=%r'\n            % (node.get_node_names_and_namespaces(), node.get_topic_names_and_types())\n        )
 
         def send(stamp, valid=True, source='ci'):
             msg = AttentionTarget()
