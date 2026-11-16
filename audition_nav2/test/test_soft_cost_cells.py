@@ -60,5 +60,51 @@ class SoftCostCellsTests(unittest.TestCase):
         cells = SoftCostCells(resolution_m=1, maximum_cost=252)
         self.assertEqual(cells.reconcile([source('a'),source('b')], T, transform=lambda s:(1.,1.)), ({(1,1):252}, ()))
 
+    def test_source_budget_rejects_same_cell_flood_and_revokes_old_overlay(self):
+        # A cell budget alone cannot bound CPU: thousands of distinct source
+        # IDs can all map to the same cell, causing thousands of TF lookups.
+        cells = SoftCostCells(resolution_m=1, max_cells=1, max_sources=3)
+        calls = []
+        def tf(s):
+            calls.append(s.source_id)
+            return (2., 3.)
+        self.assertEqual(cells.reconcile([source('baseline')], T, transform=tf),
+                         ({(2, 3): 100}, ()))
+        calls.clear()
+        flooded = (source('flood-%d' % i) for i in range(1_000_000))
+        self.assertEqual(cells.reconcile(flooded, T+1, transform=tf),
+                         ({}, ((2, 3),)))
+        self.assertEqual(calls, ['flood-0', 'flood-1', 'flood-2'])
+        self.assertEqual(cells.reconcile([], T+2, transform=tf), ({}, ()))
+
+    def test_source_budget_includes_invalid_evidence(self):
+        # Untrusted/invalid entries also consume the bounded ingress budget.
+        cells = SoftCostCells(resolution_m=1, max_sources=2)
+        calls = []
+        def tf(s):
+            calls.append(s.source_id)
+            return (2., 3.)
+        self.assertEqual(cells.reconcile(
+            [object(), source('good'), source('overflow')], T,
+            transform=tf), ({}, ()))
+        self.assertEqual(calls, ['good'])
+
+    def test_source_budget_exact_boundary_and_recovery(self):
+        cells = SoftCostCells(resolution_m=1, max_sources=2)
+        tf = lambda s: (2., 3.)
+        self.assertEqual(cells.reconcile(
+            [source('a'), source('b')], T, transform=tf),
+            ({(2, 3): 100}, ()))
+        self.assertEqual(cells.reconcile(
+            [source('a'), source('b'), source('c')], T+1,
+            transform=tf), ({}, ((2, 3),)))
+        self.assertEqual(cells.reconcile(
+            [source('a')], T+2, transform=tf), ({(2, 3): 100}, ()))
+
+    def test_source_budget_rejects_invalid_configuration(self):
+        for value in (0, -1, 65537, 1.0, True, None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                SoftCostCells(max_sources=value)
+
 if __name__ == '__main__':
     unittest.main()
