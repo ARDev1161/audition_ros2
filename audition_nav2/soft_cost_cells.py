@@ -8,13 +8,16 @@ from nav_admission import eligible, soft_cost
 
 
 class SoftCostCells:
-    def __init__(self, *, resolution_m=0.1, max_cells=4096, maximum_cost=100):
+    def __init__(self, *, resolution_m=0.1, max_cells=4096, maximum_cost=100, max_sources=256):
         if not isinstance(resolution_m, (int, float)) or not math.isfinite(resolution_m) or resolution_m <= 0:
             raise ValueError("invalid resolution")
         if type(max_cells) is not int or not 1 <= max_cells <= 65536:
             raise ValueError("invalid cell budget")
         if type(maximum_cost) is not int or not 1 <= maximum_cost <= 252:
             raise ValueError("invalid nonlethal cost")
+        if type(max_sources) is not int or not 1 <= max_sources <= 65536:
+            raise ValueError("invalid source budget")
+        self.max_sources = max_sources
         self.resolution_m = resolution_m
         self.max_cells = max_cells
         self.maximum_cost = maximum_cost
@@ -45,7 +48,13 @@ class SoftCostCells:
         else:
             self._last_clock = None
         if not rewound and callable(transform) and type(now_ns) is int and now_ns > 0:
-            for source in sources:
+            for index, source in enumerate(sources):
+                # A large DDS snapshot (including distinct IDs landing in the
+                # same cell) must never cause unbounded TF lookups. Reject the
+                # entire snapshot rather than publishing a partial overlay.
+                if index >= self.max_sources:
+                    next_cells = {}
+                    break
                 if not eligible(source, now_ns):
                     continue
                 try:
