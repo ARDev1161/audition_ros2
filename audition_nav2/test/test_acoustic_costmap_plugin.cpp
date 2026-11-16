@@ -2540,7 +2540,7 @@ TEST(AcousticCostmapPlugin, VerifiedMultiSourceReprojectsAcrossRollingAndResize)
   };
   audition_msgs::msg::LocalizedSourceArray snapshot;
   snapshot.header.frame_id = "map";
-  snapshot.header.stamp = stamp(now - 1000000LL);
+  snapshot.header.stamp = stamp(now - 80000000LL);
   snapshot.generation = 200;
   audition_msgs::msg::LocalizedSource first;
   first.header = snapshot.header;
@@ -2589,7 +2589,7 @@ TEST(AcousticCostmapPlugin, VerifiedMultiSourceReprojectsAcrossRollingAndResize)
   EXPECT_EQ(master->getCost(3, 3), 175);
 
   // An explicit empty complete snapshot retires both sources after resize.
-  snapshot.header.stamp = stamp(now + 1000000LL);
+  snapshot.header.stamp = stamp(now - 20000000LL);
   snapshot.sources.clear();
   Access::ingress_message(*acoustic, snapshot);
   ASSERT_EQ(Access::sources(*acoustic), 0u);
