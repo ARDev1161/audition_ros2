@@ -23,7 +23,8 @@ def main():
             rclpy.spin_once(node, timeout_sec=0.05)
         assert pub.get_subscription_count(), (
             'marker node missing after 45s DDS discovery; nodes=%r; topics=%r'
-            % (node.get_node_names_and_namespaces(), node.get_topic_names_and_types())\n        )
+            % (node.get_node_names_and_namespaces(), node.get_topic_names_and_types())
+        )
 
         def send(stamp, valid=True, source='ci'):
             msg = AttentionTarget()
