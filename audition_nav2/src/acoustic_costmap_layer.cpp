@@ -153,7 +153,18 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   for (const auto& item : evidence) {
     const auto it = last_metric_stamp_.find(item.cell.source_id);
     if (it != last_metric_stamp_.end()) {
-      if (item.cell.stamp_ns < it->second) return;
+      if (item.cell.stamp_ns < it->second) {
+        // A newer complete snapshot carrying an older observation is not a
+        // harmless DDS replay. Its publication timestamp passed the replay
+        // fence above, so retaining the previous soft costs would allow a
+        // stale/reassigned source to remain in the master map until TTL.
+        // Reject the entire snapshot and fence this generation. A fresh,
+        // strictly newer verified generation is required to resume.
+        coordinator_.revoke_all();
+        last_metric_stamp_.clear();
+        quarantined_generation_ = true;
+        return;
+      }
     } else {
       ++unseen;
     }
@@ -161,6 +172,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   if (last_metric_stamp_.size() + unseen > 128) {
     coordinator_.revoke_all();
     last_metric_stamp_.clear();
+    quarantined_generation_ = true;
     return;
   }
   for (const auto& item : evidence) {
@@ -171,6 +183,7 @@ void AcousticCostmapLayer::onTrustedMetricArray(
       // A partially accepted batch is never exposed to the next Nav2 tick.
       coordinator_.revoke_all();
       last_metric_stamp_.clear();
+      quarantined_generation_ = true;
       return;
     }
     last_metric_stamp_[item.cell.source_id] = item.cell.stamp_ns;
