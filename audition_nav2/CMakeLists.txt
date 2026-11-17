@@ -4,17 +4,18 @@ find_package(ament_cmake REQUIRED)
 find_package(nav2_costmap_2d QUIET)
 find_package(pluginlib QUIET)
 find_package(rclcpp QUIET)
+find_package(std_srvs QUIET)
 find_package(audition_msgs QUIET)
 # Native ODAS/YAMNet/Speech CI images deliberately omit Nav2. Keep the
 # ROS-independent admission/ownership contracts available without requiring
 # those unrelated jobs to install the navigation stack.
-if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND audition_msgs_FOUND)
+if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND std_srvs_FOUND AND audition_msgs_FOUND)
   add_library(acoustic_costmap_layer SHARED src/acoustic_costmap_layer.cpp)
   target_compile_features(acoustic_costmap_layer PUBLIC cxx_std_17)
   target_include_directories(acoustic_costmap_layer PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-  ament_target_dependencies(acoustic_costmap_layer nav2_costmap_2d pluginlib rclcpp audition_msgs)
+  ament_target_dependencies(acoustic_costmap_layer nav2_costmap_2d pluginlib rclcpp std_srvs audition_msgs)
   pluginlib_export_plugin_description_file(nav2_costmap_2d acoustic_layer_plugin.xml)
   install(TARGETS acoustic_costmap_layer DESTINATION lib)
   install(DIRECTORY include/ DESTINATION include)
@@ -29,7 +30,7 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND audition_msgs_
       target_include_directories(test_acoustic_costmap_plugin PRIVATE include)
       target_link_libraries(test_acoustic_costmap_plugin acoustic_costmap_layer)
       ament_target_dependencies(test_acoustic_costmap_plugin
-        nav2_costmap_2d pluginlib rclcpp audition_msgs)
+        nav2_costmap_2d pluginlib rclcpp std_srvs audition_msgs)
     endif()
     ament_add_gtest(test_acoustic_verified_metric_input
       test/test_acoustic_verified_metric_input.cpp)
