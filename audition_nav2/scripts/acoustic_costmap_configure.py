@@ -5,6 +5,7 @@ The input is never modified. The generated file keeps existing obstacle,
 inflation, footprint, and collision-related parameters intact.
 """
 import argparse
+import copy
 from pathlib import Path
 import sys
 
@@ -76,7 +77,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="existing Nav2 YAML")
     parser.add_argument("output", type=Path, help="new Nav2 YAML (must not exist)")
-    parser.add_argument("--costmap", choices=("local_costmap", "global_costmap"),
+    parser.add_argument("--costmap", choices=("local_costmap", "global_costmap", "both"),
                         default="local_costmap")
     parser.add_argument("--trusted-metric-topic", default="",
                         help="operator-approved absolute LocalizedSourceArray topic; "
@@ -87,7 +88,12 @@ def main(argv=None):
             raise ValueError("input and output must differ")
         with args.input.open(encoding="utf-8") as stream:
             document = yaml.safe_load(stream)
-        document = configure(document, args.costmap, args.trusted_metric_topic)
+        # Stage all edits before opening the output: a malformed second costmap
+        # must never leave behind a partially configured first costmap.
+        document = copy.deepcopy(document)
+        targets = ("local_costmap", "global_costmap") if args.costmap == "both" else (args.costmap,)
+        for target in targets:
+            document = configure(document, target, args.trusted_metric_topic)
         # Exclusive create prevents accidental overwrite of a working config.
         with args.output.open("x", encoding="utf-8") as stream:
             yaml.safe_dump(document, stream, sort_keys=False)
