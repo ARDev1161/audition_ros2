@@ -23,6 +23,9 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND std_srvs_FOUND
   install(PROGRAMS scripts/acoustic_costmap_control.py
     DESTINATION lib/${PROJECT_NAME}
     RENAME acoustic_costmap_control)
+  install(PROGRAMS scripts/acoustic_costmap_configure.py
+    DESTINATION lib/${PROJECT_NAME}
+    RENAME acoustic_costmap_configure)
 
   if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
