@@ -16,7 +16,7 @@ except ImportError as exc:
 PLUGIN = "audition_nav2::AcousticCostmapLayer"
 
 
-def configure(document, costmap, trusted_metric_topic=trusted_metric_topic):
+def configure(document, costmap, trusted_metric_topic=""):
     if not isinstance(document, dict):
         raise ValueError("Nav2 parameters must be a YAML mapping")
     # A topic is operator-approved input, never inferred from diagnostic M4 output.
@@ -68,7 +68,7 @@ def configure(document, costmap, trusted_metric_topic=trusted_metric_topic):
     # Fail closed even if the input file previously enabled acoustic costs.
     params["acoustic_layer"] = dict(existing, plugin=PLUGIN,
                                     enable_soft_costs=False,
-                                    trusted_metric_topic="")
+                                    trusted_metric_topic=trusted_metric_topic)
     return document
 
 
