@@ -1,0 +1,18 @@
+# Append acoustic_layer to the END of the existing Nav2 costmap plugins list.
+# Do not replace obstacle/inflation layers. Configure under the costmap node.
+# This example is deliberately OFF until an independently verified metric
+# publisher and its frame/covariance contract have been validated.
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      acoustic_layer:
+        plugin: "audition_nav2::AcousticCostmapLayer"
+        enable_soft_costs: false
+        trusted_metric_topic: ""
+
+# To enable after configuring an operator-approved provider:
+#   enable_soft_costs: true
+#   trusted_metric_topic: /audition/verified_metric_sources
+# Or use the SetBool service <costmap-node>/<layer-name>/set_soft_costs
+# after startup; re-enable requires a NEW verified scene generation.
+# Never wire the ordinary M4 diagnostic localization topic directly.
