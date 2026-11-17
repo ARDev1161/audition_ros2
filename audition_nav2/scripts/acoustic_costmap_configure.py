@@ -5,7 +5,6 @@ The input is never modified. The generated file keeps existing obstacle,
 inflation, footprint, and collision-related parameters intact.
 """
 import argparse
-import os
 from pathlib import Path
 import sys
 
@@ -17,9 +16,21 @@ except ImportError as exc:
 PLUGIN = "audition_nav2::AcousticCostmapLayer"
 
 
-def configure(document, costmap):
+def configure(document, costmap, trusted_metric_topic=trusted_metric_topic):
     if not isinstance(document, dict):
         raise ValueError("Nav2 parameters must be a YAML mapping")
+    # A topic is operator-approved input, never inferred from diagnostic M4 output.
+    # Keep startup disabled even when a trusted topic is explicitly supplied.
+    if not isinstance(trusted_metric_topic, str) or any(
+            c.isspace() for c in trusted_metric_topic):
+        raise ValueError("trusted metric topic must be a ROS topic name without whitespace")
+    if trusted_metric_topic and (not trusted_metric_topic.startswith("/") or
+                                 trusted_metric_topic == "/" or
+                                 "//" in trusted_metric_topic or
+                                 trusted_metric_topic.endswith("/") or
+                                 "~" in trusted_metric_topic or
+                                 "*" in trusted_metric_topic):
+        raise ValueError("trusted metric topic must be an absolute ROS topic name")
     if costmap not in ("local_costmap", "global_costmap"):
         raise ValueError("unsupported costmap")
     outer = document.get(costmap)
@@ -67,13 +78,16 @@ def main(argv=None):
     parser.add_argument("output", type=Path, help="new Nav2 YAML (must not exist)")
     parser.add_argument("--costmap", choices=("local_costmap", "global_costmap"),
                         default="local_costmap")
+    parser.add_argument("--trusted-metric-topic", default="",
+                        help="operator-approved absolute LocalizedSourceArray topic; "
+                             "never inferred from diagnostic fusion output")
     args = parser.parse_args(argv)
     try:
         if args.input.resolve() == args.output.resolve():
             raise ValueError("input and output must differ")
         with args.input.open(encoding="utf-8") as stream:
             document = yaml.safe_load(stream)
-        document = configure(document, args.costmap)
+        document = configure(document, args.costmap, args.trusted_metric_topic)
         # Exclusive create prevents accidental overwrite of a working config.
         with args.output.open("x", encoding="utf-8") as stream:
             yaml.safe_dump(document, stream, sort_keys=False)
