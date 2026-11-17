@@ -36,7 +36,9 @@ def invoke(node, service_type, service_name, request, deadline):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("status", "enable", "disable"))
+    parser.add_argument("command", choices=("status", "enable", "disable", "rollback"))
+    parser.epilog = ("rollback disables acoustic admission and verifies source revocation; "
+                     "Nav2 clears previously written soft costs on its next map update.")
     parser.add_argument("--costmap", default="/local_costmap/local_costmap",
                         help="Costmap node namespace (default: local Nav2 costmap)")
     parser.add_argument("--layer", default="acoustic_layer",
@@ -85,6 +87,10 @@ def main(argv=None):
             expected = "true" if request.data else "false"
             if fields.get("enabled") != expected:
                 print("ERROR: plugin state differs from requested state: " +
+                      status.message, file=sys.stderr)
+                return 1
+            if args.command == "rollback" and fields.get("active_sources") != "0":
+                print("ERROR: rollback has not revoked all acoustic sources: " +
                       status.message, file=sys.stderr)
                 return 1
             if request.data and (fields.get("terminal_plugin") != "true" or
