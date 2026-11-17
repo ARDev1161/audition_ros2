@@ -6,9 +6,32 @@ commands or metric evidence. A disabled/missing plugin fails closed.
 """
 import argparse
 import sys
+import time
 
 import rclpy
 from std_srvs.srv import SetBool, Trigger
+
+
+def invoke(node, service_type, service_name, request, deadline):
+    """One bounded RPC, including discovery and response."""
+    client = node.create_client(service_type, service_name)
+    try:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not client.wait_for_service(timeout_sec=remaining):
+            raise RuntimeError("service unavailable: " + service_name)
+        future = client.call_async(request)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("service deadline exceeded: " + service_name)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=remaining)
+        if not future.done():
+            raise RuntimeError("service response timeout: " + service_name)
+        response = future.result()
+        if response is None:
+            raise RuntimeError("empty service response: " + service_name)
+        return response
+    finally:
+        node.destroy_client(client)
 
 
 def main(argv=None):
@@ -32,31 +55,48 @@ def main(argv=None):
     rclpy.init()
     node = rclpy.create_node("acoustic_costmap_control")
     try:
-        service_type = Trigger if args.command == "status" else SetBool
-        service = endpoint + ("get_soft_costs_status" if args.command == "status"
-                              else "set_soft_costs")
-        client = node.create_client(service_type, service)
-        if not client.wait_for_service(timeout_sec=args.timeout):
-            print("ERROR: service unavailable: " + service, file=sys.stderr)
-            return 2
-        request = service_type.Request()
-        if args.command != "status":
-            request.data = args.command == "enable"
-        future = client.call_async(request)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=args.timeout)
-        if not future.done():
-            print("ERROR: service response timeout", file=sys.stderr)
-            return 2
+        deadline = time.monotonic() + args.timeout
+        status_service = endpoint + "get_soft_costs_status"
         try:
-            response = future.result()
+            if args.command == "status":
+                response = invoke(node, Trigger, status_service,
+                                  Trigger.Request(), deadline)
+                print(response.message)
+                return 0 if response.success else 1
+
+            control_service = endpoint + "set_soft_costs"
+            request = SetBool.Request()
+            request.data = args.command == "enable"
+            response = invoke(node, SetBool, control_service, request, deadline)
+            print(response.message)
+            if not response.success:
+                return 1
+
+            # A SetBool acknowledgement is not proof that Nav2 retained the
+            # requested operator state. Verify the authoritative plugin state
+            # before reporting success, within the SAME timeout budget.
+            status = invoke(node, Trigger, status_service,
+                            Trigger.Request(), deadline)
+            if not status.success:
+                print("ERROR: plugin status rejected verification", file=sys.stderr)
+                return 1
+            fields = dict(token.split("=", 1) for token in status.message.split()
+                          if token.count("=") == 1)
+            expected = "true" if request.data else "false"
+            if fields.get("enabled") != expected:
+                print("ERROR: plugin state differs from requested state: " +
+                      status.message, file=sys.stderr)
+                return 1
+            if request.data and (fields.get("terminal_plugin") != "true" or
+                                 fields.get("trusted_topic_configured") != "true"):
+                print("ERROR: enabled plugin failed admission prerequisites: " +
+                      status.message, file=sys.stderr)
+                return 1
+            print(status.message)
+            return 0
         except Exception as exc:
-            print("ERROR: service call failed: " + str(exc), file=sys.stderr)
+            print("ERROR: " + str(exc), file=sys.stderr)
             return 2
-        if response is None:
-            print("ERROR: empty service response", file=sys.stderr)
-            return 2
-        print(response.message)
-        return 0 if response.success else 1
     finally:
         node.destroy_node()
         rclpy.shutdown()
