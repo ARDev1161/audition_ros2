@@ -82,7 +82,13 @@ void AcousticCostmapLayer::onTrustedMetricArray(
   const std::int64_t snapshot_ns =
       static_cast<std::int64_t>(msg.header.stamp.sec) * 1000000000LL +
       static_cast<std::int64_t>(msg.header.stamp.nanosec);
-  if (msg.generation == last_metric_generation_ &&
+  // An older *valid* publication is a harmless DDS reorder. An invalid
+  // same-generation publication is different: it is contradictory evidence
+  // on the operator-approved trust boundary and must revoke the overlay,
+  // even if its publication stamp precedes the latest accepted snapshot.
+  // Otherwise a malformed replay can be silently ignored while soft costs
+  // remain active. Old generations are still ignored by the epoch fence.
+  if (valid && msg.generation == last_metric_generation_ &&
       snapshot_ns < last_snapshot_stamp_ns_) return;
   // Publication time identifies a complete snapshot within an epoch.
   // A valid packet with the same timestamp is a DDS replay, not a new
