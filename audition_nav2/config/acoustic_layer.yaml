@@ -1,18 +1,41 @@
-# Append acoustic_layer to the END of the existing Nav2 costmap plugins list.
-# Do not replace obstacle/inflation layers. Configure under the costmap node.
-# This example is deliberately OFF until an independently verified metric
-# publisher and its frame/covariance contract have been validated.
+# Example Nav2 Humble LOCAL costmap plugin roster. Copy the acoustic_layer
+# stanza and append "acoustic_layer" to YOUR existing plugins list as the
+# FINAL plugin. Do not replace a working obstacle/inflation configuration.
+# The example below is complete for a typical static + obstacle + inflation
+# local costmap; adapt sensor topics and robot geometry to your platform.
+#
+# Acoustic costs are OFF until a separately verified metric provider exists.
+# DO NOT point trusted_metric_topic at M4 diagnostic 2D intersections,
+# bearing-only DOA, or AV association output.
 local_costmap:
   local_costmap:
     ros__parameters:
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer", "acoustic_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          clearing: true
+          marking: true
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.55
+        cost_scaling_factor: 3.0
       acoustic_layer:
         plugin: "audition_nav2::AcousticCostmapLayer"
         enable_soft_costs: false
         trusted_metric_topic: ""
 
-# To enable after configuring an operator-approved provider:
-#   enable_soft_costs: true
+# When an independently verified global-frame metric publisher is deployed:
 #   trusted_metric_topic: /audition/verified_metric_sources
-# Or use the SetBool service <costmap-node>/<layer-name>/set_soft_costs
-# after startup; re-enable requires a NEW verified scene generation.
-# Never wire the ordinary M4 diagnostic localization topic directly.
+#   enable_soft_costs: true
+# Runtime operator control (ROS 2 std_srvs/SetBool):
+#   ros2 service call /local_costmap/local_costmap/acoustic_layer/set_soft_costs \
+#     std_srvs/srv/SetBool "{data: false}"
+# Re-enabling requires a NEW verified scene generation, not a replay.
+# Keep this layer terminal; any layer after it invalidates the baseline gate.
