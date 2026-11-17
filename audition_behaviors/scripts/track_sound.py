@@ -150,8 +150,28 @@ class TrackSoundServer(Node):
                     return result
                 now = time.monotonic()
                 if now >= deadline:
-                    result.tracked = result.updates > 0
-                    result.reason = 'tracking_window_complete' if result.tracked else 'no_fresh_bearing'
+                    # A successful window requires the SAME source still to be
+                    # live at completion. Otherwise a silent expiry, retirement
+                    # or DDS identity handoff could masquerade as tracking.
+                    with self.lock:
+                        current = self.latest
+                        arrival = self.arrival
+                        retirement_unchanged = (
+                            self.retirement_sequence == retirement_sequence)
+                    live = (
+                        active_identity is not None and current is not None
+                        and retirement_unchanged
+                        and (current.scene_generation, current.source_id,
+                             current.source_generation) == active_identity
+                        and now >= arrival and now - arrival <= self.max_age
+                        and fresh_observation(
+                            current, self.get_clock().now().nanoseconds,
+                            self.max_age_ns))
+                    result.tracked = result.updates > 0 and live
+                    result.reason = (
+                        'tracking_window_complete' if result.tracked
+                        else 'source_expired' if result.updates > 0
+                        else 'no_fresh_bearing')
                     goal.succeed() if result.tracked else goal.abort()
                     return result
                 with self.lock:
