@@ -69,7 +69,7 @@ def main():
         # No pre-goal cache replay; source filtering and single-goal admission.
         cached = target()
         publish(cached)
-        first = start("tracked", 1800)
+        first = start("tracked", 3500)
         assert first.accepted
         assert not start("", 1000).accepted, "overlapping goal accepted"
         publish(target(source="unrelated"))
