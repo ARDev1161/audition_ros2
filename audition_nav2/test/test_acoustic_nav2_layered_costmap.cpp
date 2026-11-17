@@ -256,3 +256,57 @@ TEST(Nav2RealUpdateMap, RollingOriginReprojectsLiveSourceThenClearsOnTTL) {
   layered.updateMap(3., 2., 0.);
   EXPECT_EQ(master->getCost(new_x, new_y), 0);
 }
+
+TEST(Nav2RealUpdateMap, MovingSourceReleasesOldCellWithoutErasingIndependentSource) {
+  LayeredCostmap layered("map", false, false);
+  layered.resizeMap(12, 12, 0.5, 0., 0.);
+  auto obstacle = std::make_shared<FixedObstacleLayer>();
+  auto acoustic = std::make_shared<MockVerifiedAcousticLayer>(layered);
+  layered.addPlugin(obstacle);
+  layered.addPlugin(acoustic);
+
+  constexpr std::int64_t t0 = 2000000000LL;
+  // Two independent metric sources initially overlap in the same cell.
+  ASSERT_TRUE(acoustic->ingest(101, t0, t0 + 800000000LL,
+                              2.25, 1.25, t0 + 10000000LL));
+  ASSERT_TRUE(acoustic->ingest(102, t0, t0 + 800000000LL,
+                              2.25, 1.25, t0 + 10000000LL));
+  acoustic->set_time(t0 + 10000000LL);
+  layered.updateMap(2., 2., 0.);
+  auto* master = layered.getCostmap();
+  ASSERT_NE(master, nullptr);
+  EXPECT_EQ(master->getCost(4, 2), 100);
+
+  // Moving one source cannot clear the overlapping source's ownership.
+  ASSERT_TRUE(acoustic->ingest(101, t0 + 100000000LL,
+                              t0 + 800000000LL, 2.75, 1.25,
+                              t0 + 110000000LL));
+  acoustic->set_time(t0 + 110000000LL);
+  layered.updateMap(2., 2., 0.);
+  EXPECT_EQ(master->getCost(4, 2), 100);
+  EXPECT_EQ(master->getCost(5, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // When the second source also moves, the old shared cell must clear.
+  ASSERT_TRUE(acoustic->ingest(102, t0 + 200000000LL,
+                              t0 + 800000000LL, 3.25, 1.25,
+                              t0 + 210000000LL));
+  acoustic->set_time(t0 + 210000000LL);
+  layered.updateMap(2., 2., 0.);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(5, 2), 100);
+  EXPECT_EQ(master->getCost(6, 2), 100);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+
+  // No further DDS traffic: both cells must retire on the next Nav2 tick
+  // after TTL, while non-acoustic costs remain unchanged.
+  acoustic->set_time(t0 + 810000000LL);
+  layered.updateMap(2., 2., 0.);
+  EXPECT_EQ(master->getCost(4, 2), 0);
+  EXPECT_EQ(master->getCost(5, 2), 0);
+  EXPECT_EQ(master->getCost(6, 2), 0);
+  EXPECT_EQ(master->getCost(1, 1), 254);
+  EXPECT_EQ(master->getCost(3, 3), 175);
+}
