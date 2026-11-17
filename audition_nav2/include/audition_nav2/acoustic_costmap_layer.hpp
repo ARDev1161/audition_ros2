@@ -62,6 +62,9 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr soft_costs_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr soft_costs_status_service_;
   bool trusted_topic_configured_ = false;
+  // Nav2 registers plugins after onInitialize(); authorize startup opt-in
+  // only when the complete plugin roster can be inspected in updateBounds.
+  bool startup_enable_requested_ = false;
   AcousticLayerCoordinator coordinator_;
   // Tracks Nav2 map geometry, but does not certify a non-acoustic baseline.
   AcousticMapGeneration map_generation_;
