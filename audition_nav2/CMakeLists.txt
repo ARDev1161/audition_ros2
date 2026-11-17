@@ -167,6 +167,16 @@ if(BUILD_TESTING)
   add_test(NAME acoustic_pause_replay_capacity_contract
     COMMAND test_acoustic_pause_replay_capacity)
 
+  # Emit quantitative timing evidence on each CI host without imposing a
+  # non-portable wall-clock threshold. This is core overlay cost, not Nav2 E2E.
+  add_executable(test_acoustic_cpu_budget test/test_acoustic_cpu_budget.cpp)
+  target_compile_features(test_acoustic_cpu_budget PRIVATE cxx_std_17)
+  target_include_directories(test_acoustic_cpu_budget PRIVATE include)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_acoustic_cpu_budget PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME acoustic_cpu_budget_evidence COMMAND test_acoustic_cpu_budget)
+
   # Deterministic TF freshness/provenance fault injection; no ROS installation
   # required. This is an admission-contract test, not a real tf2 buffer test.
   add_executable(test_acoustic_tf_admission_faults
