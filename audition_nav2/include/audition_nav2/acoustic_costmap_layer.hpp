@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <map>
 #include "rclcpp/rclcpp.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "audition_msgs/msg/localized_source_array.hpp"
 #include "nav2_costmap_2d/layer.hpp"
 #include "audition_nav2/acoustic_layer_coordinator.hpp"
@@ -32,6 +33,10 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   // Expire ownership on a wall-clock cadence even without incoming messages.
   // No acoustic observation source is wired yet; the timer is fail-closed.
   void expireOnTimer();
+  // Operator rollback without restarting Nav2. Re-enable requires a new
+  // verified metric generation, so queued DDS data cannot restore costs.
+  void setSoftCosts(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                    std::shared_ptr<std_srvs::srv::SetBool::Response> response);
   // Explicitly opt-in only to an independently validated metric ROS stream.
   // The ordinary M4 diagnostic output is never automatically subscribed.
   void onTrustedMetricArray(const audition_msgs::msg::LocalizedSourceArray& msg);
@@ -49,6 +54,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   std::map<std::uint64_t, std::int64_t> last_metric_stamp_;
   std::mutex mutex_;
   rclcpp::TimerBase::SharedPtr expiry_timer_;
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr soft_costs_service_;
+  bool trusted_topic_configured_ = false;
   AcousticLayerCoordinator coordinator_;
   // Tracks Nav2 map geometry, but does not certify a non-acoustic baseline.
   AcousticMapGeneration map_generation_;
