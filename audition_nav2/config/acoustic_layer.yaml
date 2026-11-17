@@ -39,3 +39,10 @@ local_costmap:
 #     std_srvs/srv/SetBool "{data: false}"
 # Re-enabling requires a NEW verified scene generation, not a replay.
 # Keep this layer terminal; any layer after it invalidates the baseline gate.
+
+# Inspect actual runtime authorization, source count and epoch before enabling:
+#   ros2 service call /local_costmap/local_costmap/acoustic_layer/get_soft_costs_status \\
+#     std_srvs/srv/Trigger "{}"
+# The response reports enabled, trusted_topic_configured, terminal_plugin,
+# quarantined, active_sources and generation. It does not validate the
+# physical calibration or independence of the upstream metric publisher.
