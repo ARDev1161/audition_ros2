@@ -317,7 +317,19 @@ void AcousticCostmapLayer::updateBounds(
     }
   }
 
-  if (!enabled_) return;
+  if (!enabled_) {
+    // Disabling must still advertise previously owned cells as dirty so
+    // Nav2 rebuilds them from non-acoustic layers. Simply returning here
+    // leaves old soft costs in the master until some unrelated map update.
+    if (clock_) {
+      const auto cycle = coordinator_.tick(clock_->now().nanoseconds(), geometry);
+      if (cycle.rebuild_required) {
+        const auto bounds = AcousticWorldBounds::from_cells(cycle.dirty, geometry);
+        AcousticWorldBounds::expand(bounds, min_x, min_y, max_x, max_y);
+      }
+    }
+    return;
+  }
   // An acoustic plugin before any ordinary layer might write costs to the
   // previous master. A terminal plugin is called AFTER Nav2's normal
   // resetMap + non-acoustic updateCosts sequence.
