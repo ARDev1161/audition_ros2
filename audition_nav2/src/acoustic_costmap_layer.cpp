@@ -13,9 +13,10 @@
 namespace audition_nav2 {
 
 void AcousticCostmapLayer::onInitialize() {
-  // No verified ROS metric-evidence ingress has been connected yet. Keep
-  // disabled until a trusted, timestamped TF + provenance adapter exists.
+  // Fail closed until a trusted metric topic is explicitly configured and
+  // the complete Nav2 plugin roster is available for authorization.
   enabled_ = false;
+  startup_enable_requested_ = false;
   current_ = true;
   coordinator_.disable();
   map_generation_.invalidate();
@@ -48,8 +49,10 @@ void AcousticCostmapLayer::onInitialize() {
               });
     }
     if (requested && trusted_topic_configured_) {
-      enabled_ = true;
-      coordinator_.enable();
+      // onInitialize runs before Nav2 finishes registering its plugin list.
+      // Delay authorization to the first updateBounds, where the complete
+      // roster can be checked. Never enable an incorrectly ordered layer.
+      startup_enable_requested_ = true;
     } else if (requested) {
       RCLCPP_WARN(logger_,
           "Acoustic soft costs requested without trusted_metric_topic; layer disabled");
@@ -95,6 +98,8 @@ void AcousticCostmapLayer::setSoftCosts(
       return;
     }
   }
+  // An explicit operator request overrides any deferred startup opt-in.
+  startup_enable_requested_ = false;
   if (enabled_ == request->data) {
     response->success = true;
     response->message = enabled_ ? "already enabled" : "already disabled";
@@ -338,6 +343,23 @@ void AcousticCostmapLayer::updateBounds(
     coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!layered_costmap_) return;
+  if (startup_enable_requested_) {
+    // First updateMap after Nav2 registration: apply the same terminal
+    // plugin authorization as the operator SetBool service. A bad roster
+    // remains disabled instead of silently discarding costmap updates.
+    startup_enable_requested_ = false;
+    if (trusted_topic_configured_ &&
+        AcousticNav2CycleAdapter::terminal_nonacoustic_baseline(
+            layered_costmap_->getPlugins(), layered_costmap_->getFilters(),
+            static_cast<const nav2_costmap_2d::Layer*>(this))) {
+      enabled_ = true;
+      coordinator_.enable();
+      RCLCPP_INFO(logger_, "Acoustic soft costs enabled after Nav2 plugin roster validation");
+    } else {
+      RCLCPP_ERROR(logger_,
+          "Acoustic soft costs remain disabled: acoustic_layer must be the terminal Nav2 plugin");
+    }
+  }
   const auto* map = layered_costmap_->getCostmap();
   if (!map) return;
 
