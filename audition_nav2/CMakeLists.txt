@@ -20,6 +20,9 @@ if(nav2_costmap_2d_FOUND AND pluginlib_FOUND AND rclcpp_FOUND AND std_srvs_FOUND
   install(TARGETS acoustic_costmap_layer DESTINATION lib)
   install(DIRECTORY include/ DESTINATION include)
   install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
+  install(PROGRAMS scripts/acoustic_costmap_control.py
+    DESTINATION lib/${PROJECT_NAME}
+    RENAME acoustic_costmap_control)
 
   if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
