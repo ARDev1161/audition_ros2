@@ -264,6 +264,13 @@ struct AcousticCostmapLayerTestAccess {
   static std::size_t watermark_count(const AcousticCostmapLayer& layer) {
     return layer.last_metric_stamp_.size();
   }
+  static void set_snapshot_watermark(AcousticCostmapLayer& layer,
+                                     std::int64_t stamp_ns) {
+    layer.last_snapshot_stamp_ns_ = stamp_ns;
+  }
+  static bool quarantined(const AcousticCostmapLayer& layer) {
+    return layer.quarantined_generation_;
+  }
   static std::uint64_t generation(const AcousticCostmapLayer& layer) {
     return layer.last_metric_generation_;
   }
@@ -2910,4 +2917,43 @@ TEST(AcousticCostmapPlugin, MaximumSpatiallyDistributedBatchSurvivesResizeAndRet
     EXPECT_EQ(master->getCost(9 + 2 * (i % 8), 9 + 2 * (i / 8)), 0) << i;
   EXPECT_EQ(master->getCost(1, 1), 254);
   EXPECT_EQ(master->getCost(3, 3), 175);
+}
+
+
+TEST(AcousticCostmapPlugin, MalformedReorderedSameEpochRevokesActiveSoftCosts) {
+  // A stale but *valid* complete snapshot is harmless DDS reordering.
+  // A malformed one, even with an older publication timestamp, is a
+  // trust-boundary failure and must not leave previously admitted cells live.
+  // This exercises the actual production subscription callback.
+  nav2_costmap_2d::LayeredCostmap map("map", false, false);
+  map.resizeMap(12, 12, 0.5, 0.0, 0.0);
+  audition_nav2::AcousticCostmapLayer layer;
+  using Access = audition_nav2::AcousticCostmapLayerTestAccess;
+  Access::prepare(layer, map);
+  const auto now = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME)
+                       ->now().nanoseconds();
+  ASSERT_TRUE(Access::seed_live(layer, 73, now));
+  Access::seed(layer, 73, now);
+  ASSERT_EQ(Access::sources(layer), 1u);
+  ASSERT_EQ(Access::watermark_count(layer), 1u);
+  Access::set_snapshot_watermark(layer, now - 1000000LL);
+  Access::stage(layer);
+
+  audition_msgs::msg::LocalizedSourceArray malformed;
+  malformed.generation = 5;
+  // Zero publication stamp is invalid and older than the watermark.
+  // The old early-return path silently retained the acoustic source.
+  Access::ingress_message(layer, malformed);
+  EXPECT_EQ(Access::sources(layer), 0u);
+  EXPECT_EQ(Access::watermark_count(layer), 0u);
+  EXPECT_FALSE(Access::pending(layer));
+  EXPECT_TRUE(Access::quarantined(layer));
+  EXPECT_EQ(Access::generation(layer), 5u);
+
+  // An apparently fresh packet in the quarantined generation cannot
+  // authorize any new costs or invalidate the next staged clearing cycle.
+  Access::stage(layer);
+  Access::ingress_message(layer, malformed);
+  EXPECT_TRUE(Access::pending(layer));
+  EXPECT_EQ(Access::sources(layer), 0u);
 }
