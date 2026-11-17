@@ -38,23 +38,65 @@ void AcousticCostmapLayer::onInitialize() {
     // M4's unverified diagnostic localization stream. Its messages still
     // undergo strict generation, timestamp, method, covariance and
     // same-global-frame checks before any cell is admitted.
-    if (requested && !topic.empty()) {
-      enabled_ = true;
-      coordinator_.enable();
+    trusted_topic_configured_ = !topic.empty();
+    if (!topic.empty()) {
       verified_metric_subscription_ =
           node->create_subscription<audition_msgs::msg::LocalizedSourceArray>(
               topic, rclcpp::QoS(10).reliable(),
               [this](const audition_msgs::msg::LocalizedSourceArray& msg) {
                 onTrustedMetricArray(msg);
               });
+    }
+    if (requested && trusted_topic_configured_) {
+      enabled_ = true;
+      coordinator_.enable();
     } else if (requested) {
       RCLCPP_WARN(logger_,
           "Acoustic soft costs requested without trusted_metric_topic; layer disabled");
     }
+    soft_costs_service_ = node->create_service<std_srvs::srv::SetBool>(
+        name_ + "/set_soft_costs",
+        [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+               std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+          setSoftCosts(request, response);
+        });
     expiry_timer_ = node->create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&AcousticCostmapLayer::expireOnTimer, this));
   }
+}
+
+void AcousticCostmapLayer::setSoftCosts(
+    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+    std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (request->data && !trusted_topic_configured_) {
+    response->success = false;
+    response->message = "trusted_metric_topic is required; no acoustic cells admitted";
+    return;
+  }
+  if (enabled_ == request->data) {
+    response->success = true;
+    response->message = enabled_ ? "already enabled" : "already disabled";
+    return;
+  }
+  // Disabling is an immediate admission barrier. The previous Nav2 master
+  // is cleared by its next normal reset/updateMap pass, never by directly
+  // writing into a map owned by other plugins.
+  if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+  pending_valid_ = false;
+  coordinator_.revoke_all();
+  last_metric_stamp_.clear();
+  last_snapshot_stamp_ns_ = 0;
+  // Require a fresh epoch after either transition. Do not reaccept a
+  // queued snapshot from before rollback when the layer is re-enabled.
+  quarantined_generation_ = last_metric_generation_ != 0;
+  enabled_ = request->data;
+  if (enabled_) coordinator_.enable();
+  else coordinator_.disable();
+  response->success = true;
+  response->message = enabled_ ? "enabled; waiting for new verified generation"
+                               : "disabled; costs retire on next Nav2 update";
 }
 
 void AcousticCostmapLayer::onTrustedMetricArray(
