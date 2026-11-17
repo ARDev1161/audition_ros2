@@ -75,6 +75,20 @@ void AcousticCostmapLayer::setSoftCosts(
     response->message = "trusted_metric_topic is required; no acoustic cells admitted";
     return;
   }
+  // Reject operator enable when Nav2 has not registered this plugin as the
+  // terminal overlay. Otherwise the service could report success while the
+  // update cycle silently drops every acoustic observation.
+  if (request->data) {
+    if (!layered_costmap_ ||
+        !AcousticNav2CycleAdapter::terminal_nonacoustic_baseline(
+            layered_costmap_->getPlugins(), layered_costmap_->getFilters(),
+            static_cast<const nav2_costmap_2d::Layer*>(this))) {
+      response->success = false;
+      response->message =
+          "acoustic_layer must be the terminal Nav2 costmap plugin";
+      return;
+    }
+  }
   if (enabled_ == request->data) {
     response->success = true;
     response->message = enabled_ ? "already enabled" : "already disabled";
