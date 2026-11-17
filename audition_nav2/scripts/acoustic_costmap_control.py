@@ -54,9 +54,11 @@ def fail_closed_disable(node, endpoint):
         if not status.success or fields.get("enabled") != "false":
             raise RuntimeError("rollback state unverified: " + status.message)
         print("Automatic rollback confirmed: acoustic layer disabled", file=sys.stderr)
+        return True
     except Exception as exc:
         print("CRITICAL: automatic rollback could not be confirmed: " + str(exc),
               file=sys.stderr)
+        return False
 
 
 def status_fields(message):
@@ -158,8 +160,17 @@ def main(argv=None):
         if enabling and failed:
             # A failed or timed-out enable can have taken effect remotely.
             # Roll back ALL endpoints, not only those acknowledged locally.
+            rollback_ok = True
             for endpoint in endpoints:
-                fail_closed_disable(node, endpoint)
+                # Never report the failed enable as safely rolled back when
+                # any remote endpoint remains unverified.
+                if not fail_closed_disable(node, endpoint):
+                    rollback_ok = False
+            if not rollback_ok:
+                print("CRITICAL: one or more acoustic layers may remain enabled; "
+                      "stop Nav2 costmap nodes until state is verified",
+                      file=sys.stderr)
+                return 3
         return 1 if failed else 0
     finally:
         node.destroy_node()
