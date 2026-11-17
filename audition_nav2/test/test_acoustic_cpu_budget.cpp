@@ -60,10 +60,19 @@ int main() {
             << " replay_mean_ns=" << ingest_total_ns / cycles
             << " checksum=" << checksum << '\n';
   assert(checksum == static_cast<std::size_t>(cycles) * 32);
-  // Timer-only expiration, then the next Nav2 tick must retire all ownership.
+  // Timer-only expiration must retire ownership on the SAME geometry as
+  // the last tick. Grid indices are not valid across rolling/resize changes.
+  // The 20,000th tick uses grids[(cycles - 1) % 3], not grids[2].
   buffer.expire_without_tick(base + 5000000001LL);
-  const auto cleared = buffer.tick(base + 5000000002LL, grids[2]);
+  const auto cleared = buffer.tick(base + 5000000002LL,
+                                   grids[(cycles - 1) % 3]);
   assert(cleared.own_cells.empty());
+  assert(!cleared.geometry_changed);
   assert(cleared.retired_cells.size() == 32);
+  // A later geometry change must not re-emit obsolete grid indices.
+  const auto resized_after_clear = buffer.tick(base + 5000000003LL, grids[2]);
+  assert(resized_after_clear.geometry_changed);
+  assert(resized_after_clear.own_cells.empty());
+  assert(resized_after_clear.retired_cells.empty());
   return 0;
 }
