@@ -60,6 +60,12 @@ void AcousticCostmapLayer::onInitialize() {
                std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
           setSoftCosts(request, response);
         });
+    soft_costs_status_service_ = node->create_service<std_srvs::srv::Trigger>(
+        name_ + "/get_soft_costs_status",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          getSoftCostsStatus(request, response);
+        });
     expiry_timer_ = node->create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&AcousticCostmapLayer::expireOnTimer, this));
@@ -111,6 +117,26 @@ void AcousticCostmapLayer::setSoftCosts(
   response->success = true;
   response->message = enabled_ ? "enabled; waiting for new verified generation"
                                : "disabled; costs retire on next Nav2 update";
+}
+
+void AcousticCostmapLayer::getSoftCostsStatus(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  const bool terminal = layered_costmap_ &&
+      AcousticNav2CycleAdapter::terminal_nonacoustic_baseline(
+          layered_costmap_->getPlugins(), layered_costmap_->getFilters(),
+          static_cast<const nav2_costmap_2d::Layer*>(this));
+  // Report state rather than silently claiming a usable overlay. A valid
+  // metric topic is an operator authorization boundary, not a calibration.
+  response->success = true;
+  response->message =
+      std::string("enabled=") + (enabled_ ? "true" : "false") +
+      " trusted_topic_configured=" + (trusted_topic_configured_ ? "true" : "false") +
+      " terminal_plugin=" + (terminal ? "true" : "false") +
+      " quarantined=" + (quarantined_generation_ ? "true" : "false") +
+      " active_sources=" + std::to_string(coordinator_.source_count()) +
+      " generation=" + std::to_string(last_metric_generation_);
 }
 
 void AcousticCostmapLayer::onTrustedMetricArray(
