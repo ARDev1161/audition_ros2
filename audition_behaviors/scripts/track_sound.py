@@ -99,6 +99,12 @@ class TrackSoundServer(Node):
                         and msg.source_generation < self.watermark.source_generation):
                     return
             if not msg.valid:
+                # Retirements carry observation timestamps too. An old or
+                # future-dated DDS invalidation must not revoke a newer live
+                # incarnation or poison its monotonic admission watermark.
+                if not fresh_observation(msg, self.get_clock().now().nanoseconds,
+                                         self.max_age_ns):
+                    return
                 if (self.watermark is not None and msg.scene_generation == self.watermark.scene_generation
                         and msg.source_id and msg.source_id != self.watermark.source_id):
                     return
