@@ -34,6 +34,31 @@ def invoke(node, service_type, service_name, request, deadline):
         node.destroy_client(client)
 
 
+def fail_closed_disable(node, endpoint):
+    """Best-effort emergency rollback after an unverified enable response.
+
+    Use a fresh short deadline because the original service deadline may have
+    expired. A failed rollback must be reported, never treated as success.
+    """
+    request = SetBool.Request()
+    request.data = False
+    try:
+        result = invoke(node, SetBool, endpoint + "set_soft_costs",
+                        request, time.monotonic() + 2.0)
+        if not result.success:
+            raise RuntimeError(result.message)
+        status = invoke(node, Trigger, endpoint + "get_soft_costs_status",
+                        Trigger.Request(), time.monotonic() + 2.0)
+        fields = dict(token.split("=", 1) for token in status.message.split()
+                      if token.count("=") == 1)
+        if not status.success or fields.get("enabled") != "false":
+            raise RuntimeError("rollback state unverified: " + status.message)
+        print("Automatic rollback confirmed: acoustic layer disabled", file=sys.stderr)
+    except Exception as exc:
+        print("CRITICAL: automatic rollback could not be confirmed: " + str(exc),
+              file=sys.stderr)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("status", "enable", "disable", "rollback"))
@@ -59,6 +84,7 @@ def main(argv=None):
     try:
         deadline = time.monotonic() + args.timeout
         status_service = endpoint + "get_soft_costs_status"
+        enable_attempted = False
         try:
             if args.command == "status":
                 response = invoke(node, Trigger, status_service,
@@ -69,9 +95,13 @@ def main(argv=None):
             control_service = endpoint + "set_soft_costs"
             request = SetBool.Request()
             request.data = args.command == "enable"
+            enable_attempted = request.data
             response = invoke(node, SetBool, control_service, request, deadline)
             print(response.message)
             if not response.success:
+                if enable_attempted:
+                    fail_closed_disable(node, endpoint)
+                    enable_attempted = False
                 return 1
 
             # A SetBool acknowledgement is not proof that Nav2 retained the
@@ -81,6 +111,9 @@ def main(argv=None):
                             Trigger.Request(), deadline)
             if not status.success:
                 print("ERROR: plugin status rejected verification", file=sys.stderr)
+                if enable_attempted:
+                    fail_closed_disable(node, endpoint)
+                    enable_attempted = False
                 return 1
             fields = dict(token.split("=", 1) for token in status.message.split()
                           if token.count("=") == 1)
@@ -88,6 +121,9 @@ def main(argv=None):
             if fields.get("enabled") != expected:
                 print("ERROR: plugin state differs from requested state: " +
                       status.message, file=sys.stderr)
+                if enable_attempted:
+                    fail_closed_disable(node, endpoint)
+                    enable_attempted = False
                 return 1
             if args.command == "rollback" and fields.get("active_sources") != "0":
                 print("ERROR: rollback has not revoked all acoustic sources: " +
@@ -97,10 +133,15 @@ def main(argv=None):
                                  fields.get("trusted_topic_configured") != "true"):
                 print("ERROR: enabled plugin failed admission prerequisites: " +
                       status.message, file=sys.stderr)
+                if enable_attempted:
+                    fail_closed_disable(node, endpoint)
+                    enable_attempted = False
                 return 1
             print(status.message)
             return 0
         except Exception as exc:
+            if enable_attempted:
+                fail_closed_disable(node, endpoint)
             print("ERROR: " + str(exc), file=sys.stderr)
             return 2
     finally:
