@@ -4,6 +4,7 @@ import importlib.util
 import pathlib
 import threading
 import unittest
+from types import SimpleNamespace
 from audition_msgs.msg import AttentionTarget
 
 path = pathlib.Path(__file__).resolve().parents[1] / 'scripts' / 'track_sound.py'
@@ -34,9 +35,15 @@ class Policy(unittest.TestCase):
             retired = None
             sequence = 0
             arrival = 0.0
+            retirement_sequence = 0
+            max_age_ns = 500000000
+
+            def get_clock(self):
+                return SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=self.now_ns))
         self.state = State()
 
     def send(self, msg):
+        self.state.now_ns = max(1, msg.header.stamp.sec) * 1000000000 + 100000000
         module.TrackSoundServer.on_target(self.state, msg)
 
     def test_replay_and_incarnation(self):
