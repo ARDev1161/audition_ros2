@@ -36,6 +36,13 @@ def valid_bearing(msg, frame):
             and abs(math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) - 1.0) <= 0.01)
 
 
+def fresh_observation(msg, now_ns, maximum_age_ns):
+    """Validate the observation clock, not only local DDS arrival time."""
+    stamp_ns = msg.header.stamp.sec * 1000000000 + msg.header.stamp.nanosec
+    return (now_ns > 0 and stamp_ns > 0 and stamp_ns <= now_ns
+            and now_ns - stamp_ns <= maximum_age_ns)
+
+
 def stamp_key(msg):
     return (msg.scene_generation, msg.header.stamp.sec, msg.header.stamp.nanosec)
 
@@ -60,6 +67,7 @@ class TrackSoundServer(Node):
         self.frame = self.declare_parameter('target_frame', 'base_link').value
         self.max_age = self.declare_parameter('maximum_target_age_ms', 500).value / 1000.0
         self.max_timeout = self.declare_parameter('maximum_goal_timeout_ms', 30000).value
+        self.max_age_ns = int(self.max_age * 1000000000)
         if (not self.frame or self.frame.startswith('/') or not 0 < self.max_age <= 10
                 or not 1 <= self.max_timeout <= 300000):
             raise ValueError('invalid TrackSound configuration')
@@ -100,6 +108,12 @@ class TrackSoundServer(Node):
                 self.retirement_sequence += 1
                 return
             if not valid_bearing(msg, self.frame):
+                return
+            if not fresh_observation(msg, self.get_clock().now().nanoseconds,
+                                     self.max_age_ns):
+                # A late DDS delivery must never revive a stale target.
+                # Do not advance the watermark: an earlier valid observation
+                # could still be queued behind this invalid packet.
                 return
             self.watermark = msg
             self.latest = msg
@@ -145,7 +159,8 @@ class TrackSoundServer(Node):
                     seq = self.sequence
                     arrival = self.arrival
                     retired = self.retired
-                    retirement_changed = self.retirement_sequence != retirement_sequence
+                    current_retirement_sequence = self.retirement_sequence
+                    retirement_changed = current_retirement_sequence != retirement_sequence
                 # A source retirement is a hard advisory boundary, not a
                 # successful tracking window. Never keep reporting a previously
                 # tracked source after an explicit invalidation.
@@ -159,17 +174,21 @@ class TrackSoundServer(Node):
                         result.reason = 'source_retired'
                         goal.abort()
                         return result
-                    retirement_sequence = self.retirement_sequence
+                    retirement_sequence = current_retirement_sequence
                 # A silent source expiration must not be reported as ongoing
                 # tracking. End the action when the last admitted bearing has
                 # exceeded the configured freshness window.
                 if (active_identity is not None and
-                        (target is None or now < arrival or now - arrival > self.max_age)):
+                        (target is None or now < arrival or now - arrival > self.max_age
+                         or not fresh_observation(target, self.get_clock().now().nanoseconds,
+                                                  self.max_age_ns))):
                     result.reason = 'source_expired'
                     goal.abort()
                     return result
                 if (target is not None and seq > last_sequence
                         and now >= arrival and now - arrival <= self.max_age
+                        and fresh_observation(target, self.get_clock().now().nanoseconds,
+                                              self.max_age_ns)
                         and (not goal.request.source_id or target.source_id == goal.request.source_id)):
                     identity = (target.scene_generation, target.source_id,
                                 target.source_generation)
