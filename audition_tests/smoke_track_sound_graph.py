@@ -82,9 +82,11 @@ def main():
         publish(target(frame="map"))
         publish(target(stamp_override=101))
         # Keep the tracked incarnation live through the success boundary.
-        for _ in range(5):
+        first_result = first.get_result_async()
+        until = time.monotonic() + 5.0
+        while not first_result.done() and time.monotonic() < until:
             publish(target())
-        outcome = await_future(node, first.get_result_async(), 6)
+        outcome = await_future(node, first_result, 2)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("tracking outcome", outcome.status, outcome.result.reason)
         assert outcome.result.tracked and outcome.result.updates >= 2, ("unexpected evidence", outcome.result.updates)
         assert len(feedback) >= 2, ("unexpected feedback", len(feedback))
@@ -122,9 +124,11 @@ def main():
         recovery = start("tracked", 1200)
         assert recovery.accepted
         publish(target(generation=2))
-        for _ in range(5):
+        recovery_result = recovery.get_result_async()
+        until = time.monotonic() + 4.0
+        while not recovery_result.done() and time.monotonic() < until:
             publish(target(generation=2))
-        recovered = await_future(node, recovery.get_result_async(), 5)
+        recovered = await_future(node, recovery_result, 2)
         assert recovered.status == GoalStatus.STATUS_SUCCEEDED
         assert recovered.result.updates == 1
         print("PASS: TrackSound DDS source filter, replay, revocation, feedback, timeout and cancellation")
