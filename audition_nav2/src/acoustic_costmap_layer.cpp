@@ -399,7 +399,23 @@ void AcousticCostmapLayer::updateBounds(
   const auto* filters = layered_costmap_->getFilters();
   if (!AcousticNav2CycleAdapter::terminal_nonacoustic_baseline(
           plugins, filters, static_cast<const nav2_costmap_2d::Layer*>(this))) {
+    // A previously authorized layer can lose its terminal position after
+    // a Nav2 reconfiguration. Revoke ownership AND request a master rebuild
+    // of its old cells; returning here would strand stale acoustic costs.
+    coordinator_.disable();
+    enabled_ = false;
     coordinator_.revoke_all();
+    last_metric_stamp_.clear();
+    last_snapshot_stamp_ns_ = 0;
+    quarantined_generation_ = last_metric_generation_ != 0;
+    if (clock_) {
+      const auto cleanup = coordinator_.tick(clock_->now().nanoseconds(), geometry);
+      if (cleanup.rebuild_required) {
+        const auto bounds = AcousticWorldBounds::from_cells(cleanup.dirty, geometry);
+        AcousticWorldBounds::expand(bounds, min_x, min_y, max_x, max_y);
+      }
+    }
+    RCLCPP_ERROR(logger_, "Acoustic layer disabled: no longer terminal in Nav2 plugin roster");
     return;
   }
 
