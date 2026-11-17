@@ -408,13 +408,11 @@ void AcousticCostmapLayer::updateBounds(
     last_metric_stamp_.clear();
     last_snapshot_stamp_ns_ = 0;
     quarantined_generation_ = last_metric_generation_ != 0;
-    if (clock_) {
-      const auto cleanup = coordinator_.tick(clock_->now().nanoseconds(), geometry);
-      if (cleanup.rebuild_required) {
-        const auto bounds = AcousticWorldBounds::from_cells(cleanup.dirty, geometry);
-        AcousticWorldBounds::expand(bounds, min_x, min_y, max_x, max_y);
-      }
-    }
+    // Keep the revoked ownership dirty until a subsequent updateBounds.
+    // A roster change can interrupt the current Nav2 updateMap pass; consuming
+    // dirty cells here could acknowledge cleanup before any non-acoustic
+    // baseline has been rebuilt. The disabled branch below requests the
+    // rebuild on the next complete Nav2 pass, including after a reordering.
     RCLCPP_ERROR(logger_, "Acoustic layer disabled: no longer terminal in Nav2 plugin roster");
     return;
   }
