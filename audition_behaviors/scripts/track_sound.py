@@ -70,6 +70,7 @@ class TrackSoundServer(Node):
         self.reserved = False
         self.watermark = None
         self.retired = None
+        self.retirement_sequence = 0
         group = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             AttentionTarget, 'attention/target_base', self.on_target, 10, callback_group=group)
@@ -96,6 +97,7 @@ class TrackSoundServer(Node):
                 self.watermark = msg
                 self.latest = None
                 self.retired = msg
+                self.retirement_sequence += 1
                 return
             if not valid_bearing(msg, self.frame):
                 return
@@ -112,6 +114,7 @@ class TrackSoundServer(Node):
             self.reserved = True
             self.start_sequence = self.sequence
             self.start_time = time.monotonic()
+            self.start_retirement_sequence = self.retirement_sequence
             return GoalResponse.ACCEPT
 
     def on_cancel(self, _goal):
@@ -122,6 +125,8 @@ class TrackSoundServer(Node):
         with self.lock:
             start = self.start_time
             last_sequence = self.start_sequence
+            retirement_sequence = self.start_retirement_sequence
+            active_identity = None
         deadline = start + goal.request.timeout_ms / 1000.0
         try:
             while rclpy.ok():
@@ -139,9 +144,40 @@ class TrackSoundServer(Node):
                     target = self.latest
                     seq = self.sequence
                     arrival = self.arrival
+                    retired = self.retired
+                    retirement_changed = self.retirement_sequence != retirement_sequence
+                # A source retirement is a hard advisory boundary, not a
+                # successful tracking window. Never keep reporting a previously
+                # tracked source after an explicit invalidation.
+                if retirement_changed and retired is not None:
+                    retired_identity = (retired.scene_generation, retired.source_id,
+                                        retired.source_generation)
+                    if (active_identity is not None
+                            and retired_identity[0] >= active_identity[0]
+                            and (not retired_identity[1] or
+                                 retired_identity[1] == active_identity[1])):
+                        result.reason = 'source_retired'
+                        goal.abort()
+                        return result
+                    retirement_sequence = self.retirement_sequence
+                # A silent source expiration must not be reported as ongoing
+                # tracking. End the action when the last admitted bearing has
+                # exceeded the configured freshness window.
+                if (active_identity is not None and
+                        (target is None or now < arrival or now - arrival > self.max_age)):
+                    result.reason = 'source_expired'
+                    goal.abort()
+                    return result
                 if (target is not None and seq > last_sequence
                         and now >= arrival and now - arrival <= self.max_age
                         and (not goal.request.source_id or target.source_id == goal.request.source_id)):
+                    identity = (target.scene_generation, target.source_id,
+                                target.source_generation)
+                    if active_identity is not None and identity != active_identity:
+                        result.reason = 'source_changed'
+                        goal.abort()
+                        return result
+                    active_identity = identity
                     last_sequence = seq
                     result.updates += 1
                     feedback = TrackSound.Feedback()
