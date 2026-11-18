@@ -84,7 +84,8 @@ def set_and_verify(node, endpoint, enabled, deadline, revoke=False):
     if fields.get("enabled") != ("true" if enabled else "false"):
         raise RuntimeError("state not confirmed: " + endpoint + message)
     if enabled and (fields.get("terminal_plugin") != "true" or
-                    fields.get("trusted_topic_configured") != "true"):
+                    fields.get("trusted_topic_configured") != "true" or
+                    fields.get("lifecycle_active") != "true"):
         raise RuntimeError("unsafe enable prerequisites: " + endpoint + message)
     if revoke and fields.get("active_sources") != "0":
         raise RuntimeError("sources not revoked: " + endpoint + message)
@@ -138,7 +139,8 @@ def main(argv=None):
                 for endpoint in endpoints:
                     fields, message = verified_status(node, endpoint, deadline)
                     if (fields.get("terminal_plugin") != "true" or
-                            fields.get("trusted_topic_configured") != "true"):
+                            fields.get("trusted_topic_configured") != "true" or
+                            fields.get("lifecycle_active") != "true"):
                         raise RuntimeError("unsafe enable prerequisites: " +
                                            endpoint + message)
             except Exception as exc:
