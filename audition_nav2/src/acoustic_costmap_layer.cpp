@@ -17,6 +17,7 @@ void AcousticCostmapLayer::onInitialize() {
   // the complete Nav2 plugin roster is available for authorization.
   enabled_ = false;
   startup_enable_requested_ = false;
+  lifecycle_active_ = true;
   current_ = true;
   coordinator_.disable();
   map_generation_.invalidate();
@@ -79,6 +80,11 @@ void AcousticCostmapLayer::setSoftCosts(
     const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (request->data && !lifecycle_active_) {
+    response->success = false;
+    response->message = "Nav2 costmap layer is deactivated; enable rejected";
+    return;
+  }
   if (request->data && !trusted_topic_configured_) {
     response->success = false;
     response->message = "trusted_metric_topic is required; no acoustic cells admitted";
@@ -139,6 +145,7 @@ void AcousticCostmapLayer::getSoftCostsStatus(
       std::string("enabled=") + (enabled_ ? "true" : "false") +
       " trusted_topic_configured=" + (trusted_topic_configured_ ? "true" : "false") +
       " terminal_plugin=" + (terminal ? "true" : "false") +
+      " lifecycle_active=" + (lifecycle_active_ ? "true" : "false") +
       " quarantined=" + (quarantined_generation_ ? "true" : "false") +
       " active_sources=" + std::to_string(coordinator_.source_count()) +
       " generation=" + std::to_string(last_metric_generation_);
@@ -343,7 +350,7 @@ void AcousticCostmapLayer::updateBounds(
     coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
   pending_valid_ = false;
   if (!layered_costmap_) return;
-  if (startup_enable_requested_) {
+  if (startup_enable_requested_ && lifecycle_active_) {
     // First updateMap after Nav2 registration: apply the same terminal
     // plugin authorization as the operator SetBool service. A bad roster
     // remains disabled instead of silently discarding costmap updates.
@@ -379,7 +386,7 @@ void AcousticCostmapLayer::updateBounds(
     }
   }
 
-  if (!enabled_) {
+  if (!enabled_ || !lifecycle_active_) {
     // Disabling must still advertise previously owned cells as dirty so
     // Nav2 rebuilds them from non-acoustic layers. Simply returning here
     // leaves old soft costs in the master until some unrelated map update.
@@ -509,6 +516,32 @@ void AcousticCostmapLayer::updateCosts(
   AcousticNav2CycleAdapter::overlay_after_nav2_reset(
       pending_cycle_, geometry, min_i, min_j, max_i, max_j,
       master.getCharMap(), static_cast<std::size_t>(count), true);
+}
+
+void AcousticCostmapLayer::activate() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  // Nav2 may reactivate a layer after its subscriptions have queued old
+  // observations. Never restore acoustic costs without operator opt-in and
+  // a strictly newer verified generation.
+  lifecycle_active_ = true;
+  current_ = true;
+}
+
+void AcousticCostmapLayer::deactivate() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  lifecycle_active_ = false;
+  startup_enable_requested_ = false;
+  enabled_ = false;
+  coordinator_.disable();
+  coordinator_.revoke_all();
+  if (pending_valid_) coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+  pending_valid_ = false;
+  last_metric_stamp_.clear();
+  last_snapshot_stamp_ns_ = 0;
+  quarantined_generation_ = last_metric_generation_ != 0;
+  baseline_gate_.invalidate();
+  baseline_pipeline_.abort();
+  current_ = false;
 }
 
 void AcousticCostmapLayer::reset() {
