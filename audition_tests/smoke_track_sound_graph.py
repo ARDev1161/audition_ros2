@@ -86,10 +86,13 @@ def main():
         assert not feedback, "wrong-source or cached target produced feedback"
         fresh = target()
         publish(fresh)
-        publish(fresh)
-        publish(target(generation=0))
-        publish(target(frame="map"))
-        publish(target(stamp_override=101))
+        # Replay and invalid probes must not consume the 500 ms freshness
+        # budget of an otherwise live source. The slow fixture helper takes
+        # ~270 ms per call and used to expire the track before the live loop.
+        publish_live(fresh)
+        publish_live(target(generation=0))
+        publish_live(target(frame="map"))
+        publish_live(target(stamp_override=101))
         # Keep the tracked incarnation live through the success boundary.
         first_result = first.get_result_async()
         until = time.monotonic() + 5.0
@@ -139,7 +142,9 @@ def main():
             publish_live(target(generation=2))
         recovered = await_future(node, recovery_result, 2)
         assert recovered.status == GoalStatus.STATUS_SUCCEEDED
-        assert recovered.result.updates == 1
+        # Continued generation-2 heartbeats are all valid independent updates;
+        # the recovery contract requires at least one, not exactly one.
+        assert recovered.result.tracked and recovered.result.updates >= 1
         print("PASS: TrackSound DDS source filter, replay, revocation, feedback, timeout and cancellation")
         return 0
     except Exception as exc:

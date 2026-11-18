@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>audition_fusion</name>
+  <version>0.1.0</version>
+  <description>Diagnostic ROS-side bearing association and TF2 triangulation; never navigation occupancy.</description>
+  <maintainer email="ardev1161@users.noreply.github.com">ARDev1161</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>audition_msgs</depend>
+  <depend>rclpy</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

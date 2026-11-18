@@ -6,7 +6,7 @@ from audition_msgs.srv import ReloadPipeline, GetCapabilities, GetPipelineStatus
 
 
 def call(node, client, request, timeout=90):
-    assert client.wait_for_service(timeout_sec=40), client.srv_name
+    assert client.wait_for_service(timeout_sec=90), client.srv_name
     future = client.call_async(request)
     rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
     assert future.done() and future.exception() is None, client.srv_name

@@ -15,6 +15,7 @@
   <exec_depend>audition_capture</exec_depend>
   <exec_depend>audition_perception</exec_depend>
   <exec_depend>audition_behaviors</exec_depend>
+  <exec_depend>audition_fusion</exec_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

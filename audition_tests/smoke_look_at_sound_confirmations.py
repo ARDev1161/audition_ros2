@@ -58,7 +58,6 @@ def run():
             request.timeout_ms = timeout_ms
             handle = wait(node, client.send_goal_async(request, feedback_callback=feedback_callback))
             assert handle.accepted
-            feedback_states.clear()  # Each goal has an independent confirmation epoch.
             return handle
 
         def send(observation, repeats=3):
@@ -83,27 +82,36 @@ def run():
         future = handle.get_result_async()
         # Synchronize on the server's actual evidence acknowledgement before
         # advancing the stamp. DDS delivery alone is not worker consumption.
-        def await_progress(expected, timeout=3.0):
+        def await_progress(expected, since, timeout=3.0):
+            # Only a feedback callback emitted after this goal/observation
+            # proves that the action worker actually consumed the evidence.
+            # Old feedback from previous goals is not an acknowledgement.
             deadline = time.monotonic() + timeout
-            while expected not in feedback_states and time.monotonic() < deadline:
+            while (expected not in feedback_states[since:]
+                   and time.monotonic() < deadline):
                 rclpy.spin_once(node, timeout_sec=0.05)
-            assert expected in feedback_states, ("no confirmation progress", expected, feedback_states)
+            assert expected in feedback_states[since:], (
+                "no fresh confirmation progress", expected, feedback_states[since:])
 
+        generation_start = len(feedback_states)
         send(target(200, 1))
-        await_progress("confirming_bearing:1/3")
+        await_progress("confirming_bearing:1/3", generation_start)
         send(target(201, 1))
-        await_progress("confirming_bearing:2/3")
-        reset_count_before = feedback_states.count("confirming_bearing:1/3")
+        await_progress("confirming_bearing:2/3", generation_start)
+        before_generation = len(feedback_states)
         send(target(202, 2))
-        assert not future.done(), "source generation transition reused prior evidence"
-        # Feedback is delivered asynchronously. The last received state may
-        # still describe the previous generation even after DDS publish.
-        # Require a NEW 1/3 acknowledgement rather than inspecting the tail.
+        # The action worker consumes DDS asynchronously. Wait for a *new*
+        # acknowledgement rather than testing the most recent callback
+        # immediately after publishing.
         deadline = time.monotonic() + 3.0
-        while feedback_states.count("confirming_bearing:1/3") <= reset_count_before and time.monotonic() < deadline:
+        while (not any(state == "confirming_bearing:1/3"
+                       for state in feedback_states[before_generation:])
+               and time.monotonic() < deadline):
             rclpy.spin_once(node, timeout_sec=0.05)
-        assert feedback_states.count("confirming_bearing:1/3") > reset_count_before, (
-            "generation reset progress", feedback_states[-6:])
+        assert not future.done(), "source generation transition reused prior evidence"
+        assert any(state == "confirming_bearing:1/3"
+                   for state in feedback_states[before_generation:]), (
+                       "generation reset progress", feedback_states[before_generation:])
         send(target(203, 2))
         assert not future.done(), "only two observations of new generation"
         send(target(204, 2))
@@ -127,26 +135,35 @@ def run():
         # partially collected streak. A stale invalidation must not do so.
         handle = goal(6000)
         future = handle.get_result_async()
+        goal_feedback_start = len(feedback_states)
         send(target(400, 2))
-        await_progress("confirming_bearing:1/3")
+        await_progress("confirming_bearing:1/3", goal_feedback_start)
         send(target(401, 2))
-        await_progress("confirming_bearing:2/3")
+        await_progress("confirming_bearing:2/3", goal_feedback_start)
+        # At this point the server has *acknowledged* two independent
+        # observations. A stale invalidation can no longer appear to cause
+        # an unrelated missed DDS/worker observation.
         stale = target(399, 2)
         stale.valid = False
         send(stale)
         send(target(402, 2))
         outcome = wait(node, future)
-        assert outcome.status == GoalStatus.STATUS_SUCCEEDED, "stale invalidation revoked evidence"
+        assert outcome.status == GoalStatus.STATUS_SUCCEEDED, (
+            "stale invalidation revoked evidence",
+            outcome.status, outcome.result.reason, feedback_states[goal_feedback_start:])
 
         handle = goal(6000)
         future = handle.get_result_async()
+        goal_feedback_start = len(feedback_states)
         send(target(500, 2))
-        await_progress("confirming_bearing:1/3")
+        await_progress("confirming_bearing:1/3", goal_feedback_start)
         send(target(501, 2))
-        await_progress("confirming_bearing:2/3")
+        await_progress("confirming_bearing:2/3", goal_feedback_start)
         revoked = target(502, 2)
         revoked.valid = False
+        before_revocation = len(feedback_states)
         send(revoked)
+        await_progress("waiting_for_fresh_bearing", before_revocation)
         # Delayed valid data older than the invalidation must not be
         # admitted or count as post-revocation evidence.
         send(target(501, 2))

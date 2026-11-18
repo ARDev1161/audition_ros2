@@ -15,6 +15,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("wav_path", description="Absolute mono/multichannel WAV"),
         DeclareLaunchArgument("frame_id", default_value="microphone_array"),
+        DeclareLaunchArgument("loop", default_value="false"),
         DeclareLaunchArgument("audition_namespace", default_value="audition",
                               description="Relative namespace, e.g. robot_a/audition"),
         DeclareLaunchArgument("spatial_backend", default_value="disabled"),
@@ -36,6 +37,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(base),
             launch_arguments={
                 "wav_path": LaunchConfiguration("wav_path"),
+                "loop": LaunchConfiguration("loop"),
                 "frame_id": LaunchConfiguration("frame_id"),
                 "spatial_backend": LaunchConfiguration("spatial_backend"),
                 "spatial_config": LaunchConfiguration("spatial_config"),
