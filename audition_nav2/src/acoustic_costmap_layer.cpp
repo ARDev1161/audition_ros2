@@ -546,19 +546,26 @@ void AcousticCostmapLayer::deactivate() {
 
 void AcousticCostmapLayer::reset() {
   std::lock_guard<std::mutex> lock(mutex_);
+  // Nav2 can reset a layer independently of its lifecycle callbacks. Treat
+  // reset as an operator re-authorization boundary: do not silently resume
+  // acoustic writes when fresh DDS data arrives after a costmap reset.
+  startup_enable_requested_ = false;
+  enabled_ = false;
+  if (pending_valid_)
+    coordinator_.defer_staged_cycle(pending_cycle_, pending_geometry_);
+  pending_valid_ = false;
+  coordinator_.disable();
   coordinator_.revoke_all();
   map_generation_.invalidate();
   baseline_gate_.invalidate();
   baseline_pipeline_.abort();
-  pending_valid_ = false;
-  // Reset is a rollback barrier, not authorization to replay pre-reset
-  // observations. Preserve the last epoch number and quarantine it until a
-  // strictly newer verified generation arrives. Fresh uninitialized layers
-  // (generation zero) still admit their first valid snapshot normally.
+  // Retain the last epoch fence; an explicit enable still requires a newer
+  // independently verified generation, never queued pre-reset observations.
   quarantined_generation_ = last_metric_generation_ != 0;
   last_snapshot_stamp_ns_ = 0;
   last_metric_stamp_.clear();
-  current_ = true;
+  // reset() is not activate(): preserve the actual Nav2 lifecycle state.
+  current_ = lifecycle_active_;
 }
 }  // namespace audition_nav2
 
