@@ -143,6 +143,18 @@ def main(argv=None):
                                            endpoint + message)
             except Exception as exc:
                 print("ERROR: " + str(exc), file=sys.stderr)
+                # Preflight is not a transaction: an earlier operator command
+                # may already have enabled one costmap. A failed admission of
+                # the pair must not leave that old overlay active while the
+                # operator reasonably assumes the group was rejected.
+                rollback_ok = True
+                for endpoint in endpoints:
+                    if not fail_closed_disable(node, endpoint):
+                        rollback_ok = False
+                if not rollback_ok:
+                    print("CRITICAL: preflight rollback unverified; stop Nav2 "
+                          "costmap nodes until state is verified", file=sys.stderr)
+                    return 3
                 return 2
 
         for endpoint in endpoints:
