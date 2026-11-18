@@ -1,11 +1,89 @@
 name: ROS 2 Humble CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main, "feat/**"]
 
 jobs:
+  m4-diagnostic-contract:
+    name: M4 independent diagnostic contract (no ROS dependencies)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile M4 Python sources
+        run: |
+          python3 -m compileall -q audition_fusion
+      - name: Execute all M4 diagnostic contract and negative tests
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_*.py' -v
+      - name: Reproduce adverse association and geometry benchmarks
+        run: |
+          python3 audition_fusion/benchmarks/av_association_benchmark.py
+          python3 audition_fusion/benchmarks/radar_association_benchmark.py
+          python3 audition_fusion/benchmarks/radar_temporal_benchmark.py
+          python3 audition_fusion/benchmarks/conditional_geometry_adversarial.py
+          python3 audition_fusion/benchmarks/common_mode_geometry_benchmark.py
+      - name: Confirm synthetic field report cannot authorize localization
+        run: |
+          python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
+            audition_fusion/test/fixtures/m4_field_contract_example.json > /tmp/m4-report.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/m4-report.json', encoding='utf-8') as stream:
+              report = json.load(stream)
+          safety = report['safety_diagnostic']
+          assert report['physical_validation_claim'] is False
+          assert safety['physical_localization_accepted'] is False
+          assert safety['nav2_admission'] is False
+          assert safety['diagnostic_promotion_eligible'] is False
+          assert safety['no_observed_safety_regression'] is False
+          assert 'acquisition_provenance_not_supplied' in safety['blockers']
+          assert 'recording_bytes_not_verified' in safety['blockers']
+          assert 'data_domain_unverified' in safety['blockers']
+          PY
+      - name: Enforce strict fail-closed CLI exit codes and preserve blocker report
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          import tempfile
+
+          script = 'audition_fusion/benchmarks/evaluate_field_manifest.py'
+          fixture = 'audition_fusion/test/fixtures/m4_field_contract_example.json'
+          baseline = subprocess.run([sys.executable, script, fixture],
+                                    text=True, capture_output=True)
+          assert baseline.returncode == 0, baseline.stderr
+          strict = subprocess.run([sys.executable, script, fixture,
+                                   '--require-diagnostic-eligibility'],
+                                  text=True, capture_output=True)
+          assert strict.returncode == 3, (strict.returncode, strict.stderr)
+          report = json.loads(strict.stdout)
+          assert json.loads(baseline.stdout) == report
+          assert not report['safety_diagnostic']['diagnostic_promotion_eligible']
+          assert not report['safety_diagnostic']['no_observed_safety_regression']
+          assert not report['safety_diagnostic']['nav2_admission']
+          assert 'M4 diagnostic eligibility blocked:' in strict.stderr
+          for blocker in ('acquisition_provenance_not_supplied',
+                          'recording_bytes_not_verified', 'data_domain_unverified'):
+              assert blocker in report['safety_diagnostic']['blockers']
+              assert blocker in strict.stderr
+          with tempfile.TemporaryDirectory() as directory:
+              invalid = pathlib.Path(directory) / 'malformed.json'
+              invalid.write_text('{"trials": [], "trials": []}', encoding='utf-8')
+              rejected = subprocess.run([sys.executable, script, str(invalid),
+                                         '--require-diagnostic-eligibility'],
+                                        text=True, capture_output=True)
+              assert rejected.returncode == 2, rejected.stderr
+              assert rejected.stdout == ''
+              assert 'Invalid M4 evaluation input:' in rejected.stderr
+          PY
+
   humble:
     runs-on: ubuntu-22.04
     container: ros:humble-ros-base
@@ -23,6 +101,8 @@ jobs:
             ros-humble-ament-cmake-gtest \
             ros-humble-rosidl-default-generators \
             ros-humble-geometry-msgs \
+            ros-humble-nav-msgs \
+            ros-humble-diagnostic-msgs \
             ros-humble-visualization-msgs \
             ros-humble-tf2-ros \
             ros-humble-rclpy \
@@ -50,9 +130,143 @@ jobs:
           ros2 interface show audition_msgs/action/LookAtSound
           ros2 interface show audition_msgs/action/TrackSound
           ros2 interface show audition_msgs/msg/CameraAimProposal
+          ros2 interface show audition_msgs/msg/BearingIntersectionCandidateArray
+          ros2 interface show audition_msgs/msg/VisualBearingObservationArray
+          ros2 interface show audition_msgs/msg/AudioVisualPairHypothesisArray
+          ros2 interface show audition_msgs/msg/RadarTrackArray
+          ros2 interface show audition_msgs/msg/RadarObservationArray
+          ros2 interface show audition_msgs/msg/RadarAudioCandidateArray
+      - name: M4 guarded triangulation geometry unit tests
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_*.py' -v
+
+      - name: M4 reproducible adverse AV association benchmark (diagnostic only)
+        run: |
+          python3 audition_fusion/benchmarks/av_association_benchmark.py
+          python3 -m unittest discover -s audition_fusion/test -p 'test_av_groundtruth.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_bearing_groundtruth.py' -v
+
+      - name: M4-C synthetic radar/audio association benchmark (diagnostic only)
+        run: |
+          python3 audition_fusion/benchmarks/radar_association_benchmark.py
+          python3 audition_fusion/benchmarks/radar_temporal_benchmark.py
+          python3 -m unittest discover -s audition_fusion/test -p 'test_radar*.py' -v
+
+      - name: M4 independent field manifest contract scoring (synthetic fixture only)
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_field_evaluation.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_acquisition_provenance.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_recording_artifact_audit.py' -v
+          python3 -m unittest discover -s audition_fusion/test -p 'test_acquisition_robustness.py' -v
+          python3 audition_fusion/benchmarks/evaluate_field_manifest.py \
+            audition_fusion/test/fixtures/m4_field_contract_example.json \
+            > /tmp/audition_m4_field_contract_report.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/audition_m4_field_contract_report.json', encoding='utf-8') as f:
+              report = json.load(f)
+          assert report['trial_count'] == 4
+          assert report['strategies']['instant_fusion']['tp'] == 1
+          assert report['strategies']['instant_fusion']['fp'] == 2
+          assert report['strategies']['temporal_fusion']['fp'] == 0
+          assert report['strategies']['temporal_fusion']['fn'] == 1
+          assert report['physical_validation_claim'] is False
+          assert report['recording_artifact_audit']['recording_bytes_verified'] is False
+          assert 'recording_bytes_not_verified' in report['safety_diagnostic']['blockers']
+          safety = report['safety_diagnostic']
+          assert safety['physical_localization_accepted'] is False
+          assert safety['nav2_admission'] is False
+          assert safety['diagnostic_promotion_eligible'] is False
+          assert any(x.startswith('insufficient_recording_clusters:') for x in safety['blockers'])
+          comparison = report['paired_comparison']
+          assert comparison['candidate'] == 'temporal_fusion'
+          assert comparison['positive_gain_validated'] is False
+          clusters = report['clustered_comparison']
+          assert clusters['physical_validation_claim'] is False
+          assert clusters['recording_independence_only'] is True
+          assert clusters['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
+          assert 'direct' in clusters['per_stratum']
+          assert 'aligned-impostor' in clusters['per_stratum']
+          assert 'identity-swap' in clusters['per_stratum']
+          assert 'occluded' in clusters['per_stratum']
+          assert clusters['per_stratum']['aligned-impostor']['baselines']['instant_fusion']['bootstrap_95pct_accuracy_interval'] is None
+          assert clusters['per_stratum']['occluded']['unobservable_excluded'] == 1
+          assert clusters['per_stratum']['occluded']['baselines']['instant_fusion']['paired_accuracy_delta'] is None
+          instant = comparison['baseline_comparisons']['instant_fusion']
+          assert instant['observable_trials'] == 3
+          assert instant['candidate_false_pairs'] == 0
+          assert instant['baseline_false_pairs'] == 2
+          assert instant['paired_false_pair_delta_per_trial'] == -2/3
+          PY
+
+      - name: M4 simulator export ingestion and verified artifact hashes
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_simulation_import.py' -v
+          python3 - <<'PY'
+          import hashlib, json, pathlib, tempfile, subprocess, sys
+          with tempfile.TemporaryDirectory() as work:
+              root=pathlib.Path(work)
+              recording=root/'capture.dat'
+              recording.write_bytes(b'Synthetic contract artifact, not audio')
+              sha=hashlib.sha256(recording.read_bytes()).hexdigest()
+              candidate={"audio_id":"s1","radar_id":"r1"}
+              trial={"trial_id":"one","stratum":"smoke",
+                     "truth_source":"simulator_authoritative",
+                     "truth":{"observable":True,"pair":candidate},
+                     "predictions":{name:{"decision":"pair","pair":candidate}
+                                    for name in ("audio_only","radar_only",
+                                                 "instant_fusion","temporal_fusion")}}
+              export={"format":"audition.simulation-export.v1",
+                      "domain":"simulation","dataset_id":"synthetic-cli-test",
+                      "scenarios":[{"scenario_id":"s","split":"held_out",
+                                    "recording":"capture.dat",
+                                    "recording_sha256":sha,"trials":[trial]}]}
+              source=root/'export.json'
+              source.write_text(json.dumps(export),encoding='utf-8')
+              manifest=root/'manifest.json'
+              subprocess.run([sys.executable,
+                  'audition_fusion/benchmarks/import_simulation_export.py',
+                  str(source),'--artifacts-root',str(root),'--out',str(manifest)],
+                  check=True)
+              provenance=json.loads((root/'manifest.json.provenance.json').read_text())
+              assert provenance['domain'] == 'simulation'
+              assert provenance['physical_validation_claim'] is False
+              assert provenance['simulation_export_sha256'] == hashlib.sha256(
+                  source.read_bytes()).hexdigest()
+              assert provenance['manifest_sha256'] == hashlib.sha256(
+                  manifest.read_bytes()).hexdigest()
+              report=subprocess.check_output([sys.executable,
+                  'audition_fusion/benchmarks/evaluate_field_manifest.py',
+                  str(manifest),'--require-simulation-provenance'])
+              result=json.loads(report)
+              assert result["strategies"]["temporal_fusion"]["tp"] == 1
+              assert result["physical_validation_claim"] is False
+              assert result["data_domain"] == "simulation"
+              assert result["provenance_verified"] is True
+          PY
+
+      - name: M4 adverse conditional geometry audit (known blind spots)
+        run: |
+          python3 audition_fusion/benchmarks/conditional_geometry_adversarial.py
+
+      - name: M4 common-mode geometry false-confidence audit
+        run: |
+          python3 -m unittest discover -s audition_fusion/test -p 'test_common_mode_audit.py' -v
+          python3 audition_fusion/benchmarks/common_mode_geometry_benchmark.py > /tmp/m4_common_mode.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/m4_common_mode.json', encoding='utf-8') as f:
+              report = json.load(f)
+          assert report['physical_validation_claim'] is False
+          assert report['metric_position_published'] is False
+          assert all(item['admitted'] for item in report['cases'].values())
+          assert report['cases']['shared_pose_bias_1m']['position_error_m'] > 0.99
+          assert report['cases']['coherent_reflection_image']['position_error_m'] > 3.99
+          PY
+
       - name: Validate launch Python syntax
         run: |
-          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/m3_track_sound.launch.py audition_bringup/launch/m3_attention_bearing_ray.launch.py audition_bringup/launch/m3_attention_camera_aim.launch.py audition_bringup/launch/m3_attention_camera_admission.launch.py audition_bringup/launch/attention_config.py
+          python3 -m py_compile audition_bringup/launch/m1_wav_pipeline.launch.py audition_bringup/launch/m1_alsa_pipeline.launch.py audition_bringup/launch/m2_wav_pipeline.launch.py audition_bringup/launch/m2_alsa_pipeline.launch.py audition_bringup/launch/m2_profile.launch.py audition_bringup/launch/profile_config.py audition_bringup/launch/m2_capture_session_fixture.launch.py audition_bringup/launch/profile_supervisor.py audition_bringup/launch/profile_supervisor_core.py audition_bringup/launch/profile_audio_flow.py audition_bringup/launch/profile_source_flow.py audition_bringup/launch/profile_semantic_flow.py audition_bringup/launch/m3_attention.launch.py audition_bringup/launch/m3_attention_tf.launch.py audition_bringup/launch/m3_look_at_sound.launch.py audition_bringup/launch/m3_track_sound.launch.py audition_bringup/launch/m3_attention_bearing_ray.launch.py audition_bringup/launch/m3_attention_camera_aim.launch.py audition_bringup/launch/m3_attention_camera_admission.launch.py audition_bringup/launch/m4_bearing_candidates.launch.py audition_bringup/launch/m4_av_pairs.launch.py audition_bringup/launch/m4_pose_evidence.launch.py audition_bringup/launch/m4_fusion_diagnostics.launch.py audition_bringup/launch/m4_radar_adapter.launch.py audition_bringup/launch/m4_radar_diagnostics.launch.py audition_bringup/launch/attention_config.py
 
       - name: Smoke M3 attention advisory over real ROS graph
         shell: bash
@@ -234,6 +448,128 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke M4 timestamped TF2 three-view diagnostic candidates over ROS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=123
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_bearing_candidates.launch.py \
+            audition_namespace:=robot_ci/m4 world_frame:=odom \
+            > /tmp/audition_m4_candidates.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_bearing_candidates.py; then
+            cat /tmp/audition_m4_candidates.log
+            exit 1
+          fi
+
+      - name: Smoke M4 visual evidence and ambiguous pairing over real TF2/DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=124
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          PYTHONUNBUFFERED=1 RCUTILS_LOGGING_BUFFERED_STREAM=0 ros2 launch audition_bringup m4_av_pairs.launch.py \
+            audition_namespace:=robot_ci/av world_frame:=odom \
+            > /tmp/audition_m4_av.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_av_pairs.py; then
+            cat /tmp/audition_m4_av.log
+            exit 1
+          fi
+
+      - name: Smoke M4 pose uncertainty evidence over real ROS DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=125
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_pose_evidence.launch.py \
+            audition_namespace:=robot_ci/pose world_frame:=odom \
+            > /tmp/audition_m4_pose_evidence.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_pose_evidence.py; then
+            cat /tmp/audition_m4_pose_evidence.log
+            exit 1
+          fi
+
+      - name: Smoke M4 TF2 and pose covariance agreement on real DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=126
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_pose_evidence.launch.py \
+            audition_namespace:=robot_ci/pose_tf world_frame:=odom \
+            require_tf_consistency:=true \
+            enable_conditional_evidence:=true \
+            microphone_extrinsics_calibrated:=true \
+            > /tmp/audition_m4_pose_tf.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_tf_pose_evidence.py; then
+            cat /tmp/audition_m4_pose_tf.log
+            exit 1
+          fi
+
+      - name: Smoke M4-A integrated diagnostic launch over one ROS DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=127
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_fusion_diagnostics.launch.py \
+            audition_namespace:=robot_ci/m4_integrated world_frame:=odom \
+            > /tmp/audition_m4_integrated.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_integrated_graph.py; then
+            cat /tmp/audition_m4_integrated.log
+            exit 1
+          fi
+
+      - name: Smoke M4-C optional radar adapter over real TF2/DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=128
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_radar_adapter.launch.py \
+            audition_namespace:=robot_ci/radar world_frame:=odom \
+            > /tmp/audition_m4_radar.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_radar_adapter.py; then
+            cat /tmp/audition_m4_radar.log
+            exit 1
+          fi
+
+      - name: Smoke M4-D integrated radar/audio candidates over real TF2 DDS graph
+        shell: bash
+        run: |
+          set -eo pipefail
+          export ROS_DOMAIN_ID=129
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          ros2 launch audition_bringup m4_radar_diagnostics.launch.py \
+            audition_namespace:=robot_ci/radar_integrated world_frame:=odom \
+            > /tmp/audition_m4_radar_audio.log 2>&1 &
+          launch_pid=$!
+          trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
+          if ! python3 audition_tests/smoke_m4_radar_audio_graph.py; then
+            cat /tmp/audition_m4_radar_audio.log
+            exit 1
+          fi
+
       - name: Smoke M3r strict replay and challenger confirmation over ROS graph
         shell: bash
         run: |
@@ -312,7 +648,7 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           ros2 launch audition_bringup m2_wav_pipeline.launch.py \
-            wav_path:=/tmp/audition_ci.wav \
+            wav_path:=/tmp/audition_ci.wav loop:=true \
             > /tmp/audition_m2_launch.log 2>&1 &
           launch_pid=$!
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
@@ -329,7 +665,7 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           ros2 launch audition_bringup m2_wav_pipeline.launch.py \
-            wav_path:=/tmp/audition_ci.wav spatial_backend:=mono \
+            wav_path:=/tmp/audition_ci.wav spatial_backend:=mono loop:=true \
             > /tmp/audition_mono_launch.log 2>&1 &
           launch_pid=$!
           trap 'kill "$launch_pid" 2>/dev/null || true' EXIT
@@ -404,12 +740,18 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           python3 audition_bringup/launch/profile_supervisor.py \
-            --profile replay_ci --wav-path /tmp/audition_ci.wav \
+            --profile replay_ci --wav-path /tmp/audition_ci.wav --timeout 75 \
             > /tmp/audition_supervisor.log 2>&1 &
           supervisor_pid=$!
           trap 'kill "$supervisor_pid" 2>/dev/null || true' EXIT
           if ! python3 audition_tests/smoke_pipeline_reload.py; then
             cat /tmp/audition_supervisor.log
+            for log in /tmp/audition-profile-*.log; do
+              if [ -f "$log" ]; then
+                echo "==== owned pipeline: $log ===="
+                tail -n 160 "$log"
+              fi
+            done
             exit 1
           fi
 
