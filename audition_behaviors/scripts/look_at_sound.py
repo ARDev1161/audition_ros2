@@ -116,6 +116,7 @@ class LookAtSoundServer(Node):
         # incarnation must not resurrect after latest has been cleared.
         self.source_generation_fence = None
         self.goal_stamp = None
+        self.goal_source = ''
         self.goal_deadline = 0.0
         self.goal_evidence = None
         self.goal_evidence_count = 0
@@ -216,7 +217,7 @@ class LookAtSoundServer(Node):
             # time out. The same lock protects the goal epoch, revocation and
             # confirmation state; the worker only consumes the result.
             if self.reserved:
-                self.evaluate_candidate_locked(self.arrival, '')
+                self.evaluate_candidate_locked(self.arrival, self.goal_source)
 
     def evaluate_candidate_locked(self, now, source):
         """Atomically evaluate the live cache and update confirmation evidence.
@@ -269,6 +270,7 @@ class LookAtSoundServer(Node):
                 return GoalResponse.REJECT
             self.reserved = True
             self.goal_start_sequence = self.sequence
+            self.goal_source = request.source_id
             self.goal_stamp = self.last_stamp
             self.goal_deadline = time.monotonic() + request.timeout_ms / 1000.0
             self.goal_evidence = None
