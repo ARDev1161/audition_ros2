@@ -146,6 +146,7 @@ void AcousticCostmapLayer::getSoftCostsStatus(
       " trusted_topic_configured=" + (trusted_topic_configured_ ? "true" : "false") +
       " terminal_plugin=" + (terminal ? "true" : "false") +
       " lifecycle_active=" + (lifecycle_active_ ? "true" : "false") +
+      " operator_enable_required=" + (!enabled_ ? "true" : "false") +
       " quarantined=" + (quarantined_generation_ ? "true" : "false") +
       " active_sources=" + std::to_string(coordinator_.source_count()) +
       " generation=" + std::to_string(last_metric_generation_);
