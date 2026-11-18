@@ -148,11 +148,19 @@ def wait(node, predicate, deadline):
 def main():
     rclpy.init()
     probe = Probe()
-    deadline = time.monotonic() + 27
+    # Give the ROS component containers their own startup budget. A single
+    # deadline shared with the semantic assertions makes slow discovery look
+    # like an event-contract failure and hides which phase timed out.
+    startup_deadline = time.monotonic() + 60
     try:
-        if not wait(probe, lambda: probe.scene_generation is not None, deadline):
-            print("FAIL: no canonical scene", file=sys.stderr)
+        if not wait(probe, lambda: probe.scene_generation is not None, startup_deadline):
+            print("FAIL: no canonical scene after 60s; "
+                  f"scene publishers={probe.count_publishers('/audition/scene')}, "
+                  f"spatial subscribers={probe.spatial_pub.get_subscription_count()}, "
+                  f"event subscribers={probe.pub.get_subscription_count()}",
+                  file=sys.stderr)
             return 1
+        deadline = time.monotonic() + 27
         if not wait(
             probe, lambda: probe.pub.get_subscription_count() > 0 and
             probe.cpub.get_subscription_count() > 0, deadline

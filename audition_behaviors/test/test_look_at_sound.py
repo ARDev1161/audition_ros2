@@ -877,6 +877,7 @@ class FreshnessTest(unittest.TestCase):
         # A delayed action worker must not extend the accepted timeout.
         class Request:
             timeout_ms = 200
+            source_id = 'voice-a'
         class Server:
             reserved = False
             max_timeout = 10000

@@ -16,10 +16,18 @@ def main():
                              lambda m: seen.append(m), 10)
     pub = node.create_publisher(AttentionTarget, '/robot_ci/camera/attention/target_base', 10)
     try:
-        end = time.monotonic() + 20
+        # The launch process and probe start concurrently. DDS discovery can
+        # lag behind process startup on heavily loaded CI runners.
+        end = time.monotonic() + 45
         while pub.get_subscription_count() == 0 and time.monotonic() < end:
             rclpy.spin_once(node, timeout_sec=0.1)
-        assert pub.get_subscription_count(), 'camera aim subscriber not discovered'
+        if pub.get_subscription_count() == 0:
+            nodes = node.get_node_names_and_namespaces()
+            topics = node.get_topic_names_and_types()
+            raise AssertionError(
+                'camera aim subscriber not discovered after 45s; '
+                f'nodes={nodes!r}; topics={topics!r}'
+            )
         def send(stamp, valid=True, x=1.0, y=0.0, source='a'):
             msg = AttentionTarget()
             msg.valid = valid

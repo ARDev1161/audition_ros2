@@ -1,0 +1,325 @@
+#include "audition_nav2/acoustic_master_merge.hpp"
+#include <cassert>
+#include <cstdint>
+#include <limits>
+#include <cmath>
+#include <vector>
+using namespace audition_nav2;
+int main() {
+  GridGeometry grid{4, 3, 1., 0., 0.};
+  LayerUpdate u;
+  u.own_cells[{0,0}] = 100;
+  u.own_cells[{1,0}] = 100;
+  u.own_cells[{2,0}] = 100;
+  u.own_cells[{3,0}] = 100;
+  std::vector<std::uint8_t> master(12, 0);
+  master[0] = 255; // unknown remains unknown
+  master[1] = 254; // obstacle remains lethal
+  master[2] = 120; // higher pre-existing cost preserved
+  assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),master.size()) == 1);
+  assert(master[0] == 255 && master[1] == 254 && master[2] == 120);
+  assert(master[3] == 100 && master[5] == 0);
+  // A single malformed cell must reject the ENTIRE overlay atomically,
+  // even when a valid cost precedes it in sorted iteration order.
+  LayerUpdate poisoned = u;
+  poisoned.own_cells[{1,1}] = 254;
+  const auto before_poison = master;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 4, 3,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
+  poisoned = u;
+  poisoned.own_cells[{99,99}] = 90;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 4, 3,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
+  // Invalid values outside the update window must also reject the overlay.
+  poisoned = u;
+  poisoned.own_cells[{3,2}] = 255;
+  assert(AcousticMasterMerge::apply(poisoned, grid, 0, 0, 2, 1,
+                                    master.data(), master.size()) == 0);
+  assert(master == before_poison);
+  assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),master.size()) == 0);
+  assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,nullptr,master.size()) == 0);
+  assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),1) == 0);
+  // Nav2 recomputes the master region; the acoustic layer never clears
+  // a previous cell itself. Expired costs vanish from the next merge.
+  master[3] = 0;
+  u.own_cells.clear();
+  u.retired_cells.insert({3,0});
+  assert(AcousticMasterMerge::apply(u,grid,0,0,4,3,master.data(),master.size()) == 0);
+  assert(master[3] == 0);
+  // Rolling geometry cannot reuse previous indices: only current own_cells.
+  u.geometry_changed = true;
+  u.own_cells[{2,2}] = 90;
+  assert(AcousticMasterMerge::apply(u,grid,2,2,3,3,master.data(),master.size()) == 1);
+  assert(master[10] == 90);
+  assert(AcousticMasterMerge::apply(u,grid,0,0,2,2,master.data(),master.size()) == 0);
+  // Invalid Nav2 geometry must never modify another layer's master costs.
+  const auto before_invalid = master;
+  const double bad[] = {std::numeric_limits<double>::quiet_NaN(),
+                        std::numeric_limits<double>::infinity(),
+                        -std::numeric_limits<double>::infinity()};
+  for (const double value : bad) {
+    for (int field = 0; field < 3; ++field) {
+      GridGeometry malformed = grid;
+      if (field == 0) malformed.resolution = value;
+      if (field == 1) malformed.origin_x = value;
+      if (field == 2) malformed.origin_y = value;
+      assert(AcousticMasterMerge::apply(u, malformed, 0, 0, 4, 3,
+                                        master.data(), master.size()) == 0);
+      assert(master == before_invalid);
+    }
+  }
+  for (const double resolution : {0.0, -0.5}) {
+    GridGeometry malformed = grid;
+    malformed.resolution = resolution;
+    assert(AcousticMasterMerge::apply(u, malformed, 0, 0, 4, 3,
+                                      master.data(), master.size()) == 0);
+    assert(master == before_invalid);
+  }
+
+  // A partial Nav2 update must not touch any cell outside its exclusive
+  // [min_i,max_i) x [min_j,max_j) window, even when the overlay contains it.
+  LayerUpdate window;
+  window.own_cells[{0,0}] = 80;
+  window.own_cells[{1,0}] = 81;
+  window.own_cells[{2,1}] = 82;
+  window.own_cells[{3,2}] = 83;
+  std::vector<std::uint8_t> clipped(12, 7);
+  assert(AcousticMasterMerge::apply(window, grid, 1, 0, 3, 2,
+                                    clipped.data(), clipped.size()) == 2);
+  assert(clipped[0] == 7 && clipped[1] == 81 && clipped[6] == 82);
+  assert(clipped[11] == 7);
+  // Empty, inverted and out-of-range update windows are strictly inert.
+  const auto before_window = clipped;
+  assert(AcousticMasterMerge::apply(window, grid, 3, 2, 1, 0,
+                                    clipped.data(), clipped.size()) == 0);
+  assert(AcousticMasterMerge::apply(window, grid, 4, 0, 5, 3,
+                                    clipped.data(), clipped.size()) == 0);
+  assert(AcousticMasterMerge::apply(window, grid, 0, 3, 4, 4,
+                                    clipped.data(), clipped.size()) == 0);
+  assert(clipped == before_window);
+  // Reject partially out-of-bounds windows atomically, not just fully
+  // out-of-range windows. A clipped partial write would be unsafe for
+  // rolling maps and stale acoustic-cost rollback.
+  LayerUpdate edge_overlay;
+  edge_overlay.own_cells[{0,0}] = 160;
+  edge_overlay.own_cells[{3,2}] = 170;
+  std::vector<std::uint8_t> edge_master(12, 11);
+  const auto edge_before = edge_master;
+  const unsigned bad_windows[][4] = {
+      {0, 0, 5, 3}, {0, 0, 4, 4}, {3, 2, 5, 4},
+      {4, 0, 5, 3}, {0, 3, 4, 4}, {2, 0, 2, 3},
+      {0, 2, 4, 2}, {3, 2, 1, 1}};
+  for (const auto& bounds : bad_windows) {
+    assert(AcousticMasterMerge::apply(
+        edge_overlay, grid, bounds[0], bounds[1], bounds[2], bounds[3],
+        edge_master.data(), edge_master.size()) == 0);
+    assert(edge_master == edge_before);
+  }
+  assert(AcousticMasterMerge::apply(edge_overlay, grid, 0, 0, 4, 3,
+                                    edge_master.data(), edge_master.size()) == 2);
+  assert(edge_master[0] == 160 && edge_master[11] == 170);
+  // Soft acoustic evidence cannot overwrite unknown, inscribed/inflated
+  // collision costs or a stronger independent layer.
+  LayerUpdate competing;
+  for (unsigned i = 0; i < 4; ++i) competing.own_cells[{i,0}] = 252;
+  std::vector<std::uint8_t> protected_master{255,254,253,252,
+                                               0,0,0,0,0,0,0,0};
+  assert(AcousticMasterMerge::apply(competing, grid, 0, 0, 4, 3,
+                                    protected_master.data(),
+                                    protected_master.size()) == 0);
+  assert(protected_master[0] == 255 && protected_master[1] == 254 &&
+         protected_master[2] == 253 && protected_master[3] == 252);
+  // A malformed producer must never synthesize lethal/inscribed values.
+  competing.own_cells.clear();
+  competing.own_cells[{0,1}] = 253;
+  competing.own_cells[{1,1}] = 254;
+  competing.own_cells[{2,1}] = 255;
+  assert(AcousticMasterMerge::apply(competing, grid, 0, 0, 4, 3,
+                                    protected_master.data(),
+                                    protected_master.size()) == 0);
+  assert(protected_master[4] == 0 && protected_master[5] == 0 &&
+         protected_master[6] == 0);
+  // Simulate two sources competing for a cell: the higher existing
+  // soft cost wins, and a later weaker observation cannot reduce it.
+  LayerUpdate first, second;
+  first.own_cells[{3,1}] = 180;
+  second.own_cells[{3,1}] = 60;
+  assert(AcousticMasterMerge::apply(first, grid, 0, 0, 4, 3,
+                                    protected_master.data(),
+                                    protected_master.size()) == 1);
+  assert(AcousticMasterMerge::apply(second, grid, 0, 0, 4, 3,
+                                    protected_master.data(),
+                                    protected_master.size()) == 0);
+  assert(protected_master[7] == 180);
+  // The caller must rebuild the master from non-acoustic layers on TTL:
+  // no stale acoustic value is removed by writing FREE_SPACE.
+  protected_master[7] = 43; // independently rebuilt master value
+  second.own_cells.clear();
+  second.retired_cells.insert({3,1});
+  assert(AcousticMasterMerge::apply(second, grid, 0, 0, 4, 3,
+                                    protected_master.data(),
+                                    protected_master.size()) == 0);
+  assert(protected_master[7] == 43);
+  // A fresh non-acoustic baseline is mandatory for TTL rollback.
+  // A previously merged master is never a valid baseline.
+  LayerUpdate acoustic;
+  acoustic.own_cells[{1, 1}] = 110;
+  acoustic.own_cells[{2, 1}] = 150;
+  std::vector<std::uint8_t> baseline(12, 23);
+  baseline[5] = 254;  // Independent obstacle wins.
+  baseline[6] = 40;
+  std::vector<std::uint8_t> composed(12, 77);
+  std::size_t additions = 999;
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 1 && composed[5] == 254 && composed[6] == 150);
+  // No packets arrive: TTL expiry produces an empty overlay. Recomposition
+  // must restore exactly the non-acoustic baseline, not write FREE_SPACE.
+  acoustic.own_cells.clear();
+  acoustic.retired_cells.insert({2, 1});
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 0 && composed == baseline);
+  // Partial Nav2 windows must not alter cells outside the dirty rectangle.
+  composed.assign(12, 77);
+  acoustic.own_cells[{2, 1}] = 80;
+  assert(AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 1 && composed[6] == 80);
+  for (std::size_t k = 0; k < composed.size(); ++k)
+    if (k != 6) assert(composed[k] == 77);
+  // Validate the full overlay before copying ANY baseline bytes, including
+  // malformed entries outside the requested Nav2 update window.
+  for (const auto bad_cost : {std::uint8_t{0}, std::uint8_t{253},
+                              std::uint8_t{254}, std::uint8_t{255}}) {
+    LayerUpdate malformed = acoustic;
+    malformed.own_cells[{3, 2}] = bad_cost;
+    const auto previous = composed;
+    additions = 999;
+    assert(!AcousticMasterMerge::compose_from_baseline(
+        malformed, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+        composed.data(), composed.size(), &additions));
+    assert(additions == 0 && composed == previous);
+  }
+  for (const auto& invalid_index :
+       {std::pair<unsigned, unsigned>{grid.width, 0},
+        std::pair<unsigned, unsigned>{0, grid.height}}) {
+    LayerUpdate malformed = acoustic;
+    malformed.own_cells[invalid_index] = 90;
+    const auto previous = composed;
+    additions = 999;
+    assert(!AcousticMasterMerge::compose_from_baseline(
+        malformed, grid, 2, 1, 3, 2, baseline.data(), baseline.size(),
+        composed.data(), composed.size(), &additions));
+    assert(additions == 0 && composed == previous);
+  }
+  // Alias, overlap, truncated buffers and invalid geometry fail atomically.
+  const auto before_reject = composed;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, composed.data(), composed.size(),
+      composed.data(), composed.size(), &additions));
+  assert(additions == 0 && composed == before_reject);
+  std::vector<std::uint8_t> overlapping(24, 88);
+  const auto before_overlap = overlapping;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, overlapping.data(), 12,
+      overlapping.data() + 1, 12, &additions));
+  assert(overlapping == before_overlap);
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 4, 3, baseline.data(), 11,
+      composed.data(), composed.size(), &additions));
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, grid, 0, 0, 5, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(composed == before_reject);
+  // A malformed geometry must never cause a partial baseline copy.
+  GridGeometry invalid_grid = grid;
+  invalid_grid.resolution = std::numeric_limits<double>::quiet_NaN();
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      acoustic, invalid_grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      composed.data(), composed.size(), &additions));
+  assert(composed == before_reject);
+  // Reject oversized overlays before copying even a single baseline cell.
+  // The same bound protects the in-place merge path against unbounded work.
+  LayerUpdate oversized;
+  for (std::size_t n = 0; n <= AcousticMasterMerge::kMaxOverlayCells; ++n)
+    oversized.own_cells[{static_cast<unsigned>(n), 0}] = 42;
+  std::vector<std::uint8_t> untouched(12, 91);
+  std::size_t rejected_changes = 999;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      oversized, grid, 0, 0, 4, 3, baseline.data(), baseline.size(),
+      untouched.data(), untouched.size(), &rejected_changes));
+  assert(rejected_changes == 0 && untouched == std::vector<std::uint8_t>(12, 91));
+  assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
+                                    untouched.data(), untouched.size()) == 0);
+  assert(untouched == std::vector<std::uint8_t>(12, 91));
+  // Exactly at the limit remains bounded; invalid out-of-grid keys reject.
+  oversized.own_cells.erase({static_cast<unsigned>(AcousticMasterMerge::kMaxOverlayCells), 0});
+  assert(AcousticMasterMerge::apply(oversized, grid, 0, 0, 4, 3,
+                                    untouched.data(), untouched.size()) == 0);
+  // Baseline reconstruction runs on the Nav2 update thread. A dirty
+  // window larger than the fixed work budget must be rejected before any
+  // destination cell is touched (even with an empty acoustic overlay).
+  GridGeometry large_grid{300, 300, 0.05, -7.5, -7.5};
+  std::vector<std::uint8_t> large_baseline(90000, 21);
+  std::vector<std::uint8_t> large_destination(90000, 77);
+  LayerUpdate empty_overlay;
+  std::size_t large_changes = 123;
+  assert(!AcousticMasterMerge::compose_from_baseline(
+      empty_overlay, large_grid, 0, 0, 257, 256,
+      large_baseline.data(), large_baseline.size(),
+      large_destination.data(), large_destination.size(), &large_changes));
+  assert(large_changes == 0);
+  for (auto cost : large_destination) assert(cost == 77);
+  // The exact budget boundary remains valid and copies only the requested
+  // region; no cell outside the update window is modified.
+  assert(AcousticMasterMerge::compose_from_baseline(
+      empty_overlay, large_grid, 0, 0, 256, 256,
+      large_baseline.data(), large_baseline.size(),
+      large_destination.data(), large_destination.size(), &large_changes));
+  assert(large_changes == 0);
+  assert(large_destination[0] == 21);
+  assert(large_destination[255 + 255 * 300] == 21);
+  assert(large_destination[256] == 77);
+  assert(large_destination[256 * 300] == 77);
+  // Exhaustive small-grid rollback matrix: every acoustic cell must disappear
+  // when the next cycle supplies a fresh non-acoustic baseline, including
+  // windows that cover only one cell. Neighbouring cells are never modified.
+  for (unsigned y = 0; y < grid.height; ++y) {
+    for (unsigned x = 0; x < grid.width; ++x) {
+      LayerUpdate one;
+      one.own_cells[{x, y}] = 200;
+      std::vector<std::uint8_t> independent(12, 19);
+      independent[0] = 255;
+      independent[1] = 254;
+      independent[2] = 253;
+      std::vector<std::uint8_t> destination(12, 99);
+      std::size_t applied = 999;
+      const auto index = static_cast<std::size_t>(y) * grid.width + x;
+      assert(AcousticMasterMerge::compose_from_baseline(
+          one, grid, x, y, x + 1, y + 1,
+          independent.data(), independent.size(),
+          destination.data(), destination.size(), &applied));
+      const bool protected_cell = index < 3;
+      assert(applied == (protected_cell ? 0U : 1U));
+      assert(destination[index] == (protected_cell ? independent[index] : 200));
+      for (std::size_t k = 0; k < destination.size(); ++k)
+        if (k != index) assert(destination[k] == 99);
+      one.own_cells.clear();
+      one.retired_cells.insert({x, y});
+      assert(AcousticMasterMerge::compose_from_baseline(
+          one, grid, x, y, x + 1, y + 1,
+          independent.data(), independent.size(),
+          destination.data(), destination.size(), &applied));
+      assert(applied == 0 && destination[index] == independent[index]);
+      for (std::size_t k = 0; k < destination.size(); ++k)
+        if (k != index) assert(destination[k] == 99);
+    }
+  }
+  return 0;
+}

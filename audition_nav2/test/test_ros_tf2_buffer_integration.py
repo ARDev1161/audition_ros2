@@ -1,0 +1,192 @@
+"""Real ROS 2 Humble tf2::Buffer admission tests for the optional M5 adapter.
+
+Unlike the deterministic stamped gate tests, these exercise Buffer lookup,
+interpolation, static transforms, missing frames and extrapolation. No robot,
+audio source, Nav2 costmap, or network graph is required.
+"""
+import math
+import pathlib
+import sys
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from geometry_msgs.msg import TransformStamped
+from tf2_ros import Buffer
+from nav_admission import MetricSource
+from ros_tf_adapter import RosMetricTfGate, stamped_tf_lookup
+from soft_cost_cells import SoftCostCells
+
+NS = 1_000_000_000
+COV = (.04, 0., 0., 0., .04, 0., 0., 0., .04)
+
+
+def transform(stamp_ns, *, parent='map', child='microphone_array',
+              tx=0., ty=0., yaw=0.):
+    msg = TransformStamped()
+    msg.header.frame_id = parent
+    msg.child_frame_id = child
+    msg.header.stamp.sec = stamp_ns // NS
+    msg.header.stamp.nanosec = stamp_ns % NS
+    msg.transform.translation.x = tx
+    msg.transform.translation.y = ty
+    msg.transform.rotation.z = math.sin(yaw / 2.)
+    msg.transform.rotation.w = math.cos(yaw / 2.)
+    return msg
+
+
+def source(stamp_ns=2 * NS, *, validated=True, frame='microphone_array'):
+    return MetricSource('s1', frame, stamp_ns, stamp_ns + NS,
+                        (1., 0., 0.), COV, validated)
+
+
+class RealTf2BufferAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        self.buffer = Buffer(cache_time=None)
+        self.buffer.set_transform(transform(NS, tx=2.), 'm5-test')
+        self.buffer.set_transform(transform(3 * NS, tx=4.), 'm5-test')
+        self.lookup = stamped_tf_lookup(self.buffer, timeout_sec=0.01)
+
+    def test_interpolation_at_observation_time_not_latest(self):
+        # A latest-TF fallback would produce x=5 rather than x=4.
+        x, y = self.lookup('map', 'microphone_array', 2 * NS, (1., 0., 0.))
+        self.assertAlmostEqual(x, 4.)
+        self.assertAlmostEqual(y, 0.)
+
+    def test_future_and_past_extrapolation_fail_closed(self):
+        for stamp in (NS - 1, 3 * NS + 1):
+            with self.subTest(stamp=stamp), self.assertRaises(LookupError):
+                self.lookup('map', 'microphone_array', stamp, (1., 0., 0.))
+
+    def test_missing_frame_and_invalid_source_never_authorized(self):
+        gate = RosMetricTfGate('map', self.buffer, 2 * NS, timeout_sec=0.01)
+        self.assertEqual(gate(source()), (4., 0.))
+        with self.assertRaises(ValueError):
+            gate(source(validated=False))
+        with self.assertRaises(LookupError):
+            gate(source(frame='unknown_microphone'))
+
+    def test_real_buffer_tf_failure_revokes_existing_soft_costs(self):
+        # The first verified metric observation paints a reversible soft cell.
+        # A later observation beyond Buffer's TF history must remove that
+        # ownership, even when no valid replacement transform is available.
+        cells = SoftCostCells(resolution_m=1.)
+        gate = RosMetricTfGate('map', self.buffer, 2 * NS, timeout_sec=0.01)
+        painted, cleared = cells.reconcile(
+            [source()], 2 * NS, transform=gate)
+        self.assertEqual(painted, {(4, 0): 100})
+        self.assertEqual(cleared, ())
+
+        # A source with fresh validity but missing future TF cannot preserve
+        # an earlier source's costmap cell.
+        future = source(4 * NS)
+        gate = RosMetricTfGate('map', self.buffer, 4 * NS, timeout_sec=0.01)
+        painted, cleared = cells.reconcile(
+            [future], 4 * NS, transform=gate)
+        self.assertEqual(painted, {})
+        self.assertEqual(cleared, ((4, 0),))
+
+        # No new messages: the next reconciliation must remain empty.
+        painted, cleared = cells.reconcile(
+            [], 4 * NS + 1, transform=gate)
+        self.assertEqual((painted, cleared), ({}, ()))
+
+    def test_real_buffer_expiry_revokes_without_new_messages(self):
+        cells = SoftCostCells(resolution_m=1.)
+        gate = RosMetricTfGate('map', self.buffer, 2 * NS, timeout_sec=0.01)
+        self.assertEqual(cells.reconcile(
+            [source()], 2 * NS, transform=gate)[0], {(4, 0): 100})
+        # An expired source is not transformed or re-admitted.
+        gate = RosMetricTfGate('map', self.buffer, 3 * NS, timeout_sec=0.01)
+        self.assertEqual(cells.reconcile(
+            [source()], 3 * NS, transform=gate), ({}, ((4, 0),)))
+
+    def test_rotation_and_static_transform(self):
+        buf = Buffer()
+        buf.set_transform_static(transform(0, child='static_mic',
+                                           tx=2., ty=3., yaw=math.pi / 2.),
+                                 'm5-test')
+        lookup = stamped_tf_lookup(buf, timeout_sec=0.01)
+        x, y = lookup('map', 'static_mic', 100 * NS, (1., 0., 0.))
+        self.assertAlmostEqual(x, 2., places=6)
+        self.assertAlmostEqual(y, 4., places=6)
+
+    def test_tf2_normalizes_quaternion_before_lookup(self):
+        # tf2 normalizes rotations on ingestion; malformed input cannot be
+        # tested by round-tripping through a real Buffer.
+        buf = Buffer()
+        bad = transform(NS)
+        bad.transform.rotation.w = 2.
+        buf.set_transform(bad, 'm5-test')
+        result = stamped_tf_lookup(buf, timeout_sec=0.01)(
+            'map', 'microphone_array', NS, (1., 0., 0.))
+        self.assertAlmostEqual(result[0], 1.)
+        self.assertAlmostEqual(result[1], 0.)
+
+    def test_stale_dynamic_reply_and_nonfinite_geometry_fail_closed(self):
+        class ReplyBuffer:
+            def __init__(self, reply):
+                self.reply = reply
+
+            def lookup_transform(self, target, source, stamp, timeout):
+                return self.reply
+
+        for bad_stamp in (NS - 1, NS + 1, 3 * NS):
+            with self.subTest(stamp=bad_stamp), self.assertRaises(LookupError):
+                stamped_tf_lookup(ReplyBuffer(transform(bad_stamp)))(
+                    'map', 'microphone_array', NS, (1., 0., 0.))
+
+        lookup = stamped_tf_lookup(ReplyBuffer(transform(NS)))
+        for xyz in ((float('nan'), 0., 0.),
+                    (1., float('inf'), 0.), (1., 2.),
+                    (1., 2., 3., 4.)):
+            with self.subTest(xyz=xyz), self.assertRaises(ValueError):
+                lookup('map', 'microphone_array', NS, xyz)
+
+        overflow = transform(NS, tx=1e308)
+        with self.assertRaises(ValueError):
+            stamped_tf_lookup(ReplyBuffer(overflow))(
+                'map', 'microphone_array', NS, (1e308, 0., 0.))
+
+    def test_nearly_unit_quaternion_cannot_scale_metric_distance(self):
+        class ReplyBuffer:
+            def lookup_transform(self, target, source, stamp, timeout):
+                reply = transform(NS, yaw=math.pi / 2.)
+                reply.transform.rotation.z *= 1.001
+                reply.transform.rotation.w *= 1.001
+                return reply
+
+        x, y = stamped_tf_lookup(ReplyBuffer())(
+            'map', 'microphone_array', NS, (10., 0., 0.))
+        self.assertAlmostEqual(x, 0., places=5)
+        self.assertAlmostEqual(y, 10., places=5)
+
+    def test_adapter_rejects_malformed_buffer_response(self):
+        # Inject a deliberately broken Buffer result to cover the adapter's
+        # fail-closed boundary, which a real Buffer sanitizes internally.
+        class BrokenBuffer:
+            def __init__(self, reply):
+                self.reply = reply
+
+            def lookup_transform(self, target, source, stamp, timeout):
+                return self.reply
+
+        cases = []
+        bad_norm = transform(NS)
+        bad_norm.transform.rotation.w = 2.
+        cases.append(('nonunit quaternion', bad_norm, ValueError))
+        bad_nan = transform(NS)
+        bad_nan.transform.translation.x = float('nan')
+        cases.append(('nonfinite translation', bad_nan, ValueError))
+        bad_frame = transform(NS, parent='odom')
+        cases.append(('mismatched parent frame', bad_frame, LookupError))
+        bad_child = transform(NS, child='wrong_mic')
+        cases.append(('mismatched child frame', bad_child, LookupError))
+        for name, reply, error in cases:
+            with self.subTest(name=name), self.assertRaises(error):
+                stamped_tf_lookup(BrokenBuffer(reply), timeout_sec=0.01)(
+                    'map', 'microphone_array', NS, (1., 0., 0.))
+
+
+if __name__ == '__main__':
+    unittest.main()
