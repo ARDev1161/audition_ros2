@@ -57,6 +57,15 @@ def main():
             # Give the separate action server executor time to consume DDS.
             time.sleep(0.12)
 
+        def publish_live(msg):
+            # Exercise a realistic high-rate live stream. The generic publish()
+            # helper intentionally spends ~270 ms per observation for DDS
+            # synchronization; using it as a tracking heartbeat leaves too
+            # little margin against the server's 500 ms freshness deadline.
+            for _ in range(2):
+                pub.publish(msg)
+                rclpy.spin_once(node, timeout_sec=0.02)
+
         def start(source, timeout_ms):
             request = TrackSound.Goal()
             request.source_id = source
@@ -85,7 +94,7 @@ def main():
         first_result = first.get_result_async()
         until = time.monotonic() + 5.0
         while not first_result.done() and time.monotonic() < until:
-            publish(target())
+            publish_live(target())
         outcome = await_future(node, first_result, 2)
         assert outcome.status == GoalStatus.STATUS_SUCCEEDED, ("tracking outcome", outcome.status, outcome.result.reason)
         assert outcome.result.tracked and outcome.result.updates >= 2, ("unexpected evidence", outcome.result.updates)
@@ -127,7 +136,7 @@ def main():
         recovery_result = recovery.get_result_async()
         until = time.monotonic() + 4.0
         while not recovery_result.done() and time.monotonic() < until:
-            publish(target(generation=2))
+            publish_live(target(generation=2))
         recovered = await_future(node, recovery_result, 2)
         assert recovered.status == GoalStatus.STATUS_SUCCEEDED
         assert recovered.result.updates == 1
