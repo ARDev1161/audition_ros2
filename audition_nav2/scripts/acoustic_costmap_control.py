@@ -157,13 +157,14 @@ def main(argv=None):
                     break
                 # Disable/rollback must still try remaining costmaps.
 
-        if enabling and failed:
-            # A failed or timed-out enable can have taken effect remotely.
-            # Roll back ALL endpoints, not only those acknowledged locally.
+        if failed and args.command in ("enable", "disable", "rollback"):
+            # A timed-out SetBool may still complete on the Nav2 executor.
+            # In particular, a failed disable/rollback must never be treated
+            # as an ordinary CLI failure while an overlay might remain live.
+            # Use independent deadlines and attempt every endpoint, including
+            # ones whose initial request appeared successful.
             rollback_ok = True
             for endpoint in endpoints:
-                # Never report the failed enable as safely rolled back when
-                # any remote endpoint remains unverified.
                 if not fail_closed_disable(node, endpoint):
                     rollback_ok = False
             if not rollback_ok:
