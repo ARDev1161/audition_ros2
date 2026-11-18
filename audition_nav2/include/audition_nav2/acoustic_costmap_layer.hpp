@@ -26,6 +26,8 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   void updateCosts(nav2_costmap_2d::Costmap2D& master_grid,
                    int min_i, int min_j, int max_i, int max_j) override;
   void reset() override;
+  void activate() override;
+  void deactivate() override;
   bool isClearable() override { return true; }
  private:
   // Narrow white-box regression seam for the bounds/ingress/costs race.
@@ -65,6 +67,9 @@ class AcousticCostmapLayer final : public nav2_costmap_2d::Layer {
   // Nav2 registers plugins after onInitialize(); authorize startup opt-in
   // only when the complete plugin roster can be inspected in updateBounds.
   bool startup_enable_requested_ = false;
+  // Lifecycle admission barrier: a deactivated Nav2 costmap cannot be
+  // re-enabled by a still-reachable service callback.
+  bool lifecycle_active_ = true;
   AcousticLayerCoordinator coordinator_;
   // Tracks Nav2 map geometry, but does not certify a non-acoustic baseline.
   AcousticMapGeneration map_generation_;
