@@ -216,7 +216,7 @@ class LookAtSoundServer(Node):
             # between polls, causing a valid bounded confirmation sequence to
             # time out. The same lock protects the goal epoch, revocation and
             # confirmation state; the worker only consumes the result.
-            if self.reserved:
+            if getattr(self, 'reserved', False):
                 self.evaluate_candidate_locked(self.arrival, self.goal_source)
 
     def evaluate_candidate_locked(self, now, source):
