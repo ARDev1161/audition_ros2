@@ -209,6 +209,14 @@ class LookAtSoundServer(Node):
             self.latest = msg
             self.sequence += 1
             self.arrival = time.monotonic()
+            # Account for every accepted DDS observation at ingress, not only
+            # the last sample visible to the action worker's 50 ms poll.
+            # Executor scheduling can coalesce several independent bearings
+            # between polls, causing a valid bounded confirmation sequence to
+            # time out. The same lock protects the goal epoch, revocation and
+            # confirmation state; the worker only consumes the result.
+            if self.reserved:
+                self.evaluate_candidate_locked(self.arrival, '')
 
     def evaluate_candidate_locked(self, now, source):
         """Atomically evaluate the live cache and update confirmation evidence.
