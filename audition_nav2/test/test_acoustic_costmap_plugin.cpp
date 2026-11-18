@@ -290,6 +290,14 @@ struct AcousticCostmapLayerTestAccess {
               layer.onTrustedMetricArray(message);
             });
   }
+  static bool operator_enable(AcousticCostmapLayer& layer) {
+    layer.trusted_topic_configured_ = true;
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    auto response = std::make_shared<std_srvs::srv::SetBool::Response>();
+    request->data = true;
+    layer.setSoftCosts(request, response);
+    return response->success;
+  }
   static void ingress_message(AcousticCostmapLayer& layer,
                               const audition_msgs::msg::LocalizedSourceArray& message) {
     layer.onTrustedMetricArray(message);
@@ -2672,13 +2680,17 @@ TEST(AcousticCostmapPlugin, ResetRevokesMultiSourceAndRequiresFreshMetricAdmissi
   EXPECT_EQ(master->getCost(2, 2), 0);
   EXPECT_EQ(master->getCost(4, 2), 0);
 
-  // Recovery requires a newer generation and fresh verified observations.
+  // Reset is an operator authorization boundary, not just an epoch fence.
+  // A newer verified generation alone must remain inert until explicit opt-in.
   snapshot.header.stamp = stamp(now - 20000000LL);
   snapshot.generation = 202;
   for (auto& source : snapshot.sources) {
     source.header = snapshot.header;
     source.last_observed = snapshot.header.stamp;
   }
+  Access::ingress_message(*acoustic, snapshot);
+  EXPECT_EQ(Access::sources(*acoustic), 0u);
+  ASSERT_TRUE(Access::operator_enable(*acoustic));
   Access::ingress_message(*acoustic, snapshot);
   ASSERT_EQ(Access::sources(*acoustic), 2u);
   map.updateMap(1., 1., 0.);
